@@ -2,7 +2,12 @@ import type { EffectDefinition } from './types';
 import { noiseGateEffect } from './noiseGate';
 import { compressorEffect } from './compressor';
 import { overdriveEffect } from './overdrive';
+import { ts808Effect } from './ts808';
+import { klonEffect } from './klon';
 import { distortionEffect } from './distortion';
+import { ratEffect } from './rat';
+import { fuzzEffect } from './fuzz';
+import { autowahEffect } from './autowah';
 import { eqEffect } from './eq';
 import { chorusEffect } from './chorus';
 import { flangerEffect } from './flanger';
@@ -16,8 +21,13 @@ import { volumeEffect } from './volume';
 export const EFFECT_REGISTRY: EffectDefinition[] = [
   noiseGateEffect,
   compressorEffect,
+  klonEffect,
   overdriveEffect,
+  ts808Effect,
   distortionEffect,
+  ratEffect,
+  fuzzEffect,
+  autowahEffect,
   eqEffect,
   chorusEffect,
   flangerEffect,

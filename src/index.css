@@ -175,166 +175,384 @@ input[type='text'] {
   margin: 0 4px;
 }
 
-/* ---------- 效果链板 ---------- */
+/* ---------- 效果器板(Pedaltrain 金属格栅) ---------- */
 
 .board {
-  background:
-    repeating-linear-gradient(90deg, transparent 0 46px, rgba(255, 255, 255, 0.015) 46px 48px),
-    var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 18px 16px;
+  position: relative;
+  border-radius: 8px;
+  padding: 26px 20px 30px;
   overflow-x: auto;
-  min-height: 300px;
+  min-height: 380px;
+  /* 横向铝轨 + 缝隙 */
+  background:
+    repeating-linear-gradient(
+      180deg,
+      #2c3036 0px,
+      #34383f 6px,
+      #23262b 30px,
+      #101215 34px,
+      #0b0d0f 40px
+    ),
+    #1a1d21;
+  border: 1px solid #3a3f46;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.08),
+    inset 0 -4px 8px rgba(0, 0, 0, 0.6),
+    0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+/* 板体前缘厚度(3D 边) */
+.board::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 10px;
+  background: linear-gradient(180deg, #3a3f46, #15171a);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  pointer-events: none;
 }
 
 .chain-view {
   display: flex;
-  align-items: stretch;
-  gap: 0;
-  min-height: 280px;
+  align-items: center;
+  min-height: 320px;
 }
 
 .pedal-slot {
   display: flex;
   align-items: center;
   position: relative;
-  border-radius: 10px;
+  border-radius: 12px;
+  cursor: grab;
+}
+
+.pedal-slot:active {
+  cursor: grabbing;
 }
 
 .pedal-slot.dragging {
-  opacity: 0.4;
+  opacity: 0.35;
 }
 
 .pedal-slot.drag-over {
   outline: 2px dashed var(--accent);
-  outline-offset: 2px;
+  outline-offset: 4px;
 }
 
-.drag-handle {
-  cursor: grab;
-  color: var(--text-dim);
-  padding: 0 4px;
-  user-select: none;
-  font-size: 15px;
-}
-
+/* patch 线:线身 + 两端金属插头 */
 .patch-cable {
-  width: 26px;
-  height: 4px;
-  background: linear-gradient(#555, #222);
-  border-radius: 2px;
-  align-self: center;
+  width: 30px;
+  height: 5px;
   flex-shrink: 0;
-  margin: 0 2px;
+  align-self: center;
+  position: relative;
+  background: linear-gradient(#0c0d0f, #26282c 50%, #0c0d0f);
+  border-radius: 3px;
+  box-shadow: 0 3px 3px rgba(0, 0, 0, 0.5);
+  margin: 0 1px;
 }
 
-/* ---------- 单块 ---------- */
+.patch-cable::before,
+.patch-cable::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 9px;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, #6a7078, #c8ccd2 45%, #4a4f57);
+  border-radius: 2px;
+}
+
+.patch-cable::before {
+  left: -2px;
+}
+
+.patch-cable::after {
+  right: -2px;
+}
+
+/* ---------- 单块效果器(stompbox) ---------- */
 
 .pedal {
-  width: 168px;
+  --pedal-color: #888;
+  position: relative;
+  width: 176px;
   flex-shrink: 0;
-  background: linear-gradient(180deg, #2b2f36, #20232a);
-  border: 1px solid var(--border);
-  border-top: 4px solid var(--accent);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 12px 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  align-items: center;
+  gap: 10px;
+  background:
+    linear-gradient(
+      168deg,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.05) 18%,
+      rgba(0, 0, 0, 0.12) 60%,
+      rgba(0, 0, 0, 0.38) 100%
+    ),
+    var(--pedal-color);
+  border: 1px solid rgba(0, 0, 0, 0.55);
+  box-shadow:
+    inset 0 2px 2px rgba(255, 255, 255, 0.3),
+    inset 0 -8px 14px rgba(0, 0, 0, 0.35),
+    0 12px 20px rgba(0, 0, 0, 0.55);
+  transition: filter 0.15s;
 }
 
 .pedal-off {
-  filter: saturate(0.4) brightness(0.8);
+  filter: saturate(0.35) brightness(0.75);
 }
 
-.pedal-header {
+/* 外壳螺丝 */
+.screw {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #d5d9de, #6a6f76 60%, #3a3e44);
+  box-shadow:
+    inset 0 -1px 2px rgba(0, 0, 0, 0.6),
+    0 1px 1px rgba(255, 255, 255, 0.25);
+}
+
+.screw::after {
+  content: '';
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 50%;
+  height: 1.5px;
+  margin-top: -0.75px;
+  background: rgba(0, 0, 0, 0.55);
+  transform: rotate(38deg);
+  border-radius: 1px;
+}
+
+.screw-tl { top: 5px; left: 5px; }
+.screw-tr { top: 5px; right: 5px; }
+.screw-bl { bottom: 5px; left: 5px; }
+.screw-br { bottom: 5px; right: 5px; }
+
+.pedal-remove {
+  position: absolute;
+  top: 2px;
+  right: 16px;
+  z-index: 2;
+  padding: 0 5px;
+  font-size: 14px;
+  line-height: 1.4;
+  background: transparent;
+  border-color: transparent;
+  color: rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.pedal-remove:hover {
+  color: #ff8a80;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* 铭牌:雕刻字 */
+.pedal-nameplate {
+  width: 100%;
+  text-align: center;
+  padding: 4px 0 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.pedal-name {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+/* LED + 灯座 */
+.pedal-led-row {
+  display: flex;
+  justify-content: center;
+}
+
+.pedal-led-bezel {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #b8bcc2, #5a5e64 65%, #2e3236);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 .pedal-led {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #3a3f46;
-  flex-shrink: 0;
+  background: #4a1215;
+  transition:
+    background 0.12s,
+    box-shadow 0.12s;
 }
 
-.pedal-led.led-on {
+.led-on .pedal-led {
   background: #ff3b30;
-  box-shadow: 0 0 6px #ff3b30;
+  box-shadow:
+    0 0 6px 2px rgba(255, 59, 48, 0.8),
+    0 0 14px 4px rgba(255, 59, 48, 0.35);
 }
 
-.pedal-name {
-  font-size: 12px;
+/* 旋钮区 */
+.pedal-knobs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 6px;
+  min-height: 86px;
+}
+
+/* ---------- 旋转旋钮 ---------- */
+
+.knob-unit {
+  width: 50px;
+  text-align: center;
+  user-select: none;
+}
+
+.knob-dial {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.knob-dial:focus-visible {
+  filter: drop-shadow(0 0 3px var(--accent));
+}
+
+.knob-body {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background:
+    repeating-conic-gradient(
+      from 0deg,
+      rgba(255, 255, 255, 0.07) 0deg 5deg,
+      rgba(0, 0, 0, 0.12) 5deg 10deg
+    ),
+    radial-gradient(circle at 36% 30%, #565c64, #2b2e34 62%, #17191d);
+  border: 1px solid #101215;
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.55),
+    inset 0 1px 1px rgba(255, 255, 255, 0.22);
+}
+
+.knob-indicator {
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 3px;
+  height: 11px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: #f2f4f7;
+  box-shadow: 0 0 3px rgba(255, 255, 255, 0.6);
+}
+
+.knob-tick {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 4px;
+  margin: -2px 0 0 -1px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.knob-tick.tick-active {
+  background: var(--accent);
+  box-shadow: 0 0 3px rgba(224, 112, 32, 0.8);
+}
+
+.knob-label {
+  margin-top: 2px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  flex: 1;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.55);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.18);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.pedal-remove {
-  padding: 0 6px;
-  font-size: 14px;
-  line-height: 1.4;
-  border-radius: 4px;
-  background: transparent;
-  border-color: transparent;
-  color: var(--text-dim);
-}
-
-.pedal-remove:hover {
-  color: #ff6b60;
-  background: rgba(255, 80, 70, 0.12);
-}
-
-.pedal-params {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.pedal-param label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-bottom: 2px;
-}
-
-.param-value {
+.knob-value {
+  font-size: 9px;
   font-family: monospace;
-  color: var(--text);
+  color: rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
 }
 
-.pedal-param input[type='range'] {
-  width: 100%;
-  height: 4px;
-  accent-color: var(--accent);
-  cursor: pointer;
+.knob-disabled {
+  opacity: 0.45;
 }
 
-.pedal-switch {
-  margin-top: 2px;
-  padding: 7px 0;
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 2px;
-  border-radius: 6px;
-  background: #17191d;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
+.knob-disabled .knob-dial {
+  cursor: default;
 }
 
-.pedal-switch.switch-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+/* ---------- 脚踏开关 ---------- */
+
+.footswitch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 32%, #3c4148, #1d2024 70%);
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.6),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
+}
+
+.footswitch-cap {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 30%, #e8ebef, #9a9fa6 45%, #565b62 80%, #3a3e44);
+  box-shadow:
+    0 3px 5px rgba(0, 0, 0, 0.55),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.35);
+  transition:
+    transform 0.06s,
+    box-shadow 0.06s;
+}
+
+.footswitch:active .footswitch-cap,
+.footswitch.fs-on .footswitch-cap {
+  transform: translateY(1.5px) scale(0.96);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.6),
+    inset 0 -1px 3px rgba(0, 0, 0, 0.4);
 }
 
 /* ---------- 添加入口 ---------- */
@@ -342,15 +560,52 @@ input[type='text'] {
 .add-effect {
   display: flex;
   align-items: center;
-  padding-left: 16px;
+  padding-left: 18px;
 }
 
 .add-effect select {
   padding: 10px 12px;
   border-style: dashed;
   border-color: #4a5058;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.35);
   cursor: pointer;
+}
+
+/* ---------- 示波器 ---------- */
+
+.oscilloscope {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px 14px;
+}
+
+.oscilloscope canvas {
+  display: block;
+  width: 100%;
+  height: 140px;
+  border-radius: 6px;
+  border: 1px solid #26292e;
+}
+
+.scope-legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.legend-swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
 }
 
 /* ---------- 底栏 ---------- */

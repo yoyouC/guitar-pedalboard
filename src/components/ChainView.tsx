@@ -55,9 +55,6 @@ export function ChainView({
             setOverIndex(null);
           }}
         >
-          <div className="drag-handle" title="拖拽排序">
-            ⠿
-          </div>
           <PedalCard
             item={item}
             def={getEffectDef(item.effectId)}

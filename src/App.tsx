@@ -13,6 +13,7 @@ import {
 import { TopBar } from './components/TopBar';
 import { ChainView } from './components/ChainView';
 import { PresetBar } from './components/PresetBar';
+import { Oscilloscope } from './components/Oscilloscope';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -255,6 +256,11 @@ export default function App() {
           onAdd={handleAdd}
         />
       </main>
+
+      <Oscilloscope
+        inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
+        outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
+      />
 
       <footer className="app-footer">
         信号流向:输入 → {chain.map((i) => getEffectDef(i.effectId).name).join(' → ')} → 输出
