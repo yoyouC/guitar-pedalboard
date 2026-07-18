@@ -22,7 +22,7 @@ function makeFuzzCurve(k: number): Float32Array<ArrayBuffer> {
 
 const fuzzToPreGain = (v: number) => 1 + (v / 100) * 59; // 1 ~ 60
 const fuzzToK = (v: number) => CURVE_K_MIN + (v / 100) * (CURVE_K_MAX - CURVE_K_MIN);
-const levelToOutputGain = (v: number) => (v / 100) * 2;
+const levelToOutputGain = (v: number) => (v / 100) * 1.2;
 
 /** Fuzz 法兹:方波化硬削波 + 音色的经典单块 */
 export const fuzzEffect: EffectDefinition = {

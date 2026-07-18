@@ -1,7 +1,7 @@
 import type { EffectDefinition, EffectInstance } from './types';
 
-/** level 0~100 → output.gain 0~1.5 */
-const LEVEL_TO_GAIN = 1.5 / 100;
+/** level 0~100 → output.gain 0~1.2 */
+const LEVEL_TO_GAIN = 1.2 / 100;
 /** pan -50~+50 → panner.pan -1~+1 */
 const PAN_TO_PAN = 1 / 50;
 

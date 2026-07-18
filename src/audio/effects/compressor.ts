@@ -16,7 +16,7 @@ export const compressorEffect: EffectDefinition = {
     { key: 'ratio', label: 'Ratio', min: 1, max: 20, step: 0.5, defaultValue: 4 },
     { key: 'attack', label: 'Attack', min: 0, max: 100, step: 1, defaultValue: 10, unit: 'ms' },
     { key: 'release', label: 'Release', min: 10, max: 1000, step: 10, defaultValue: 250, unit: 'ms' },
-    { key: 'makeup', label: 'Makeup', min: 0, max: 24, step: 0.5, defaultValue: 0, unit: 'dB' },
+    { key: 'makeup', label: 'Makeup', min: 0, max: 12, step: 0.5, defaultValue: 0, unit: 'dB' },
   ],
 
   create(ctx: AudioContext): EffectInstance {

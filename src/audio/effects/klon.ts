@@ -23,7 +23,7 @@ function makeGermaniumCurve(k: number): Float32Array<ArrayBuffer> {
 
 const gainToPreGain = (v: number) => 1 + (v / 100) * 49; // 1 ~ 50
 const trebleToDb = (v: number) => ((v - 50) / 50) * TREBLE_RANGE_DB; // -10 ~ +10 dB
-const levelToOutputGain = (v: number) => (v / 100) * 2;
+const levelToOutputGain = (v: number) => (v / 100) * 1.2;
 
 /**
  * Klon 风格透明过载:干声并联混合(clean blend)+ 锗管软削波 +

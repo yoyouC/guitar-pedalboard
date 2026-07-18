@@ -9,7 +9,7 @@ const CURVE_K_MIN = 1;
 const CURVE_K_MAX = 50;
 
 /** level 参数(0~100)映射输出增益 0~2 */
-const LEVEL_GAIN_MAX = 2;
+const LEVEL_GAIN_MAX = 1.2;
 
 /** WaveShaper 曲线采样点数 */
 const CURVE_POINTS = 1024;

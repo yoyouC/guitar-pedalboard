@@ -22,9 +22,9 @@ function gainToPreGain(value: number): number {
   return 1 + (value / 100) * 99;
 }
 
-/** level 参数 0~100 映射到 output.gain 0~2 */
+/** level 参数 0~100 映射到 output.gain 0~1.2 */
 function levelToOutputGain(value: number): number {
-  return (value / 100) * 2;
+  return (value / 100) * 1.2;
 }
 
 export const distortionEffect: EffectDefinition = {
