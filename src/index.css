@@ -1,0 +1,367 @@
+:root {
+  color-scheme: dark;
+  --bg: #141619;
+  --panel: #1e2126;
+  --panel-2: #262a30;
+  --text: #e6e8eb;
+  --text-dim: #9aa0a8;
+  --accent: #e07020;
+  --border: #33383f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 16px 20px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.app-header h1 {
+  font-size: 22px;
+  margin: 8px 0 0;
+  letter-spacing: 1px;
+}
+
+button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+
+button:hover:not(:disabled) {
+  background: #2f343b;
+  border-color: #4a5058;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+select,
+input[type='text'] {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  max-width: 220px;
+}
+
+/* ---------- 顶栏 ---------- */
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.top-section {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.input-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.stop-btn {
+  border-color: #7a3535;
+  color: #e08080;
+}
+
+.gain-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.gain-ctrl input[type='range'] {
+  width: 90px;
+}
+
+.level-meter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.level-meter-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: monospace;
+}
+
+.level-meter canvas {
+  border-radius: 3px;
+  display: block;
+}
+
+.bypass-btn.bypassed {
+  background: #7a3535;
+  border-color: #a05050;
+  color: #fff;
+}
+
+/* ---------- 预设栏 ---------- */
+
+.preset-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+}
+
+.preset-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+/* ---------- 效果链板 ---------- */
+
+.board {
+  background:
+    repeating-linear-gradient(90deg, transparent 0 46px, rgba(255, 255, 255, 0.015) 46px 48px),
+    var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 16px;
+  overflow-x: auto;
+  min-height: 300px;
+}
+
+.chain-view {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 280px;
+}
+
+.pedal-slot {
+  display: flex;
+  align-items: center;
+  position: relative;
+  border-radius: 10px;
+}
+
+.pedal-slot.dragging {
+  opacity: 0.4;
+}
+
+.pedal-slot.drag-over {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-dim);
+  padding: 0 4px;
+  user-select: none;
+  font-size: 15px;
+}
+
+.patch-cable {
+  width: 26px;
+  height: 4px;
+  background: linear-gradient(#555, #222);
+  border-radius: 2px;
+  align-self: center;
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* ---------- 单块 ---------- */
+
+.pedal {
+  width: 168px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #2b2f36, #20232a);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.pedal-off {
+  filter: saturate(0.4) brightness(0.8);
+}
+
+.pedal-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pedal-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3a3f46;
+  flex-shrink: 0;
+}
+
+.pedal-led.led-on {
+  background: #ff3b30;
+  box-shadow: 0 0 6px #ff3b30;
+}
+
+.pedal-name {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pedal-remove {
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1.4;
+  border-radius: 4px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.pedal-remove:hover {
+  color: #ff6b60;
+  background: rgba(255, 80, 70, 0.12);
+}
+
+.pedal-params {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pedal-param label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.param-value {
+  font-family: monospace;
+  color: var(--text);
+}
+
+.pedal-param input[type='range'] {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.pedal-switch {
+  margin-top: 2px;
+  padding: 7px 0;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 2px;
+  border-radius: 6px;
+  background: #17191d;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.pedal-switch.switch-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ---------- 添加入口 ---------- */
+
+.add-effect {
+  display: flex;
+  align-items: center;
+  padding-left: 16px;
+}
+
+.add-effect select {
+  padding: 10px 12px;
+  border-style: dashed;
+  border-color: #4a5058;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* ---------- 底栏 ---------- */
+
+.app-footer {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 4px 2px;
+  line-height: 1.6;
+}
+
+.hint {
+  color: var(--accent);
+}

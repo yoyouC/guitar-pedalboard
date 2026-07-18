@@ -1,0 +1,35 @@
+import type { EffectDefinition } from './types';
+import { noiseGateEffect } from './noiseGate';
+import { compressorEffect } from './compressor';
+import { overdriveEffect } from './overdrive';
+import { distortionEffect } from './distortion';
+import { eqEffect } from './eq';
+import { chorusEffect } from './chorus';
+import { flangerEffect } from './flanger';
+import { phaserEffect } from './phaser';
+import { tremoloEffect } from './tremolo';
+import { delayEffect } from './delay';
+import { reverbEffect } from './reverb';
+import { volumeEffect } from './volume';
+
+/** 效果器目录,按吉他信号链常见顺序排列 */
+export const EFFECT_REGISTRY: EffectDefinition[] = [
+  noiseGateEffect,
+  compressorEffect,
+  overdriveEffect,
+  distortionEffect,
+  eqEffect,
+  chorusEffect,
+  flangerEffect,
+  phaserEffect,
+  tremoloEffect,
+  delayEffect,
+  reverbEffect,
+  volumeEffect,
+];
+
+export function getEffectDef(id: string): EffectDefinition {
+  const def = EFFECT_REGISTRY.find((d) => d.id === id);
+  if (!def) throw new Error(`未知效果器类型: ${id}`);
+  return def;
+}
