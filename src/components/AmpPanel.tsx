@@ -34,7 +34,7 @@ export function AmpPanel({ ampId, enabled, values, onSelect, onToggle, onParam }
         ))}
       </div>
 
-      <div className={`amp-head ${enabled ? 'amp-on' : 'amp-off'}`}>
+      <div className={`amp-head amp-${ampId} ${enabled ? 'amp-on' : 'amp-off'}`}>
         <div className="amp-top">
           <span className="amp-brand">{def.name}</span>
           <span className={`amp-jewel ${enabled ? 'jewel-on' : ''}`} />
@@ -67,6 +67,8 @@ export function AmpPanel({ ampId, enabled, values, onSelect, onToggle, onParam }
             <span className="amp-power-label">{enabled ? 'ON' : 'OFF'}</span>
           </button>
         </div>
+
+        <div className="amp-grill" />
       </div>
     </div>
   );

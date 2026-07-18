@@ -840,3 +840,301 @@ input[type='text'] {
 .hint {
   color: var(--accent);
 }
+
+/* ============================================================
+   单块专属皮肤(按 skin-<effectId> 类区分)
+   ============================================================ */
+
+/* 铭牌文字深浅两个通用版本 */
+.pedal-name-dark .pedal-name,
+.skin-klon .pedal-name,
+.skin-ts808 .pedal-name,
+.skin-tremolo .pedal-name,
+.skin-volume .pedal-name {
+  color: rgba(0, 0, 0, 0.65);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* --- Noise Gate:工业深灰 + 警示条纹铭牌 --- */
+.skin-noiseGate {
+  background:
+    linear-gradient(168deg, rgba(255,255,255,0.18), rgba(0,0,0,0.45)),
+    repeating-linear-gradient(90deg, #3a3d42 0 6px, #33363b 6px 12px);
+}
+.skin-noiseGate .pedal-nameplate {
+  background: repeating-linear-gradient(
+    45deg, #f1c40f 0 8px, #15161a 8px 16px);
+  border-radius: 4px;
+  border-bottom: none;
+  box-shadow: none;
+}
+.skin-noiseGate .pedal-name {
+  color: #fff;
+  background: rgba(0,0,0,0.72);
+  padding: 1px 8px;
+  border-radius: 3px;
+  text-shadow: none;
+}
+.skin-noiseGate .pedal-name::before { content: '🔇 '; }
+
+/* --- Compressor:录音棚钢蓝 + VU 横纹 --- */
+.skin-compressor {
+  background:
+    linear-gradient(168deg, rgba(255,255,255,0.22), rgba(0,0,0,0.4)),
+    repeating-linear-gradient(180deg, #3d6b99 0 3px, #355e87 3px 6px);
+}
+.skin-compressor .pedal-name { color: #dce9f5; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.skin-compressor .pedal-name::before { content: '🗜️ '; }
+
+/* --- Klon:半人马金 --- */
+.skin-klon {
+  background:
+    radial-gradient(circle at 30% 15%, rgba(255,255,255,0.35), transparent 50%),
+    linear-gradient(168deg, #e8c86a, #b8923a 55%, #8a6a24);
+}
+.skin-klon .pedal-name { font-family: Georgia, serif; font-style: italic; }
+.skin-klon .pedal-name::before { content: '🐎 '; }
+
+/* --- Overdrive:熔岩橙 --- */
+.skin-overdrive {
+  background:
+    repeating-linear-gradient(115deg, rgba(0,0,0,0.14) 0 4px, transparent 4px 14px),
+    linear-gradient(168deg, #e89040, #c05a18 55%, #8a3a08);
+}
+.skin-overdrive .pedal-name { color: #fff3e2; text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+.skin-overdrive .pedal-name::before { content: '🔥 '; }
+
+/* --- TS808:经典绿 + 白色铭牌块 --- */
+.skin-ts808 {
+  background:
+    linear-gradient(168deg, rgba(255,255,255,0.25), rgba(0,0,0,0.35)),
+    #2e8b57;
+}
+.skin-ts808 .pedal-nameplate {
+  background: #f2ede2;
+  border-radius: 4px;
+  border-bottom: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.skin-ts808 .pedal-name::before { content: '🐸 '; }
+
+/* --- Distortion:深红划痕 --- */
+.skin-distortion {
+  background:
+    repeating-linear-gradient(63deg, rgba(255,255,255,0.07) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(117deg, rgba(0,0,0,0.2) 0 1px, transparent 1px 11px),
+    linear-gradient(168deg, #b03028, #7e1c16 60%, #571009);
+}
+.skin-distortion .pedal-name { color: #ffd9d2; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.skin-distortion .pedal-name::before { content: '💥 '; }
+
+/* --- RAT:纯黑大白字 --- */
+.skin-rat {
+  background:
+    linear-gradient(168deg, #34343a, #1a1a1e 60%, #0c0c0f);
+}
+.skin-rat .pedal-nameplate {
+  background: #f2f2f2;
+  border-radius: 4px;
+  border-bottom: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.skin-rat .pedal-name { letter-spacing: 4px; }
+.skin-rat .pedal-name::before { content: '🐀 '; }
+
+/* --- Fuzz:毛茸茸焦橙 --- */
+.skin-fuzz {
+  background:
+    repeating-linear-gradient(78deg, rgba(255,255,255,0.08) 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(102deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 6px),
+    linear-gradient(168deg, #d06018, #a04408 60%, #6e2d04);
+}
+.skin-fuzz .pedal-name { color: #ffe8cc; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.skin-fuzz .pedal-name::before { content: '🧶 '; }
+
+/* --- Auto-Wah:绿波 --- */
+.skin-autowah {
+  background:
+    repeating-radial-gradient(circle at 50% 118%, rgba(255,255,255,0.1) 0 3px, transparent 3px 12px),
+    linear-gradient(168deg, #2fae6a, #1c7a48 60%, #0f4d2c);
+}
+.skin-autowah .pedal-name { color: #e2ffe9; text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+.skin-autowah .pedal-name::before { content: '〰️ '; }
+
+/* --- EQ:深青 + 推子槽 --- */
+.skin-eq {
+  background:
+    linear-gradient(90deg,
+      transparent 0 24%, rgba(0,0,0,0.35) 24% 26%, transparent 26% 49%,
+      rgba(0,0,0,0.35) 49% 51%, transparent 51% 74%, rgba(0,0,0,0.35) 74% 76%,
+      transparent 76%),
+    linear-gradient(168deg, #149b86, #0d6b5c 60%, #06433a);
+}
+.skin-eq .pedal-name { color: #d9fff6; text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+.skin-eq .pedal-name::before { content: '🎚️ '; }
+
+/* --- Chorus:紫漩涡 --- */
+.skin-chorus {
+  background:
+    repeating-conic-gradient(from 0deg at 50% 40%, rgba(255,255,255,0.08) 0deg 18deg, transparent 18deg 36deg),
+    linear-gradient(168deg, #8e5aa8, #6a3d85 60%, #43215a);
+}
+.skin-chorus .pedal-name { color: #f2e2ff; text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+.skin-chorus .pedal-name::before { content: '🌊 '; }
+
+/* --- Flanger:橙喷气流 --- */
+.skin-flanger {
+  background:
+    repeating-linear-gradient(52deg, rgba(255,255,255,0.1) 0 5px, transparent 5px 16px),
+    linear-gradient(168deg, #e08a30, #b25f10 60%, #7a3f06);
+}
+.skin-flanger .pedal-name { color: #ffe9d2; text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+.skin-flanger .pedal-name::before { content: '✈️ '; }
+
+/* --- Phaser:青同心波纹 --- */
+.skin-phaser {
+  background:
+    repeating-radial-gradient(circle at 50% 30%, rgba(255,255,255,0.09) 0 4px, transparent 4px 14px),
+    linear-gradient(168deg, #18b3a6, #0e7a72 60%, #074a46);
+}
+.skin-phaser .pedal-name { color: #dcfffb; text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+.skin-phaser .pedal-name::before { content: '🌀 '; }
+
+/* --- Tremolo:黄色锯齿脉冲 --- */
+.skin-tremolo {
+  background:
+    linear-gradient(168deg, rgba(255,255,255,0.25), rgba(0,0,0,0.3)),
+    repeating-linear-gradient(90deg, #d9b81e 0 10px, #c2a515 10px 12px, #d9b81e 12px 22px);
+}
+.skin-tremolo .pedal-name::before { content: '⚡ '; }
+
+/* --- Delay:蓝回声环 --- */
+.skin-delay {
+  background:
+    repeating-radial-gradient(circle at 85% 20%, rgba(255,255,255,0.12) 0 2px, transparent 2px 10px),
+    repeating-radial-gradient(circle at 15% 75%, rgba(255,255,255,0.08) 0 2px, transparent 2px 14px),
+    linear-gradient(168deg, #3a7fc2, #265a92 60%, #173a63);
+}
+.skin-delay .pedal-name { color: #dceeff; text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+.skin-delay .pedal-name::before { content: '🔁 '; }
+
+/* --- Reverb:石板厅堂雾 --- */
+.skin-reverb {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.14), transparent 40%, rgba(255,255,255,0.06) 75%, transparent),
+    linear-gradient(168deg, #6d7d8a, #495a66 60%, #2c3942);
+}
+.skin-reverb .pedal-name { color: #e8f1f7; text-shadow: 0 1px 2px rgba(0,0,0,0.55); }
+.skin-reverb .pedal-name::before { content: '🏛️ '; }
+
+/* --- Volume:拉丝银 --- */
+.skin-volume {
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.1) 0 1px, transparent 1px 3px),
+    linear-gradient(168deg, #c8ccd2, #9aa0a8 60%, #6d737b);
+}
+.skin-volume .pedal-name::before { content: '🔊 '; }
+
+/* 深色皮肤统一调整铭牌分隔线 */
+.skin-compressor .pedal-nameplate,
+.skin-overdrive .pedal-nameplate,
+.skin-distortion .pedal-nameplate,
+.skin-fuzz .pedal-nameplate,
+.skin-autowah .pedal-nameplate,
+.skin-eq .pedal-nameplate,
+.skin-chorus .pedal-nameplate,
+.skin-flanger .pedal-nameplate,
+.skin-phaser .pedal-nameplate,
+.skin-delay .pedal-nameplate,
+.skin-reverb .pedal-nameplate {
+  border-bottom-color: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* 深色皮肤上的 × 按钮改浅色 */
+.skin-noiseGate .pedal-remove,
+.skin-compressor .pedal-remove,
+.skin-overdrive .pedal-remove,
+.skin-distortion .pedal-remove,
+.skin-rat .pedal-remove,
+.skin-fuzz .pedal-remove,
+.skin-autowah .pedal-remove,
+.skin-eq .pedal-remove,
+.skin-chorus .pedal-remove,
+.skin-flanger .pedal-remove,
+.skin-phaser .pedal-remove,
+.skin-delay .pedal-remove,
+.skin-reverb .pedal-remove {
+  color: rgba(255, 255, 255, 0.55);
+  text-shadow: none;
+}
+
+/* ============================================================
+   箱头专属皮肤(按 amp-<ampId> 类区分)
+   ============================================================ */
+
+.amp-grill {
+  height: 56px;
+  border-top: 2px solid #0c0a08;
+}
+
+/* --- Clean Twin:黑 tolex + 银灰网罩 --- */
+.amp-clean .amp-brand { color: #d8dce2; }
+.amp-clean .amp-faceplate {
+  background: linear-gradient(180deg, #26262a, #1a1a1d);
+}
+.amp-clean .amp-faceplate .knob-label,
+.amp-clean .amp-faceplate .knob-value { color: rgba(216, 220, 226, 0.8); }
+.amp-clean .amp-grill {
+  background:
+    repeating-linear-gradient(45deg, #8a8f98 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, #6a6f76 0 1px, transparent 1px 4px),
+    #1c1d20;
+}
+
+/* --- British Crunch:黑 tolex + 金面板 + 金包边 --- */
+.amp-crunch .amp-head { border-color: #8a6f2a; }
+.amp-crunch .amp-brand { color: #e8d9a8; }
+.amp-crunch .amp-faceplate {
+  background: linear-gradient(180deg, #d8b24a, #b8923a 55%, #96742a);
+  border-top: 1px solid rgba(255, 240, 190, 0.6);
+}
+.amp-crunch .amp-faceplate .knob-label { color: rgba(40, 26, 6, 0.85); text-shadow: 0 1px 0 rgba(255,240,190,0.4); }
+.amp-crunch .amp-faceplate .knob-value { color: rgba(40, 26, 6, 0.6); }
+.amp-crunch .amp-faceplate .knob-tick { background: rgba(40, 26, 6, 0.4); }
+.amp-crunch .amp-grill {
+  background:
+    repeating-linear-gradient(45deg, #3a3a3a 0 2px, transparent 2px 5px),
+    repeating-linear-gradient(-45deg, #2a2a2a 0 2px, transparent 2px 5px),
+    #141414;
+}
+
+/* --- Modern Recto:菱形钢板 --- */
+.amp-recto .amp-brand { color: #e05a4a; }
+.amp-recto .amp-faceplate {
+  background:
+    repeating-linear-gradient(45deg, #3a3d42 0 3px, #2b2e33 3px 6px),
+    repeating-linear-gradient(-45deg, #33363b 0 3px, #26292e 3px 6px);
+}
+.amp-recto .amp-grill {
+  background:
+    repeating-linear-gradient(90deg, #1a1c1f 0 3px, #24262a 3px 6px);
+}
+
+/* --- AC Chime:棕 tolex + Vox 菱形网罩 --- */
+.amp-chime.amp-head {
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #3d2812, #2a1a0a);
+  border-color: #5a4020;
+}
+.amp-chime .amp-brand { color: #e0c894; }
+.amp-chime .amp-faceplate {
+  background: linear-gradient(180deg, #4a4a4d, #353538);
+}
+.amp-chime .amp-grill {
+  background:
+    repeating-linear-gradient(45deg, #8a6f3a 0 2px, transparent 2px 7px),
+    repeating-linear-gradient(-45deg, #8a6f3a 0 2px, transparent 2px 7px),
+    #201408;
+}

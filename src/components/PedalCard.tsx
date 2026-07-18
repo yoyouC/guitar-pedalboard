@@ -14,7 +14,7 @@ interface PedalCardProps {
 export function PedalCard({ item, def, onToggle, onRemove, onParam }: PedalCardProps) {
   return (
     <div
-      className={`pedal ${item.enabled ? 'pedal-on' : 'pedal-off'}`}
+      className={`pedal skin-${def.id} ${item.enabled ? 'pedal-on' : 'pedal-off'}`}
       style={{ '--pedal-color': def.color } as React.CSSProperties}
     >
       <span className="screw screw-tl" />
