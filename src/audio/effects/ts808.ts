@@ -6,10 +6,13 @@ const SMOOTH = 0.03;
 const MID_HUMP_HP_HZ = 720;
 /** 中频隆起的后置强调 */
 const HUMP_FREQ_HZ = 730;
-const HUMP_GAIN_DB = 4.5;
-/** Tone 旋钮行程(顺时针更亮) */
-const TONE_MIN_HZ = 1200;
-const TONE_MAX_HZ = 8000;
+const HUMP_GAIN_DB = 3;
+/** 反馈 51pF 电容:软化削波边角 */
+const CORNER_LP_HZ = 7000;
+/** 音色级固定无源低通(1K × 0.22uF = 723.4Hz),削掉刺耳泛音 */
+const MAIN_LP_HZ = 723;
+/** Tone 主动电路的高架中心(3.2kHz 以上高通区) */
+const TONE_SHELF_HZ = 3200;
 
 /**
  * TS 软削波曲线:二极管在运放反馈回路中, knee 圆润、对称。
@@ -26,13 +29,15 @@ function makeTsCurve(k: number): Float32Array<ArrayBuffer> {
 }
 
 const driveToGain = (v: number) => 1 + (v / 100) * 39; // 1 ~ 40
-const toneToFreq = (v: number) =>
-  TONE_MIN_HZ * Math.pow(TONE_MAX_HZ / TONE_MIN_HZ, v / 100);
-const levelToOutputGain = (v: number) => (v / 100) * 2;
+/** Tone 0~100 → 高架增益 dB:低频侧削暗(-12dB),高频侧打开 3.2kHz 以上(+3dB) */
+const toneToDb = (v: number) => ((v - 50) / 50) * 15;
+const levelToOutputGain = (v: number) => (v / 100) * 1.2;
 
 /**
- * Ibanez TS808 风格过载:720Hz 高通(低频不削、中频隆起)→
- * 反馈二极管软削波 → 中频强调 → Tone 低通 → Level。
+ * Ibanez TS808 风格过载(按 ElectroSmash 电路分析):
+ * 削波级反馈 720Hz 高通(低频少削、频率选择性失真)→
+ * 反馈二极管软削波 → 51pF 边角软化 → 中频隆起 →
+ * 音色级固定 723Hz 无源低通(1K×0.22uF)→ Tone 高架(3.2kHz 主动电路)→ Level。
  */
 export const ts808Effect: EffectDefinition = {
   id: 'ts808',
@@ -49,7 +54,9 @@ export const ts808Effect: EffectDefinition = {
     const tightBass = ctx.createBiquadFilter();
     const driveGain = ctx.createGain();
     const shaper = ctx.createWaveShaper();
+    const cornerLp = ctx.createBiquadFilter();
     const hump = ctx.createBiquadFilter();
+    const mainLp = ctx.createBiquadFilter();
     const tone = ctx.createBiquadFilter();
 
     // 静态初始值(与 params 默认值一致)
@@ -59,21 +66,29 @@ export const ts808Effect: EffectDefinition = {
     driveGain.gain.value = driveToGain(45);
     shaper.curve = makeTsCurve(2.2);
     shaper.oversample = '4x';
+    cornerLp.type = 'lowpass';
+    cornerLp.frequency.value = CORNER_LP_HZ;
     hump.type = 'peaking';
     hump.frequency.value = HUMP_FREQ_HZ;
-    hump.Q.value = 1.2;
+    hump.Q.value = 1;
     hump.gain.value = HUMP_GAIN_DB;
-    tone.type = 'lowpass';
-    tone.Q.value = 0.7;
-    tone.frequency.value = toneToFreq(55);
+    mainLp.type = 'lowpass';
+    mainLp.frequency.value = MAIN_LP_HZ;
+    mainLp.Q.value = 0.7;
+    tone.type = 'highshelf';
+    tone.frequency.value = TONE_SHELF_HZ;
+    tone.gain.value = toneToDb(55);
     output.gain.value = levelToOutputGain(65);
 
-    // input → 720Hz 高通 → drive → 软削波 → 中频隆起 → Tone → output
+    // input → 720Hz 高通 → drive → 软削波 → 边角软化 → 中频隆起
+    //      → 723Hz 无源低通 → Tone 高架 → output
     input.connect(tightBass);
     tightBass.connect(driveGain);
     driveGain.connect(shaper);
-    shaper.connect(hump);
-    hump.connect(tone);
+    shaper.connect(cornerLp);
+    cornerLp.connect(hump);
+    hump.connect(mainLp);
+    mainLp.connect(tone);
     tone.connect(output);
 
     return {
@@ -86,7 +101,7 @@ export const ts808Effect: EffectDefinition = {
             driveGain.gain.setTargetAtTime(driveToGain(value), t, SMOOTH);
             break;
           case 'tone':
-            tone.frequency.setTargetAtTime(toneToFreq(value), t, SMOOTH);
+            tone.gain.setTargetAtTime(toneToDb(value), t, SMOOTH);
             break;
           case 'level':
             output.gain.setTargetAtTime(levelToOutputGain(value), t, SMOOTH);
@@ -98,7 +113,9 @@ export const ts808Effect: EffectDefinition = {
         tightBass.disconnect();
         driveGain.disconnect();
         shaper.disconnect();
+        cornerLp.disconnect();
         hump.disconnect();
+        mainLp.disconnect();
         tone.disconnect();
         output.disconnect();
       },

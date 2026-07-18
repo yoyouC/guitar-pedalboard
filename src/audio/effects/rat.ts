@@ -2,11 +2,16 @@ import type { EffectDefinition, EffectInstance } from './types';
 
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
-/** 模拟 LM308 慢摆率对超高频的天然软化 */
-const SLEW_TAME_HZ = 9000;
-/** Filter 旋钮行程:逆时针全开(12kHz)→ 顺时针压到 450Hz(反向音色旋钮) */
-const FILTER_MAX_HZ = 12000;
-const FILTER_MIN_HZ = 450;
+/** 削波前高通:RAT 削波级反馈网络在 1.5kHz 以下衰减 20dB/dec,
+ * 低频少削、频率选择性失真——RAT 紧实低频的来源 */
+const PRE_CLIP_HP_HZ = 1500;
+/** 反馈 100pF 电容的边角软化(削波前) */
+const FEEDBACK_LP_HZ = 16000;
+/** 模拟 LM308 慢摆率(0.3V/us):9V 峰值下 5.3kHz 以上跟不上 */
+const SLEW_TAME_HZ = 5300;
+/** Filter 旋钮行程(实测电路):逆时针全开(32kHz)→ 顺时针压到 475Hz */
+const FILTER_MAX_HZ = 32000;
+const FILTER_MIN_HZ = 475;
 /** 硬削波阈值(归一化) */
 const CLIP_T = 0.45;
 
@@ -26,7 +31,7 @@ const driveToGain = (v: number) => 1 + (v / 100) * 99; // 1 ~ 100
 /** Filter 值 0~100 → 截止频率,指数映射,值越大频率越低(反向) */
 const filterToFreq = (v: number) =>
   FILTER_MAX_HZ * Math.pow(FILTER_MIN_HZ / FILTER_MAX_HZ, v / 100);
-const levelToOutputGain = (v: number) => (v / 100) * 2;
+const levelToOutputGain = (v: number) => (v / 100) * 1.2;
 
 /**
  * Pro Co RAT 风格失真:高增益运放 → 硅二极管对地硬削波 →
@@ -44,13 +49,20 @@ export const ratEffect: EffectDefinition = {
   create(ctx: AudioContext): EffectInstance {
     const input = ctx.createGain();
     const output = ctx.createGain();
+    const preClipHp = ctx.createBiquadFilter();
     const driveGain = ctx.createGain();
+    const feedbackLp = ctx.createBiquadFilter();
     const shaper = ctx.createWaveShaper();
     const slewTame = ctx.createBiquadFilter();
     const filter = ctx.createBiquadFilter();
 
     // 静态初始值(与 params 默认值一致)
+    preClipHp.type = 'highpass';
+    preClipHp.frequency.value = PRE_CLIP_HP_HZ;
+    preClipHp.Q.value = 0.5;
     driveGain.gain.value = driveToGain(55);
+    feedbackLp.type = 'lowpass';
+    feedbackLp.frequency.value = FEEDBACK_LP_HZ;
     shaper.curve = makeRatCurve();
     shaper.oversample = '4x';
     slewTame.type = 'lowpass';
@@ -60,9 +72,12 @@ export const ratEffect: EffectDefinition = {
     filter.frequency.value = filterToFreq(35);
     output.gain.value = levelToOutputGain(60);
 
-    // input → drive → 硬削波 → 摆率软化 → Filter(反向) → output
-    input.connect(driveGain);
-    driveGain.connect(shaper);
+    // input → 削波前高通(1.5k) → drive → 反馈边角软化 → 硬削波
+    //      → LM308 摆率软化 → Filter(反向) → output
+    input.connect(preClipHp);
+    preClipHp.connect(driveGain);
+    driveGain.connect(feedbackLp);
+    feedbackLp.connect(shaper);
     shaper.connect(slewTame);
     slewTame.connect(filter);
     filter.connect(output);
@@ -86,7 +101,9 @@ export const ratEffect: EffectDefinition = {
       },
       dispose() {
         input.disconnect();
+        preClipHp.disconnect();
         driveGain.disconnect();
+        feedbackLp.disconnect();
         shaper.disconnect();
         slewTame.disconnect();
         filter.disconnect();
