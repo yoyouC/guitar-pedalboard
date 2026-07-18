@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { audioEngine } from './audio/AudioEngine';
 import type { InputSourceType } from './audio/AudioEngine';
 import { getEffectDef } from './audio/effects';
+import { getAmpDef } from './audio/amps';
 import type { ChainItem, Preset } from './state/store';
 import {
   createChainItem,
@@ -14,6 +15,8 @@ import { TopBar } from './components/TopBar';
 import { ChainView } from './components/ChainView';
 import { PresetBar } from './components/PresetBar';
 import { Oscilloscope } from './components/Oscilloscope';
+import { AmpPanel } from './components/AmpPanel';
+import { FluidBackground } from './components/FluidBackground';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -23,9 +26,21 @@ function defaultChain(): ChainItem[] {
   );
 }
 
+function defaultAmpValues(ampId: string): Record<string, number> {
+  const values: Record<string, number> = {};
+  for (const p of getAmpDef(ampId).params) values[p.key] = p.defaultValue;
+  return values;
+}
+
 export default function App() {
   const [chain, setChain] = useState<ChainItem[]>(defaultChain);
   const [presets, setPresets] = useState<Preset[]>(loadPresets);
+
+  const [ampId, setAmpId] = useState('crunch');
+  const [ampEnabled, setAmpEnabled] = useState(true);
+  const [ampValues, setAmpValues] = useState<Record<string, number>>(() =>
+    defaultAmpValues('crunch'),
+  );
 
   const [inputType, setInputType] = useState<InputSourceType | null>(null);
   const [engineReady, setEngineReady] = useState(false);
@@ -59,12 +74,12 @@ export default function App() {
 
   // ---------- 链条 → 音频图同步 ----------
 
-  // 仅在结构(增删/排序/开关/bypass)变化时重建音频图;参数连续调整走 updateParam
+  // 仅在结构(增删/排序/开关/bypass/换箱头)变化时重建音频图;参数连续调整走 updateParam
   const structureKey = useMemo(
     () =>
       chain.map((i) => `${i.uid}:${i.effectId}:${i.enabled}`).join('|') +
-      `|bypass:${globalBypass}`,
-    [chain, globalBypass],
+      `|bypass:${globalBypass}|amp:${ampId}:${ampEnabled}`,
+    [chain, globalBypass, ampId, ampEnabled],
   );
 
   useEffect(() => {
@@ -77,6 +92,11 @@ export default function App() {
         values: item.values,
       })),
     );
+    audioEngine.setAmp({
+      def: getAmpDef(ampId),
+      enabled: ampEnabled,
+      values: ampValues,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey]);
 
@@ -173,6 +193,22 @@ export default function App() {
     audioEngine.updateParam(uid, key, value);
   }, []);
 
+  // ---------- 箱头 ----------
+
+  const handleAmpSelect = useCallback((id: string) => {
+    setAmpId(id);
+    setAmpValues(defaultAmpValues(id));
+  }, []);
+
+  const handleAmpToggle = useCallback(() => {
+    setAmpEnabled((e) => !e);
+  }, []);
+
+  const handleAmpParam = useCallback((key: string, value: number) => {
+    setAmpValues((cur) => ({ ...cur, [key]: value }));
+    audioEngine.updateAmpParam(key, value);
+  }, []);
+
   // ---------- 预设 ----------
 
   const handleSavePreset = useCallback(
@@ -206,6 +242,8 @@ export default function App() {
 
   return (
     <div className="app">
+      <FluidBackground analyser={engineReady ? audioEngine.outputAnalyser : null} />
+
       <header className="app-header">
         <h1>🎸 Guitar Pedalboard</h1>
       </header>
@@ -257,13 +295,23 @@ export default function App() {
         />
       </main>
 
+      <AmpPanel
+        ampId={ampId}
+        enabled={ampEnabled}
+        values={ampValues}
+        onSelect={handleAmpSelect}
+        onToggle={handleAmpToggle}
+        onParam={handleAmpParam}
+      />
+
       <Oscilloscope
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
       />
 
       <footer className="app-footer">
-        信号流向:输入 → {chain.map((i) => getEffectDef(i.effectId).name).join(' → ')} → 输出
+        信号流向:输入 → {chain.map((i) => getEffectDef(i.effectId).name).join(' → ')}
+        {ampEnabled && ` → ${getAmpDef(ampId).name}`} → 输出
         {globalBypass && '(全局 Bypass 中)'}
         {!inputType && <span className="hint"> — 请在上方选择一个输入源开始</span>}
       </footer>

@@ -25,108 +25,122 @@ interface TopBarProps {
   outputAnalyser: AnalyserNode | null;
 }
 
-/** 顶栏:输入源、输入/输出设备、增益、电平表、全局 Bypass */
+/** 顶部控制台:输入源 / 输入电平 / 输出 三组,分组标签 + 竖分隔 */
 export function TopBar(props: TopBarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="top-bar">
-      <div className="top-section">
-        <span className="section-title">输入</span>
-        <div className="input-buttons">
-          <button
-            className={props.inputType === 'mic' ? 'active' : ''}
-            onClick={props.onSelectMic}
-          >
-            麦克风/线路
-          </button>
-          <button
-            className={props.inputType === 'file' ? 'active' : ''}
-            onClick={() => fileRef.current?.click()}
-          >
-            音频文件
-          </button>
-          <button
-            className={props.inputType === 'test' ? 'active' : ''}
-            onClick={props.onSelectTest}
-          >
-            测试音源
-          </button>
-          {props.inputType && (
-            <button className="stop-btn" onClick={props.onStopInput}>
-              停止
+      <div className="console-group">
+        <span className="group-label">输入源</span>
+        <div className="group-body">
+          <div className="input-buttons">
+            <button
+              className={props.inputType === 'mic' ? 'active' : ''}
+              onClick={props.onSelectMic}
+            >
+              🎙 麦克风
             </button>
+            <button
+              className={props.inputType === 'file' ? 'active' : ''}
+              onClick={() => fileRef.current?.click()}
+            >
+              📂 音频文件
+            </button>
+            <button
+              className={props.inputType === 'test' ? 'active' : ''}
+              onClick={props.onSelectTest}
+            >
+              🎵 测试音源
+            </button>
+            {props.inputType && (
+              <button className="stop-btn" onClick={props.onStopInput}>
+                ■ 停止
+              </button>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="audio/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) props.onSelectFile(f);
+                e.target.value = '';
+              }}
+            />
+          </div>
+          {props.inputType === 'mic' && props.micDevices.length > 0 && (
+            <select
+              value={props.micId}
+              onChange={(e) => props.onMicChange(e.target.value)}
+            >
+              {props.micDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `输入设备 ${d.deviceId.slice(0, 6)}`}
+                </option>
+              ))}
+            </select>
           )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="audio/*"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) props.onSelectFile(f);
-              e.target.value = '';
-            }}
-          />
         </div>
-        {props.inputType === 'mic' && props.micDevices.length > 0 && (
-          <select
-            value={props.micId}
-            onChange={(e) => props.onMicChange(e.target.value)}
-          >
-            {props.micDevices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || `输入设备 ${d.deviceId.slice(0, 6)}`}
-              </option>
-            ))}
-          </select>
-        )}
-        <label className="gain-ctrl">
-          输入增益
-          <input
-            type="range"
-            min={0}
-            max={2}
-            step={0.01}
-            value={props.inputGain}
-            onChange={(e) => props.onInputGain(Number(e.target.value))}
-          />
-        </label>
-        <LevelMeter analyser={props.inputAnalyser} label="IN" />
       </div>
 
-      <div className="top-section">
-        <span className="section-title">输出</span>
-        {props.outputSelectSupported && props.outputDevices.length > 0 && (
-          <select
-            value={props.outputId}
-            onChange={(e) => props.onOutputChange(e.target.value)}
+      <div className="console-divider" />
+
+      <div className="console-group">
+        <span className="group-label">输入电平</span>
+        <div className="group-body">
+          <label className="gain-ctrl">
+            GAIN
+            <input
+              type="range"
+              min={0}
+              max={2}
+              step={0.01}
+              value={props.inputGain}
+              onChange={(e) => props.onInputGain(Number(e.target.value))}
+            />
+          </label>
+          <LevelMeter analyser={props.inputAnalyser} label="IN" />
+        </div>
+      </div>
+
+      <div className="console-divider" />
+
+      <div className="console-group">
+        <span className="group-label">输出</span>
+        <div className="group-body">
+          {props.outputSelectSupported && props.outputDevices.length > 0 && (
+            <select
+              value={props.outputId}
+              onChange={(e) => props.onOutputChange(e.target.value)}
+            >
+              {props.outputDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `输出设备 ${d.deviceId.slice(0, 6)}`}
+                </option>
+              ))}
+            </select>
+          )}
+          <label className="gain-ctrl">
+            MASTER
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={props.masterVolume}
+              onChange={(e) => props.onMasterVolume(Number(e.target.value))}
+            />
+          </label>
+          <LevelMeter analyser={props.outputAnalyser} label="OUT" />
+          <button
+            className={`bypass-btn ${props.globalBypass ? 'bypassed' : ''}`}
+            onClick={props.onToggleBypass}
           >
-            {props.outputDevices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || `输出设备 ${d.deviceId.slice(0, 6)}`}
-              </option>
-            ))}
-          </select>
-        )}
-        <label className="gain-ctrl">
-          主音量
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.01}
-            value={props.masterVolume}
-            onChange={(e) => props.onMasterVolume(Number(e.target.value))}
-          />
-        </label>
-        <LevelMeter analyser={props.outputAnalyser} label="OUT" />
-        <button
-          className={`bypass-btn ${props.globalBypass ? 'bypassed' : ''}`}
-          onClick={props.onToggleBypass}
-        >
-          {props.globalBypass ? '已 Bypass' : 'Bypass'}
-        </button>
+            {props.globalBypass ? '已 Bypass' : 'Bypass'}
+          </button>
+        </div>
       </div>
     </div>
   );

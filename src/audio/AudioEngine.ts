@@ -9,6 +9,13 @@ export interface ChainSpec {
   values: Record<string, number>;
 }
 
+/** 箱头快照(null 表示不启用箱头) */
+export interface AmpSpec {
+  def: EffectDefinition;
+  enabled: boolean;
+  values: Record<string, number>;
+}
+
 export type InputSourceType = 'mic' | 'file' | 'test';
 
 /**
@@ -37,6 +44,8 @@ class AudioEngine {
 
   private instances: { uid: string; inst: EffectInstance }[] = [];
   private chain: ChainSpec[] = [];
+  private ampInstance: EffectInstance | null = null;
+  private ampSpec: AmpSpec | null = null;
   private globalBypass = false;
 
   /** 创建/恢复 AudioContext,搭建固定主链路。幂等。 */
@@ -139,10 +148,29 @@ class AudioEngine {
     this.sourceNode = src;
   }
 
-  /** 内置测试音源:循环播放的合成 riff(拨弦质感) */
+  /** 内置测试音源:Karplus-Strong 渲染的清音电吉他 riff(public/samples),加载失败回退到合成 riff */
   async useTestTone(): Promise<void> {
     await this.init();
     this.stopSource();
+    try {
+      const url = `${import.meta.env.BASE_URL}samples/guitar-riff.wav`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buffer = await this.ctx!.decodeAudioData(await res.arrayBuffer());
+      const src = this.ctx!.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      src.connect(this.inputGain!);
+      src.start();
+      this.sourceNode = src;
+    } catch (e) {
+      console.warn('吉他 riff 采样加载失败,回退到合成 riff:', e);
+      this.useSynthRiff();
+    }
+  }
+
+  /** 备用合成 riff:循环播放的程序合成音符 */
+  private useSynthRiff(): void {
     const ctx = this.ctx!;
     const bus = ctx.createGain();
     bus.connect(this.inputGain!);
@@ -206,12 +234,27 @@ class AudioEngine {
     found?.inst.update(key, value);
   }
 
+  /** 设置/替换箱头(结构变化,重建图) */
+  setAmp(spec: AmpSpec | null): void {
+    this.ampSpec = spec;
+    this.rebuildGraph();
+  }
+
+  /** 箱头参数连续调整,不重建图 */
+  updateAmpParam(key: string, value: number): void {
+    this.ampInstance?.update(key, value);
+  }
+
   private rebuildGraph(): void {
     const ctx = this.ctx;
     if (!ctx || !this.inputGain || !this.outputAnalyser) return;
 
     this.instances.forEach((i) => i.inst.dispose());
     this.instances = [];
+    if (this.ampInstance) {
+      this.ampInstance.dispose();
+      this.ampInstance = null;
+    }
 
     // 断开 inputGain 全部下游(含 analyser 与旧链),再按新链重连
     this.inputGain.disconnect();
@@ -226,6 +269,14 @@ class AudioEngine {
         prev.connect(inst.input);
         prev = inst.output;
         this.instances.push({ uid: spec.uid, inst });
+      }
+      // 箱头位于效果链之后、输出之前(踏板 → 箱头 → 箱体的真实路由)
+      if (this.ampSpec && this.ampSpec.enabled) {
+        const amp = this.ampSpec.def.create(ctx);
+        for (const [k, v] of Object.entries(this.ampSpec.values)) amp.update(k, v);
+        prev.connect(amp.input);
+        prev = amp.output;
+        this.ampInstance = amp;
       }
     }
     prev.connect(this.outputAnalyser);
