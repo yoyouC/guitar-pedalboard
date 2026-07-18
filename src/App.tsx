@@ -45,7 +45,7 @@ export default function App() {
   const [inputType, setInputType] = useState<InputSourceType | null>(null);
   const [engineReady, setEngineReady] = useState(false);
   const [inputGain, setInputGain] = useState(1);
-  const [masterVolume, setMasterVolume] = useState(0.8);
+  const [masterVolume, setMasterVolume] = useState(0.5);
   const [globalBypass, setGlobalBypass] = useState(false);
 
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);

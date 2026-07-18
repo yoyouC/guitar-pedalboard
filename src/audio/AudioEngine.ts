@@ -64,7 +64,7 @@ class AudioEngine {
     this.outputAnalyser.fftSize = 2048;
     this.masterGain = ctx.createGain();
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -3;
+    this.limiter.threshold.value = -12;
     this.limiter.knee.value = 0;
     this.limiter.ratio.value = 20;
     this.limiter.attack.value = 0.003;
@@ -190,7 +190,7 @@ class AudioEngine {
       lp.frequency.value = 1400;
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.4, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.22, t + 0.012);
       g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
       osc.connect(lp);
       lp.connect(g);
