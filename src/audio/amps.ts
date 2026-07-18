@@ -45,10 +45,6 @@ interface AmpModelConfig {
   voicingGainDb: number;
   /** 后级(电源管)饱和硬度 */
   powerClipK: number;
-  /** 箱体模拟:低通截止与共振峰 */
-  cabLpHz: number;
-  cabPeakFreq: number;
-  cabPeakGainDb: number;
   defaults: { gain: number; bass: number; mid: number; treble: number; presence: number; master: number };
   /** 存在时替代通用 createAmp(如 crunch 的 JCM800 定制链路) */
   customCreate?: (ctx: AudioContext) => EffectInstance;
@@ -63,9 +59,6 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 600,
     voicingGainDb: -2,
     powerClipK: 1.2,
-    cabLpHz: 6000,
-    cabPeakFreq: 3200,
-    cabPeakGainDb: 2,
     defaults: { gain: 40, bass: 55, mid: 45, treble: 65, presence: 50, master: 55 },
   },
   crunch: {
@@ -76,9 +69,6 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 800,
     voicingGainDb: 3,
     powerClipK: 2,
-    cabLpHz: 4800,
-    cabPeakFreq: 2800,
-    cabPeakGainDb: 2.5,
     defaults: { gain: 60, bass: 50, mid: 65, treble: 60, presence: 55, master: 55 },
     customCreate: createCrunchAmp,
   },
@@ -90,9 +80,6 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 500,
     voicingGainDb: -3,
     powerClipK: 2.5,
-    cabLpHz: 4500,
-    cabPeakFreq: 3000,
-    cabPeakGainDb: 3,
     defaults: { gain: 70, bass: 60, mid: 40, treble: 60, presence: 60, master: 55 },
   },
   chime: {
@@ -103,9 +90,6 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 1200,
     voicingGainDb: 2.5,
     powerClipK: 1.8,
-    cabLpHz: 5200,
-    cabPeakFreq: 3400,
-    cabPeakGainDb: 2,
     defaults: { gain: 55, bass: 45, mid: 55, treble: 65, presence: 65, master: 55 },
   },
 };
@@ -150,19 +134,6 @@ function createAmp(ctx: AudioContext, cfg: AmpModelConfig): EffectInstance {
   powerShaper.curve = makeClipCurve(cfg.powerClipK);
   powerShaper.oversample = '2x';
 
-  // 箱体模拟:高通去轰 + 共振峰 + 低通去刺
-  const cabHp = ctx.createBiquadFilter();
-  cabHp.type = 'highpass';
-  cabHp.frequency.value = 75;
-  const cabPeak = ctx.createBiquadFilter();
-  cabPeak.type = 'peaking';
-  cabPeak.frequency.value = cfg.cabPeakFreq;
-  cabPeak.Q.value = 1.4;
-  cabPeak.gain.value = cfg.cabPeakGainDb;
-  const cabLp = ctx.createBiquadFilter();
-  cabLp.type = 'lowpass';
-  cabLp.frequency.value = cfg.cabLpHz;
-
   const masterGain = ctx.createGain();
 
   // 静态初始值
@@ -183,10 +154,7 @@ function createAmp(ctx: AudioContext, cfg: AmpModelConfig): EffectInstance {
   mid.connect(treble);
   treble.connect(presence);
   presence.connect(powerShaper);
-  powerShaper.connect(cabHp);
-  cabHp.connect(cabPeak);
-  cabPeak.connect(cabLp);
-  cabLp.connect(masterGain);
+  powerShaper.connect(masterGain);
   masterGain.connect(output);
 
   return {
@@ -219,7 +187,7 @@ function createAmp(ctx: AudioContext, cfg: AmpModelConfig): EffectInstance {
       [
         input, preHp, preGain, preShaper, voicing,
         bass, mid, treble, presence, powerShaper,
-        cabHp, cabPeak, cabLp, masterGain, output,
+        masterGain, output,
       ].forEach((n) => n.disconnect());
     },
   };
@@ -233,7 +201,7 @@ function createAmp(ctx: AudioContext, cfg: AmpModelConfig): EffectInstance {
  *   → 暖偏置级(保持不对称)→ 阴极跟随器
  *   → TMB 音色栈(500Hz noon 位特征凹陷)→ presence
  *   → EL34 后级 → 输出变压器带宽限制(80Hz~6.5kHz)
- *   → 4x12 Greenback 箱体(低频共振 + 2.8k 临场峰 + 5kHz 24dB/oct 陡降)
+ *   (箱体模拟已独立为 cab 级,见 cabs.ts)
  */
 function createCrunchAmp(ctx: AudioContext): EffectInstance {
   const d = AMP_MODELS.crunch.defaults;
@@ -309,27 +277,6 @@ function createCrunchAmp(ctx: AudioContext): EffectInstance {
   xfLp.type = 'lowpass';
   xfLp.frequency.value = 6500;
 
-  // 箱体:4x12 Greenback
-  const cabHp = ctx.createBiquadFilter();
-  cabHp.type = 'highpass';
-  cabHp.frequency.value = 90;
-  const cabLowBump = ctx.createBiquadFilter();
-  cabLowBump.type = 'peaking';
-  cabLowBump.frequency.value = 100;
-  cabLowBump.Q.value = 1;
-  cabLowBump.gain.value = 2.5;
-  const cabPeak = ctx.createBiquadFilter();
-  cabPeak.type = 'peaking';
-  cabPeak.frequency.value = 2800;
-  cabPeak.Q.value = 1.2;
-  cabPeak.gain.value = 4;
-  const cabLp1 = ctx.createBiquadFilter();
-  cabLp1.type = 'lowpass';
-  cabLp1.frequency.value = 5000;
-  const cabLp2 = ctx.createBiquadFilter();
-  cabLp2.type = 'lowpass';
-  cabLp2.frequency.value = 5000;
-
   const masterGain = ctx.createGain();
 
   // 静态初始值(与 defaults 一致)
@@ -345,7 +292,7 @@ function createCrunchAmp(ctx: AudioContext): EffectInstance {
     coldDrive, coldClip, warmStage, millerLp2, cfClip,
     scoop, bass, mid, treble, presence,
     powerDrive, powerClip, xfHp, xfLp,
-    cabHp, cabLowBump, cabPeak, cabLp1, cabLp2, masterGain, output,
+    masterGain, output,
   ];
   for (let i = 0; i < chain.length - 1; i++) chain[i].connect(chain[i + 1]);
 

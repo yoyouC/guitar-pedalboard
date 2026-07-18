@@ -3,6 +3,7 @@ import { audioEngine } from './audio/AudioEngine';
 import type { InputSourceType } from './audio/AudioEngine';
 import { getEffectDef } from './audio/effects';
 import { getAmpDef } from './audio/amps';
+import { getCabDef } from './audio/cabs';
 import type { ChainItem, Preset } from './state/store';
 import {
   createChainItem,
@@ -14,8 +15,9 @@ import {
 import { TopBar } from './components/TopBar';
 import { ChainView } from './components/ChainView';
 import { PresetBar } from './components/PresetBar';
-import { Oscilloscope } from './components/Oscilloscope';
 import { AmpPanel } from './components/AmpPanel';
+import { CabPanel } from './components/CabPanel';
+import { Oscilloscope } from './components/Oscilloscope';
 import { FluidBackground } from './components/FluidBackground';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
@@ -32,6 +34,12 @@ function defaultAmpValues(ampId: string): Record<string, number> {
   return values;
 }
 
+function defaultCabValues(cabId: string): Record<string, number> {
+  const values: Record<string, number> = {};
+  for (const p of getCabDef(cabId).params) values[p.key] = p.defaultValue;
+  return values;
+}
+
 export default function App() {
   const [chain, setChain] = useState<ChainItem[]>(defaultChain);
   const [presets, setPresets] = useState<Preset[]>(loadPresets);
@@ -40,6 +48,12 @@ export default function App() {
   const [ampEnabled, setAmpEnabled] = useState(true);
   const [ampValues, setAmpValues] = useState<Record<string, number>>(() =>
     defaultAmpValues('crunch'),
+  );
+
+  const [cabId, setCabId] = useState('gb4x12');
+  const [cabEnabled, setCabEnabled] = useState(true);
+  const [cabValues, setCabValues] = useState<Record<string, number>>(() =>
+    defaultCabValues('gb4x12'),
   );
 
   const [inputType, setInputType] = useState<InputSourceType | null>(null);
@@ -74,12 +88,12 @@ export default function App() {
 
   // ---------- 链条 → 音频图同步 ----------
 
-  // 仅在结构(增删/排序/开关/bypass/换箱头)变化时重建音频图;参数连续调整走 updateParam
+  // 仅在结构(增删/排序/开关/bypass/换箱头箱体)变化时重建音频图;参数连续调整走 updateParam
   const structureKey = useMemo(
     () =>
       chain.map((i) => `${i.uid}:${i.effectId}:${i.enabled}`).join('|') +
-      `|bypass:${globalBypass}|amp:${ampId}:${ampEnabled}`,
-    [chain, globalBypass, ampId, ampEnabled],
+      `|bypass:${globalBypass}|amp:${ampId}:${ampEnabled}|cab:${cabId}:${cabEnabled}`,
+    [chain, globalBypass, ampId, ampEnabled, cabId, cabEnabled],
   );
 
   useEffect(() => {
@@ -96,6 +110,11 @@ export default function App() {
       def: getAmpDef(ampId),
       enabled: ampEnabled,
       values: ampValues,
+    });
+    audioEngine.setCab({
+      def: getCabDef(cabId),
+      enabled: cabEnabled,
+      values: cabValues,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey]);
@@ -209,6 +228,22 @@ export default function App() {
     audioEngine.updateAmpParam(key, value);
   }, []);
 
+  // ---------- 箱体 ----------
+
+  const handleCabSelect = useCallback((id: string) => {
+    setCabId(id);
+    setCabValues(defaultCabValues(id));
+  }, []);
+
+  const handleCabToggle = useCallback(() => {
+    setCabEnabled((e) => !e);
+  }, []);
+
+  const handleCabParam = useCallback((key: string, value: number) => {
+    setCabValues((cur) => ({ ...cur, [key]: value }));
+    audioEngine.updateCabParam(key, value);
+  }, []);
+
   // ---------- 预设 ----------
 
   const handleSavePreset = useCallback(
@@ -304,6 +339,15 @@ export default function App() {
         onParam={handleAmpParam}
       />
 
+      <CabPanel
+        cabId={cabId}
+        enabled={cabEnabled}
+        values={cabValues}
+        onSelect={handleCabSelect}
+        onToggle={handleCabToggle}
+        onParam={handleCabParam}
+      />
+
       <Oscilloscope
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
@@ -311,7 +355,8 @@ export default function App() {
 
       <footer className="app-footer">
         信号流向:输入 → {chain.map((i) => getEffectDef(i.effectId).name).join(' → ')}
-        {ampEnabled && ` → ${getAmpDef(ampId).name}`} → 输出
+        {ampEnabled && ` → ${getAmpDef(ampId).name}`}
+        {cabEnabled && ` → ${getCabDef(cabId).name}`} → 输出
         {globalBypass && '(全局 Bypass 中)'}
         {!inputType && <span className="hint"> — 请在上方选择一个输入源开始</span>}
       </footer>

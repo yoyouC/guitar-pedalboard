@@ -46,6 +46,8 @@ class AudioEngine {
   private chain: ChainSpec[] = [];
   private ampInstance: EffectInstance | null = null;
   private ampSpec: AmpSpec | null = null;
+  private cabInstance: EffectInstance | null = null;
+  private cabSpec: AmpSpec | null = null;
   private globalBypass = false;
 
   /** 创建/恢复 AudioContext,搭建固定主链路。幂等。 */
@@ -245,6 +247,17 @@ class AudioEngine {
     this.ampInstance?.update(key, value);
   }
 
+  /** 设置/替换箱体(结构变化,重建图) */
+  setCab(spec: AmpSpec | null): void {
+    this.cabSpec = spec;
+    this.rebuildGraph();
+  }
+
+  /** 箱体参数连续调整,不重建图 */
+  updateCabParam(key: string, value: number): void {
+    this.cabInstance?.update(key, value);
+  }
+
   private rebuildGraph(): void {
     const ctx = this.ctx;
     if (!ctx || !this.inputGain || !this.outputAnalyser) return;
@@ -254,6 +267,10 @@ class AudioEngine {
     if (this.ampInstance) {
       this.ampInstance.dispose();
       this.ampInstance = null;
+    }
+    if (this.cabInstance) {
+      this.cabInstance.dispose();
+      this.cabInstance = null;
     }
 
     // 断开 inputGain 全部下游(含 analyser 与旧链),再按新链重连
@@ -270,13 +287,21 @@ class AudioEngine {
         prev = inst.output;
         this.instances.push({ uid: spec.uid, inst });
       }
-      // 箱头位于效果链之后、输出之前(踏板 → 箱头 → 箱体的真实路由)
+      // 箱头位于效果链之后(踏板 → 箱头的真实路由)
       if (this.ampSpec && this.ampSpec.enabled) {
         const amp = this.ampSpec.def.create(ctx);
         for (const [k, v] of Object.entries(this.ampSpec.values)) amp.update(k, v);
         prev.connect(amp.input);
         prev = amp.output;
         this.ampInstance = amp;
+      }
+      // 箱体位于箱头之后、输出之前(关闭即 DI 直通)
+      if (this.cabSpec && this.cabSpec.enabled) {
+        const cab = this.cabSpec.def.create(ctx);
+        for (const [k, v] of Object.entries(this.cabSpec.values)) cab.update(k, v);
+        prev.connect(cab.input);
+        prev = cab.output;
+        this.cabInstance = cab;
       }
     }
     prev.connect(this.outputAnalyser);
