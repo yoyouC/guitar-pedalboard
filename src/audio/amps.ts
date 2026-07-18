@@ -14,6 +14,24 @@ function makeClipCurve(k: number): Float32Array<ArrayBuffer> {
   return curve;
 }
 
+/**
+ * 不对称削波曲线(JCM800 cold clipper 风格):
+ * 冷偏置使负半周(cutoff 侧)很早被硬削,正半周留足空间温和软削、
+ * 保留原始音乐信息。产生以二次谐波为主的"creamy"失真。
+ */
+function makeAsymClipCurve(): Float32Array<ArrayBuffer> {
+  const curve = new Float32Array(CURVE_LENGTH);
+  let max = 0;
+  for (let i = 0; i < CURVE_LENGTH; i++) {
+    const x = (i / (CURVE_LENGTH - 1)) * 2 - 1;
+    curve[i] = x < 0 ? Math.tanh(4.5 * x) : Math.tanh(1.1 * x);
+    const a = Math.abs(curve[i]);
+    if (a > max) max = a;
+  }
+  for (let i = 0; i < CURVE_LENGTH; i++) curve[i] /= max;
+  return curve;
+}
+
 /** 每款箱头的声音特征配置 */
 interface AmpModelConfig {
   /** 前置增益最大倍数(激励削波级) */
@@ -32,6 +50,8 @@ interface AmpModelConfig {
   cabPeakFreq: number;
   cabPeakGainDb: number;
   defaults: { gain: number; bass: number; mid: number; treble: number; presence: number; master: number };
+  /** 存在时替代通用 createAmp(如 crunch 的 JCM800 定制链路) */
+  customCreate?: (ctx: AudioContext) => EffectInstance;
 }
 
 const AMP_MODELS: Record<string, AmpModelConfig> = {
@@ -46,10 +66,10 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     cabLpHz: 6000,
     cabPeakFreq: 3200,
     cabPeakGainDb: 2,
-    defaults: { gain: 40, bass: 55, mid: 45, treble: 65, presence: 50, master: 70 },
+    defaults: { gain: 40, bass: 55, mid: 45, treble: 65, presence: 50, master: 55 },
   },
   crunch: {
-    // Marshall Plexi/JCM800 类:中频突出、经典碎音
+    // Marshall Plexi/JCM800 类:中频突出、经典碎音(定制链路,见 createCrunchAmp)
     preGainMax: 40,
     preClipK: 3,
     preHpHz: 90,
@@ -59,11 +79,12 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     cabLpHz: 4800,
     cabPeakFreq: 2800,
     cabPeakGainDb: 2.5,
-    defaults: { gain: 60, bass: 50, mid: 65, treble: 60, presence: 55, master: 70 },
+    defaults: { gain: 60, bass: 50, mid: 65, treble: 60, presence: 55, master: 55 },
+    customCreate: createCrunchAmp,
   },
   recto: {
     // Mesa Dual Rectifier 类:高增益、低频紧实、现代金属
-    preGainMax: 70,
+    preGainMax: 35,
     preClipK: 6,
     preHpHz: 120,
     voicingFreq: 500,
@@ -72,11 +93,11 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     cabLpHz: 4500,
     cabPeakFreq: 3000,
     cabPeakGainDb: 3,
-    defaults: { gain: 70, bass: 60, mid: 40, treble: 60, presence: 60, master: 70 },
+    defaults: { gain: 70, bass: 60, mid: 40, treble: 60, presence: 60, master: 55 },
   },
   chime: {
     // Vox AC30 类:中高频“钟声”感、柔顺过载
-    preGainMax: 25,
+    preGainMax: 18,
     preClipK: 2.2,
     preHpHz: 80,
     voicingFreq: 1200,
@@ -85,7 +106,7 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     cabLpHz: 5200,
     cabPeakFreq: 3400,
     cabPeakGainDb: 2,
-    defaults: { gain: 55, bass: 45, mid: 55, treble: 65, presence: 65, master: 70 },
+    defaults: { gain: 55, bass: 45, mid: 55, treble: 65, presence: 65, master: 55 },
   },
 };
 
@@ -204,6 +225,162 @@ function createAmp(ctx: AudioContext, cfg: AmpModelConfig): EffectInstance {
   };
 }
 
+/**
+ * British Crunch 定制链路(Plexi / JCM800 电路建模):
+ *   早切低频(120Hz HP,.68uF 旁路 + .0022uF 耦合的效果)
+ *   → V1B 增益级软削 → Miller 高频滚降 + 470pF bright cap 补偿
+ *   → cold clipper(冷偏置,不对称削波,二次谐波为主)
+ *   → 暖偏置级(保持不对称)→ 阴极跟随器
+ *   → TMB 音色栈(500Hz noon 位特征凹陷)→ presence
+ *   → EL34 后级 → 输出变压器带宽限制(80Hz~6.5kHz)
+ *   → 4x12 Greenback 箱体(低频共振 + 2.8k 临场峰 + 5kHz 24dB/oct 陡降)
+ */
+function createCrunchAmp(ctx: AudioContext): EffectInstance {
+  const d = AMP_MODELS.crunch.defaults;
+  const input = ctx.createGain();
+  const output = ctx.createGain();
+
+  // 前级:早切低频 → 增益 → V1B 软削
+  const leanHp = ctx.createBiquadFilter();
+  leanHp.type = 'highpass';
+  leanHp.frequency.value = 120;
+  const preGain = ctx.createGain();
+  const stage1 = ctx.createWaveShaper();
+  stage1.curve = makeClipCurve(2);
+  stage1.oversample = '4x';
+
+  // Miller 滚降 + bright cap 补偿
+  const millerLp1 = ctx.createBiquadFilter();
+  millerLp1.type = 'lowpass';
+  millerLp1.frequency.value = 6500;
+  const brightShelf = ctx.createBiquadFilter();
+  brightShelf.type = 'highshelf';
+  brightShelf.frequency.value = 2500;
+  brightShelf.gain.value = 3;
+
+  // cold clipper:固定激励 + 不对称削波
+  const coldDrive = ctx.createGain();
+  coldDrive.gain.value = 4;
+  const coldClip = ctx.createWaveShaper();
+  coldClip.curve = makeAsymClipCurve();
+  coldClip.oversample = '4x';
+
+  // 暖偏置级 + 第二级 Miller 滚降 + 阴极跟随器
+  const warmStage = ctx.createWaveShaper();
+  warmStage.curve = makeClipCurve(1.2);
+  warmStage.oversample = '4x';
+  const millerLp2 = ctx.createBiquadFilter();
+  millerLp2.type = 'lowpass';
+  millerLp2.frequency.value = 6000;
+  const cfClip = ctx.createWaveShaper();
+  cfClip.curve = makeClipCurve(1.5);
+  cfClip.oversample = '2x';
+
+  // 音色栈:noon 位 500Hz 特征凹陷 + 三段控制
+  const scoop = ctx.createBiquadFilter();
+  scoop.type = 'peaking';
+  scoop.frequency.value = 500;
+  scoop.Q.value = 1;
+  scoop.gain.value = -3.5;
+  const bass = ctx.createBiquadFilter();
+  bass.type = 'lowshelf';
+  bass.frequency.value = 120;
+  const mid = ctx.createBiquadFilter();
+  mid.type = 'peaking';
+  mid.frequency.value = 700;
+  mid.Q.value = 1;
+  const treble = ctx.createBiquadFilter();
+  treble.type = 'highshelf';
+  treble.frequency.value = 3200;
+  const presence = ctx.createBiquadFilter();
+  presence.type = 'highshelf';
+  presence.frequency.value = 5000;
+
+  // 后级:EL34 + 输出变压器带宽
+  const powerDrive = ctx.createGain();
+  powerDrive.gain.value = 1.0;
+  const powerClip = ctx.createWaveShaper();
+  powerClip.curve = makeClipCurve(2);
+  powerClip.oversample = '2x';
+  const xfHp = ctx.createBiquadFilter();
+  xfHp.type = 'highpass';
+  xfHp.frequency.value = 80;
+  const xfLp = ctx.createBiquadFilter();
+  xfLp.type = 'lowpass';
+  xfLp.frequency.value = 6500;
+
+  // 箱体:4x12 Greenback
+  const cabHp = ctx.createBiquadFilter();
+  cabHp.type = 'highpass';
+  cabHp.frequency.value = 90;
+  const cabLowBump = ctx.createBiquadFilter();
+  cabLowBump.type = 'peaking';
+  cabLowBump.frequency.value = 100;
+  cabLowBump.Q.value = 1;
+  cabLowBump.gain.value = 2.5;
+  const cabPeak = ctx.createBiquadFilter();
+  cabPeak.type = 'peaking';
+  cabPeak.frequency.value = 2800;
+  cabPeak.Q.value = 1.2;
+  cabPeak.gain.value = 4;
+  const cabLp1 = ctx.createBiquadFilter();
+  cabLp1.type = 'lowpass';
+  cabLp1.frequency.value = 5000;
+  const cabLp2 = ctx.createBiquadFilter();
+  cabLp2.type = 'lowpass';
+  cabLp2.frequency.value = 5000;
+
+  const masterGain = ctx.createGain();
+
+  // 静态初始值(与 defaults 一致)
+  preGain.gain.value = 1 + (d.gain / 100) * 11; // 1 ~ 12
+  bass.gain.value = pctToDb(d.bass, 12);
+  mid.gain.value = pctToDb(d.mid, 12);
+  treble.gain.value = pctToDb(d.treble, 12);
+  presence.gain.value = (d.presence / 100) * 8;
+  masterGain.gain.value = d.master / 100;
+
+  const chain: AudioNode[] = [
+    input, leanHp, preGain, stage1, millerLp1, brightShelf,
+    coldDrive, coldClip, warmStage, millerLp2, cfClip,
+    scoop, bass, mid, treble, presence,
+    powerDrive, powerClip, xfHp, xfLp,
+    cabHp, cabLowBump, cabPeak, cabLp1, cabLp2, masterGain, output,
+  ];
+  for (let i = 0; i < chain.length - 1; i++) chain[i].connect(chain[i + 1]);
+
+  return {
+    input,
+    output,
+    update(key, value) {
+      const t = ctx.currentTime;
+      switch (key) {
+        case 'gain':
+          preGain.gain.setTargetAtTime(1 + (value / 100) * 11, t, SMOOTH);
+          break;
+        case 'bass':
+          bass.gain.setTargetAtTime(pctToDb(value, 12), t, SMOOTH);
+          break;
+        case 'mid':
+          mid.gain.setTargetAtTime(pctToDb(value, 12), t, SMOOTH);
+          break;
+        case 'treble':
+          treble.gain.setTargetAtTime(pctToDb(value, 12), t, SMOOTH);
+          break;
+        case 'presence':
+          presence.gain.setTargetAtTime((value / 100) * 8, t, SMOOTH);
+          break;
+        case 'master':
+          masterGain.gain.setTargetAtTime(value / 100, t, SMOOTH);
+          break;
+      }
+    },
+    dispose() {
+      chain.forEach((n) => n.disconnect());
+    },
+  };
+}
+
 const AMP_PARAMS = (d: AmpModelConfig['defaults']) => [
   { key: 'gain', label: 'GAIN', min: 0, max: 100, step: 1, defaultValue: d.gain },
   { key: 'bass', label: 'BASS', min: 0, max: 100, step: 1, defaultValue: d.bass },
@@ -220,7 +397,7 @@ function makeAmpDef(id: string, name: string, color: string): EffectDefinition {
     name,
     color,
     params: AMP_PARAMS(cfg.defaults),
-    create: (ctx) => createAmp(ctx, cfg),
+    create: cfg.customCreate ?? ((ctx) => createAmp(ctx, cfg)),
   };
 }
 
