@@ -285,6 +285,21 @@ await sleep(800);
 console.log(await evaluate(sampleModule('drive=1.0')));
 console.log('链条输出:', JSON.stringify((await evaluate(sampleLevels)).output));
 
+console.log('\n== 步骤 9: NAM WaveNet 切换到 JCM800 模型 ==');
+console.log(await evaluate(clickButton('NAM WaveNet')));
+await sleep(1500);
+const switchJcm = `(() => {
+  const sel = document.querySelector('.nam-model-select');
+  if (!sel) return '模型下拉框不存在';
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'jcm800-sound');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'switched to jcm800-sound';
+})()`;
+console.log(await evaluate(switchJcm));
+await sleep(3000);
+console.log(JSON.stringify((await evaluate(sampleLevels)).amp));
+
 console.log('\n== 页面 console 输出 ==');
 for (const l of consoleLogs) console.log(l);
 
