@@ -22,6 +22,7 @@ class NamWasmProcessor extends AudioWorkletProcessor {
       const msg = e.data;
       if (msg.type === 'init') this.init(msg);
       else if (msg.type === 'model') this.setModel(msg);
+      else if (msg.type === 'conditioning') this.setConditioning(msg);
       else if (msg.type === 'suspend') this.suspended = true;
     };
   }
@@ -66,6 +67,16 @@ class NamWasmProcessor extends AudioWorkletProcessor {
     } catch (err) {
       this.port.postMessage({ type: 'nam-wasm-error', message: `model: ${String(err)}` });
     }
+  }
+
+  setConditioning(msg) {
+    if (!namModule) return;
+    const v = msg.values;
+    if (!v || !v.length) return;
+    const ptr = namModule._malloc(v.length * 4);
+    namModule.HEAPF32.set(v, ptr >> 2);
+    namModule._setConditioning(v.length, ptr);
+    namModule._free(ptr);
   }
 
   process(inputs, outputs) {

@@ -254,6 +254,37 @@ console.log('风暴后(12 轮重建)Chrome 总 CPU%:', chromeCpu());
 console.log('风暴后电平(验证仍在正常工作):');
 console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
 
+console.log('\n== 步骤 8: NAM 单块(NAMKnobs TS808)——添加 + 旋钮条件化 ==');
+const addNamTs = `(() => {
+  const sel = document.querySelector('.add-effect select');
+  if (!sel) return '添加菜单不存在';
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'namTs');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'added namTs';
+})()`;
+console.log(await evaluate(addNamTs));
+await sleep(4000); // wasm 初始化 + 模型加载
+const sampleModule = (label) => `(() => {
+  const e = window.__audioEngine;
+  const uids = [...e.moduleAnalysers.keys()];
+  const uid = uids[uids.length - 1];
+  const a = e.moduleAnalysers.get(uid);
+  const b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b);
+  let s = 0; for (const v of b) s += v * v;
+  return '${label} uid=' + uid.slice(0, 8) + ' rmsDb=' + (20 * Math.log10(Math.sqrt(s / b.length) + 1e-12)).toFixed(1);
+})()`;
+console.log(await evaluate(sampleModule('drive=0.5')));
+console.log(await evaluate(`(() => {
+  const e = window.__audioEngine;
+  const uids = [...e.moduleAnalysers.keys()];
+  e.updateParam(uids[uids.length - 1], 'drive', 1.0);
+  return 'drive → 1.0';
+})()`));
+await sleep(800);
+console.log(await evaluate(sampleModule('drive=1.0')));
+console.log('链条输出:', JSON.stringify((await evaluate(sampleLevels)).output));
+
 console.log('\n== 页面 console 输出 ==');
 for (const l of consoleLogs) console.log(l);
 

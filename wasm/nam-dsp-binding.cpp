@@ -18,14 +18,20 @@
 #include <NAM/get_dsp.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <vector>
 
 static std::unique_ptr<nam::DSP> g_model = nullptr;
 static float g_dcCoeff = 0.99869f;  // 10Hz @48k 计算值,setSampleRate 后按实际采样率重算
 static float g_dcPrevIn = 0.0f;
 static float g_dcPrevOut = 0.0f;
+
+// 条件化模型(NAMKnobs 等)的旋钮通道:ch1..N 的恒定输入值与常量缓冲
+static std::vector<std::vector<float>> g_condBufs;
+static std::vector<float*> g_inPtrs;
 
 extern "C" {
 
@@ -46,6 +52,17 @@ int setDsp(const char* jsonStr) {
   }
 }
 
+/** 模型期望的输入通道数(1=快照模型,>1=条件化模型:ch0 音频,ch1.. 旋钮) */
+int getNumInputChannels() {
+  return g_model ? g_model->NumInputChannels() : 1;
+}
+
+/** 设置条件通道的值(ch1..n,0..1 覆盖训练范围;与模型加载先后无关) */
+void setConditioning(const int n, const float* values) {
+  g_condBufs.assign(n, std::vector<float>(128, 0.0f));
+  for (int i = 0; i < n; i++) std::fill(g_condBufs[i].begin(), g_condBufs[i].end(), values[i]);
+}
+
 /** 设置 AudioContext 采样率,重算 DC blocker 系数(10Hz 截止)。 */
 void setSampleRate(float sampleRate) {
   const float pi = 3.14159265358979323846f;
@@ -53,15 +70,31 @@ void setSampleRate(float sampleRate) {
   g_dcCoeff = 1.0f - omega;
 }
 
-/** 单声道处理 n 帧 + DC blocker;无模型时直通。 */
+/** 单声道处理 n 帧(条件化模型:ch0=音频,ch1..=setConditioning 的恒定值)+ DC blocker;无模型时直通。 */
 void processAudio(float* in, float* out, int n) {
   if (!g_model) {
     if (in != out) std::memcpy(out, in, sizeof(float) * (size_t)n);
     return;
   }
-  NAM_SAMPLE* ip = in;
-  NAM_SAMPLE* op = out;
-  g_model->process(&ip, &op, n);
+  const int nCh = g_model->NumInputChannels();
+  if (nCh <= 1) {
+    NAM_SAMPLE* ip = in;
+    NAM_SAMPLE* op = out;
+    g_model->process(&ip, &op, n);
+  } else {
+    if ((int)g_inPtrs.size() != nCh) g_inPtrs.assign(nCh, nullptr);
+    g_inPtrs[0] = in;
+    for (int c = 1; c < nCh; c++) {
+      if (c - 1 < (int)g_condBufs.size()) {
+        g_inPtrs[c] = g_condBufs[c - 1].data();
+      } else {
+        static float zeros[128] = {0};
+        g_inPtrs[c] = zeros;
+      }
+    }
+    NAM_SAMPLE* op = out;
+    g_model->process(g_inPtrs.data(), &op, n);
+  }
   float prevIn = g_dcPrevIn;
   float prevOut = g_dcPrevOut;
   for (int i = 0; i < n; i++) {

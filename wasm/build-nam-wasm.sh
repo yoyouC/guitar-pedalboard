@@ -19,7 +19,7 @@ em++ -O3 -std=c++17 -msimd128 -DNAM_SAMPLE_FLOAT -DNAM_USE_INLINE_GEMM \
   -I"${SRC}" -I"${SRC}/Dependencies" -I"${SRC}/Dependencies/nlohmann" -I"${SRC}/Dependencies/eigen" \
   "${SRC}"/NAM/*.cpp "${SRC}"/NAM/wavenet/*.cpp "${WASM_DIR}/nam-dsp-binding.cpp" \
   -sMODULARIZE=1 -sEXPORT_NAME=NamWasmModule \
-  -sEXPORTED_FUNCTIONS=_setDsp,_setSampleRate,_processAudio,_malloc,_free \
+  -sEXPORTED_FUNCTIONS=_setDsp,_setSampleRate,_setConditioning,_getNumInputChannels,_processAudio,_malloc,_free \
   -sEXPORTED_RUNTIME_METHODS=stringToUTF8,lengthBytesUTF8 \
   -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 \
   -sFILESYSTEM=0 -sENVIRONMENT=worker,node \

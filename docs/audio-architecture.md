@@ -107,11 +107,11 @@ interface EffectDefinition {   // "目录项":描述 + 工厂
 
 `EFFECT_REGISTRY` 是一个按吉他信号链常见顺序排列的 `EffectDefinition[]`;`getEffectDef(id)` 按 id 查找。UI 的"添加效果器"菜单、单块渲染全部从注册表驱动。箱头和箱体有各自独立的注册表 `AMP_REGISTRY`(`amps.ts`)、`CAB_REGISTRY`(`cabs.ts`),接口相同。
 
-## 3. 17 款单块速查
+## 3. 17 款内置单块速查(NAMKnobs 条件化单块见 §5)
 
 | id | 名称 | 参数 | 实现要点 |
 |---|---|---|---|
-| `noiseGate` | Noise Gate | threshold/attack/release | **AudioWorklet**(见 §6):整块 RMS 比较阈值得目标增益,attack/release 逐样本平滑;worklet 未加载时兜底直通 |
+| `noiseGate` | Noise Gate | threshold/attack/release | **AudioWorklet**(见 §7):整块 RMS 比较阈值得目标增益,attack/release 逐样本平滑;worklet 未加载时兜底直通 |
 | `compressor` | Compressor | threshold/ratio/attack/release/makeup | `DynamicsCompressorNode` + makeup 增益,knee 固定 12dB |
 | `klon` | Transparent OD | gain/treble/level | Klon 风格:锗管软削波曲线 + **干声 40% 恒定并联**(clean blend)+ 3kHz treble 搁架(±10dB) |
 | `overdrive` | Overdrive | drive/tone/level | tanh 软削波,drive 同时映射激励增益(1~50)与曲线硬度 k(1~50) |
@@ -126,7 +126,7 @@ interface EffectDefinition {   // "目录项":描述 + 工厂
 | `phaser` | Phaser | rate/depth | 4 级 allpass(400/800/1600/3200Hz,Q=0.5),LFO 统一扫各级频率(±1500Hz) |
 | `tremolo` | Tremolo | rate/depth | LFO → modGain.gain 幅度调制;depth 同时反向调基准增益保持平均电平 |
 | `delay` | Delay | time/feedback/mix | `DelayNode`(最大 2s)+ 反馈环 + 干/湿并联 |
-| `reverb` | Reverb | time/decay/mix | `ConvolverNode` + 程序生成 IR(见 §6);time/decay 变化时重建 IR |
+| `reverb` | Reverb | time/decay/mix | `ConvolverNode` + 程序生成 IR(见 §7);time/decay 变化时重建 IR |
 | `volume` | Volume & Pan | level/pan | 增益 + `StereoPannerNode` |
 
 每款的细节直接读对应文件即可 —— 单文件 60~130 行,头部注释都写了电路参考和链路。
@@ -191,7 +191,18 @@ input → 高通(preHpHz,切低频保持紧实)
 - **验证**:`node scripts/verify-nam-wasm.cjs` —— ① lstm-demo 经 WASM 与经纯 JS 参考实现对拍,误差 ~2e-7(两条路线互相印证);② WaveNet 标准模型推理 100s 音频耗时 19s(约单核 19%),静音与大声输入耗时接近(无 denormal 悬崖),实时余量充足。
 - **已知限制**:采样率不匹配仅告警;conditioned 模型的条件输入未接(NAM Core 支持,但 UI 未暴露);无 DC blocker(官方模块有,本项目输出侧已有箱体高通与限幅器)。
 
-## 5. 箱体(`src/audio/cabs.ts`)
+## 5. NAM 单块(`src/audio/effects/namPedal.ts`,NAMKnobs 条件化)
+
+NAMKnobs(upstream_v2)的**条件化单块**——旋钮是模型的条件输入,不再是模型外 EQ:
+
+- **条件通道编码**:`in_channels = 1 + K`(ch0 音频,ch1..K 恒定旋钮值,0..1 覆盖训练范围,通道顺序与模型 `metadata.controls` 一致)。Comp 为 LSTM(5 通道),其余为 WaveNet(2~3 通道)。
+- **绑定多通道**:`wasm/nam-dsp-binding.cpp` 的 `setConditioning(n, values)` 维护各条件通道的常量缓冲,`processAudio` 检测到 `NumInputChannels() > 1` 时拼装多通道指针喂给 `model->process`;快照模型路径不变。
+- **单块接口**:每个模型是一个独立 `EffectDefinition`(params 按 controls 生成:旋钮 0..1 + LEVEL dB 外置增益——对齐 NAMKnobs v2 的"Level 为网络外确定增益"设计),注册进 `EFFECT_REGISTRY`,添加菜单/预设/电平表自动生效。`update(key, value)` 把旋钮值经 voice `setConditioning` 送入 worklet。
+- **voice 共享**:`namWasmVoice.ts` 统一管理 worklet 节点 + wasm 实例生命周期(init/ready/sendModel/suspend),NAM 箱头(namWasm.ts)与 NAM 单块(namPedal.ts)共用。
+- **模型**:`public/models/namknobs/`(comp/ts_full/rat/gr/ds1/ff/mxr,upstream_v2;许可未标明,仅本地评估,见 ATTRIBUTION.md)。
+- **验证**:`node scripts/verify-nam-pedal.cjs`(通道数 + 旋钮有效性 + 快照回归);CDP 步骤 8 实测浏览器内旋钮→条件通道→电平变化。
+
+## 6. 箱体(`src/audio/cabs.ts`)
 
 纯频响整形(无卷积 IR),拓扑固定:
 
@@ -202,7 +213,7 @@ input → 高通(hpHz) → 低频共振峰(lowBump) → 临场峰(peak,可调 Q)
 
 4 款配置:`open1x12`(开背,低频少)、`blue2x12`(Celestion Blue)、`gb4x12`(Greenback,默认)、`v304x12`(Vintage 30,攻击性上中频)。唯一参数 `level`(映射 0~1.2 增益)。关闭箱体即 DI 直通。
 
-## 6. 两个特殊模块
+## 7. 两个特殊模块
 
 ### AudioWorklet 噪声门(`src/audio/noiseGateWorklet.ts`)
 
@@ -214,7 +225,7 @@ input → 高通(hpHz) → 低频共振峰(lowBump) → 临场峰(peak,可调 Q)
 
 `makeImpulseResponse(ctx, seconds, decay)`:双声道指数衰减白噪声(`(random*2-1) × (1-i/len)^decay`)。Reverb 的 time/decay 参数变化时重新生成。
 
-## 7. 如何新增一款效果器
+## 8. 如何新增一款效果器
 
 以新增 "Vibe" 为例:
 
@@ -228,7 +239,7 @@ input → 高通(hpHz) → 低频共振峰(lowBump) → 临场峰(peak,可调 Q)
 
 新增箱头/箱体同理:改 `AMP_MODELS` + `AMP_REGISTRY`(或 `CAB_MODELS` + `CAB_REGISTRY`),面板自动出现新选项卡。
 
-## 8. 已知限制与注意事项
+## 9. 已知限制与注意事项
 
 - **重建即重置**:任何结构变化(增删单块、排序、toggle、换箱头/箱体、全局 bypass)都会销毁并重建全部实例 —— LFO 相位归零、delay/reverb 尾音中断。这是有意的简单设计,不是 bug。
 - **预设只覆盖单块链**:`store.ts` 的 `Preset` 不含箱头/箱体/输入增益等全局设置。
