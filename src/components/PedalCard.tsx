@@ -1,17 +1,20 @@
 import type { ChainItem } from '../state/store';
 import type { EffectDefinition } from '../audio/effects/types';
 import { Knob } from './Knob';
+import { MiniMeter } from './MiniMeter';
 
 interface PedalCardProps {
   item: ChainItem;
   def: EffectDefinition;
+  analyser: AnalyserNode | null;
+  showMeters: boolean;
   onToggle: (uid: string) => void;
   onRemove: (uid: string) => void;
   onParam: (uid: string, key: string, value: number) => void;
 }
 
 /** 拟物单块效果器:金属外壳 + 旋钮 + 脚踏开关 */
-export function PedalCard({ item, def, onToggle, onRemove, onParam }: PedalCardProps) {
+export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove, onParam }: PedalCardProps) {
   return (
     <div
       className={`pedal skin-${def.id} ${item.enabled ? 'pedal-on' : 'pedal-off'}`}
@@ -38,6 +41,7 @@ export function PedalCard({ item, def, onToggle, onRemove, onParam }: PedalCardP
         <span className={`pedal-led-bezel ${item.enabled ? 'led-on' : ''}`}>
           <span className="pedal-led" />
         </span>
+        {item.enabled && showMeters && <MiniMeter analyser={analyser} />}
       </div>
 
       <div className="pedal-knobs">

@@ -21,6 +21,8 @@ interface TopBarProps {
   onMasterVolume: (v: number) => void;
   globalBypass: boolean;
   onToggleBypass: () => void;
+  showMeters: boolean;
+  onToggleMeters: () => void;
   inputAnalyser: AnalyserNode | null;
   outputAnalyser: AnalyserNode | null;
 }
@@ -101,7 +103,7 @@ export function TopBar(props: TopBarProps) {
               onChange={(e) => props.onInputGain(Number(e.target.value))}
             />
           </label>
-          <LevelMeter analyser={props.inputAnalyser} label="IN" />
+          <LevelMeter analyser={props.showMeters ? props.inputAnalyser : null} label="IN" />
         </div>
       </div>
 
@@ -133,7 +135,14 @@ export function TopBar(props: TopBarProps) {
               onChange={(e) => props.onMasterVolume(Number(e.target.value))}
             />
           </label>
-          <LevelMeter analyser={props.outputAnalyser} label="OUT" />
+          <LevelMeter analyser={props.showMeters ? props.outputAnalyser : null} label="OUT" />
+          <button
+            className={props.showMeters ? 'active' : ''}
+            title="显示/隐藏各级电平表"
+            onClick={props.onToggleMeters}
+          >
+            电平表
+          </button>
           <button
             className={`bypass-btn ${props.globalBypass ? 'bypassed' : ''}`}
             onClick={props.onToggleBypass}

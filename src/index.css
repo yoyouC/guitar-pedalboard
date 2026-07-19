@@ -452,7 +452,15 @@ input[type='text'] {
 /* LED + 灯座 */
 .pedal-led-row {
   display: flex;
+  align-items: center;
   justify-content: center;
+  gap: 8px;
+}
+
+.mini-meter {
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .pedal-led-bezel {
@@ -703,6 +711,12 @@ input[type='text'] {
   text-transform: uppercase;
   color: #d8c9a8;
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8);
+}
+
+.amp-top-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* 宝石电源灯 */

@@ -1,11 +1,14 @@
 import { AMP_REGISTRY } from '../audio/amps';
 import type { EffectDefinition } from '../audio/effects/types';
 import { Knob } from './Knob';
+import { MiniMeter } from './MiniMeter';
 
 interface AmpPanelProps {
   ampId: string;
   enabled: boolean;
   values: Record<string, number>;
+  analyser: AnalyserNode | null;
+  showMeters: boolean;
   onSelect: (ampId: string) => void;
   onToggle: () => void;
   onParam: (key: string, value: number) => void;
@@ -16,7 +19,7 @@ function getDef(ampId: string): EffectDefinition {
 }
 
 /** 箱头模拟面板:型号选择 + 拟物箱头(tolex 外壳 + 旋钮排 + 电源开关) */
-export function AmpPanel({ ampId, enabled, values, onSelect, onToggle, onParam }: AmpPanelProps) {
+export function AmpPanel({ ampId, enabled, values, analyser, showMeters, onSelect, onToggle, onParam }: AmpPanelProps) {
   const def = getDef(ampId);
 
   return (
@@ -37,7 +40,10 @@ export function AmpPanel({ ampId, enabled, values, onSelect, onToggle, onParam }
       <div className={`amp-head amp-${ampId} ${enabled ? 'amp-on' : 'amp-off'}`}>
         <div className="amp-top">
           <span className="amp-brand">{def.name}</span>
-          <span className={`amp-jewel ${enabled ? 'jewel-on' : ''}`} />
+          <span className="amp-top-right">
+            {enabled && showMeters && <MiniMeter analyser={analyser} />}
+            <span className={`amp-jewel ${enabled ? 'jewel-on' : ''}`} />
+          </span>
         </div>
 
         <div className="amp-faceplate">

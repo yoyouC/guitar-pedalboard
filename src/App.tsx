@@ -61,6 +61,7 @@ export default function App() {
   const [inputGain, setInputGain] = useState(1);
   const [masterVolume, setMasterVolume] = useState(0.5);
   const [globalBypass, setGlobalBypass] = useState(false);
+  const [showMeters, setShowMeters] = useState(true);
 
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -308,6 +309,8 @@ export default function App() {
         }}
         globalBypass={globalBypass}
         onToggleBypass={() => setGlobalBypass((b) => !b)}
+        showMeters={showMeters}
+        onToggleMeters={() => setShowMeters((m) => !m)}
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
       />
@@ -322,6 +325,7 @@ export default function App() {
       <main className="board">
         <ChainView
           items={chain}
+          showMeters={showMeters}
           onReorder={handleReorder}
           onToggle={handleToggle}
           onRemove={handleRemove}
@@ -334,6 +338,8 @@ export default function App() {
         ampId={ampId}
         enabled={ampEnabled}
         values={ampValues}
+        analyser={engineReady ? audioEngine.ampAnalyser : null}
+        showMeters={showMeters}
         onSelect={handleAmpSelect}
         onToggle={handleAmpToggle}
         onParam={handleAmpParam}
@@ -343,6 +349,8 @@ export default function App() {
         cabId={cabId}
         enabled={cabEnabled}
         values={cabValues}
+        analyser={engineReady ? audioEngine.cabAnalyser : null}
+        showMeters={showMeters}
         onSelect={handleCabSelect}
         onToggle={handleCabToggle}
         onParam={handleCabParam}

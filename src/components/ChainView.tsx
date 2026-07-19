@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import type { ChainItem } from '../state/store';
 import { getEffectDef } from '../audio/effects';
+import { audioEngine } from '../audio/AudioEngine';
 import { PedalCard } from './PedalCard';
 import { AddEffectMenu } from './AddEffectMenu';
 
 interface ChainViewProps {
   items: ChainItem[];
+  showMeters: boolean;
   onReorder: (from: number, to: number) => void;
   onToggle: (uid: string) => void;
   onRemove: (uid: string) => void;
@@ -16,6 +18,7 @@ interface ChainViewProps {
 /** 横向 pedalboard:按信号流向排列单块,支持 HTML5 拖拽排序 */
 export function ChainView({
   items,
+  showMeters,
   onReorder,
   onToggle,
   onRemove,
@@ -58,6 +61,8 @@ export function ChainView({
           <PedalCard
             item={item}
             def={getEffectDef(item.effectId)}
+            analyser={audioEngine.getModuleAnalyser(item.uid)}
+            showMeters={showMeters}
             onToggle={onToggle}
             onRemove={onRemove}
             onParam={onParam}
