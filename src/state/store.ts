@@ -58,11 +58,19 @@ export function presetToChain(preset: Preset): ChainItem[] {
   return preset.items.map((item) => {
     const def = getEffectDef(item.effectId);
     const base = createChainItem(def);
+    // 合并保存值,缺失键回落到默认(兼容旧预设);
+    // 并钳制到当前参数范围:旧预设的值域可能已变更(如 Level 曾为 0~100),
+    // 越界值会映射成危险增益
+    const values = { ...base.values, ...item.values };
+    for (const p of def.params) {
+      if (p.key in values) {
+        values[p.key] = Math.min(p.max, Math.max(p.min, values[p.key]));
+      }
+    }
     return {
       ...base,
       enabled: item.enabled,
-      // 合并保存值,缺失键回落到默认(兼容旧预设)
-      values: { ...base.values, ...item.values },
+      values,
     };
   });
 }

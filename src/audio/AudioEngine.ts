@@ -23,7 +23,9 @@ export type InputSourceType = 'mic' | 'file' | 'test';
 /**
  * 音频引擎单例:
  *   输入源 → inputGain → inputAnalyser(仅测量) → [效果链] → outputAnalyser
- *   → masterGain → limiter → destination
+ *   → limiter(-1dBFS 安全网) → masterGain → destination
+ * 限幅器只拦截临近削波的峰值,常态不压缩节目动态;
+ * 主音量位于限幅器之后(≤1),监听音量与压缩量解耦,destination 不会过载。
  */
 class AudioEngine {
   private static _instance = new AudioEngine();
@@ -72,16 +74,17 @@ class AudioEngine {
     this.outputAnalyser.fftSize = 2048;
     this.masterGain = ctx.createGain();
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.value = -12;
+    // 安全网限幅器:仅拦截接近 0dBFS 的峰值;无 lookahead,瞬态仍可能轻微过冲
+    this.limiter.threshold.value = -1;
     this.limiter.knee.value = 0;
     this.limiter.ratio.value = 20;
-    this.limiter.attack.value = 0.003;
-    this.limiter.release.value = 0.1;
+    this.limiter.attack.value = 0.001;
+    this.limiter.release.value = 0.05;
 
     this.inputGain.connect(this.inputAnalyser);
-    this.outputAnalyser.connect(this.masterGain);
-    this.masterGain.connect(this.limiter);
-    this.limiter.connect(ctx.destination);
+    this.outputAnalyser.connect(this.limiter);
+    this.limiter.connect(this.masterGain);
+    this.masterGain.connect(ctx.destination);
 
     try {
       await loadNoiseGate(ctx);

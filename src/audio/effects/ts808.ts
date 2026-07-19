@@ -1,4 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './types';
+import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
 
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
@@ -31,7 +32,6 @@ function makeTsCurve(k: number): Float32Array<ArrayBuffer> {
 const driveToGain = (v: number) => 1 + (v / 100) * 39; // 1 ~ 40
 /** Tone 0~100 → 高架增益 dB:低频侧削暗(-12dB),高频侧打开 3.2kHz 以上(+3dB) */
 const toneToDb = (v: number) => ((v - 50) / 50) * 15;
-const levelToOutputGain = (v: number) => (v / 100) * 1.2;
 
 /**
  * Ibanez TS808 风格过载(按 ElectroSmash 电路分析):
@@ -46,7 +46,7 @@ export const ts808Effect: EffectDefinition = {
   params: [
     { key: 'drive', label: 'DRIVE', min: 0, max: 100, step: 1, defaultValue: 45 },
     { key: 'tone', label: 'TONE', min: 0, max: 100, step: 1, defaultValue: 55 },
-    { key: 'level', label: 'LEVEL', min: 0, max: 100, step: 1, defaultValue: 65 },
+    { key: 'level', label: 'LEVEL', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: -11, unit: 'dB' },
   ],
   create(ctx: AudioContext): EffectInstance {
     const input = ctx.createGain();
@@ -78,7 +78,7 @@ export const ts808Effect: EffectDefinition = {
     tone.type = 'highshelf';
     tone.frequency.value = TONE_SHELF_HZ;
     tone.gain.value = toneToDb(55);
-    output.gain.value = levelToOutputGain(65);
+    output.gain.value = levelDbToGain(-11);
 
     // input → 720Hz 高通 → drive → 软削波 → 边角软化 → 中频隆起
     //      → 723Hz 无源低通 → Tone 高架 → output
@@ -104,7 +104,7 @@ export const ts808Effect: EffectDefinition = {
             tone.gain.setTargetAtTime(toneToDb(value), t, SMOOTH);
             break;
           case 'level':
-            output.gain.setTargetAtTime(levelToOutputGain(value), t, SMOOTH);
+            output.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
             break;
         }
       },

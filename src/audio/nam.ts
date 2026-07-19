@@ -1,4 +1,5 @@
 import type { EffectInstance } from './effects/types';
+import { levelDbToGain } from './level';
 
 /**
  * Neural Amp Modeler(LSTM 架构)支持:
@@ -131,14 +132,14 @@ export async function loadNamModelFromFile(file: File): Promise<NamModel> {
 const SMOOTH = 0.03;
 const pctToDb = (v: number, range: number) => ((v - 50) / 50) * range;
 
-/** NAM 箱头的固定 6 旋钮默认值(GAIN 50 = 单位输入激励) */
+/** NAM 箱头的固定 6 旋钮默认值(GAIN 50 = 单位输入激励,MASTER dB 域见 level.ts) */
 export const NAM_AMP_DEFAULTS = {
   gain: 50,
   bass: 50,
   mid: 50,
   treble: 50,
   presence: 50,
-  master: 55,
+  master: 0,
 };
 
 /**
@@ -176,7 +177,7 @@ export function createNamAmp(ctx: AudioContext): EffectInstance {
   mid.gain.value = pctToDb(d.mid, 12);
   treble.gain.value = pctToDb(d.treble, 12);
   presence.gain.value = (d.presence / 100) * 8;
-  masterGain.gain.value = d.master / 100;
+  masterGain.gain.value = levelDbToGain(d.master);
 
   let worklet: AudioWorkletNode | null = null;
   let disposed = false;
@@ -255,7 +256,7 @@ export function createNamAmp(ctx: AudioContext): EffectInstance {
           presence.gain.setTargetAtTime((value / 100) * 8, t, SMOOTH);
           break;
         case 'master':
-          masterGain.gain.setTargetAtTime(value / 100, t, SMOOTH);
+          masterGain.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
           break;
       }
     },

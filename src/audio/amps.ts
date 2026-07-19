@@ -1,6 +1,7 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
 import { createNamAmp, NAM_AMP_DEFAULTS } from './nam';
 import { createNamWasmAmp } from './namWasm';
+import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from './level';
 
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
@@ -61,7 +62,7 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 600,
     voicingGainDb: -2,
     powerClipK: 1.2,
-    defaults: { gain: 40, bass: 55, mid: 45, treble: 65, presence: 50, master: 55 },
+    defaults: { gain: 40, bass: 55, mid: 45, treble: 65, presence: 50, master: -14.5 },
   },
   crunch: {
     // Marshall Plexi/JCM800 类:中频突出、经典碎音(定制链路,见 createCrunchAmp)
@@ -71,7 +72,7 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 800,
     voicingGainDb: 3,
     powerClipK: 2,
-    defaults: { gain: 60, bass: 50, mid: 65, treble: 60, presence: 55, master: 55 },
+    defaults: { gain: 60, bass: 50, mid: 65, treble: 60, presence: 55, master: -20.5 },
     customCreate: createCrunchAmp,
   },
   recto: {
@@ -82,7 +83,7 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 500,
     voicingGainDb: -3,
     powerClipK: 2.5,
-    defaults: { gain: 70, bass: 60, mid: 40, treble: 60, presence: 60, master: 55 },
+    defaults: { gain: 70, bass: 60, mid: 40, treble: 60, presence: 60, master: -20 },
   },
   chime: {
     // Vox AC30 类:中高频“钟声”感、柔顺过载
@@ -92,7 +93,7 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 1200,
     voicingGainDb: 2.5,
     powerClipK: 1.8,
-    defaults: { gain: 55, bass: 45, mid: 55, treble: 65, presence: 65, master: 55 },
+    defaults: { gain: 55, bass: 45, mid: 55, treble: 65, presence: 65, master: -19.5 },
   },
 };
 
@@ -145,7 +146,7 @@ function createAmp(ctx: AudioContext, cfg: AmpModelConfig): EffectInstance {
   mid.gain.value = pctToDb(d.mid, 12);
   treble.gain.value = pctToDb(d.treble, 12);
   presence.gain.value = (d.presence / 100) * 8;
-  masterGain.gain.value = d.master / 100;
+  masterGain.gain.value = levelDbToGain(d.master);
 
   input.connect(preHp);
   preHp.connect(preGain);
@@ -181,7 +182,7 @@ function createAmp(ctx: AudioContext, cfg: AmpModelConfig): EffectInstance {
           presence.gain.setTargetAtTime((value / 100) * 8, t, SMOOTH);
           break;
         case 'master':
-          masterGain.gain.setTargetAtTime(value / 100, t, SMOOTH);
+          masterGain.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
           break;
       }
     },
@@ -287,7 +288,7 @@ function createCrunchAmp(ctx: AudioContext): EffectInstance {
   mid.gain.value = pctToDb(d.mid, 12);
   treble.gain.value = pctToDb(d.treble, 12);
   presence.gain.value = (d.presence / 100) * 8;
-  masterGain.gain.value = d.master / 100;
+  masterGain.gain.value = levelDbToGain(d.master);
 
   const chain: AudioNode[] = [
     input, leanHp, preGain, stage1, millerLp1, brightShelf,
@@ -320,7 +321,7 @@ function createCrunchAmp(ctx: AudioContext): EffectInstance {
           presence.gain.setTargetAtTime((value / 100) * 8, t, SMOOTH);
           break;
         case 'master':
-          masterGain.gain.setTargetAtTime(value / 100, t, SMOOTH);
+          masterGain.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
           break;
       }
     },
@@ -336,7 +337,7 @@ const AMP_PARAMS = (d: AmpModelConfig['defaults']) => [
   { key: 'mid', label: 'MID', min: 0, max: 100, step: 1, defaultValue: d.mid },
   { key: 'treble', label: 'TREBLE', min: 0, max: 100, step: 1, defaultValue: d.treble },
   { key: 'presence', label: 'PRESENCE', min: 0, max: 100, step: 1, defaultValue: d.presence },
-  { key: 'master', label: 'MASTER', min: 0, max: 100, step: 1, defaultValue: d.master },
+  { key: 'master', label: 'MASTER', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: d.master, unit: 'dB' },
 ];
 
 function makeAmpDef(id: string, name: string, color: string): EffectDefinition {

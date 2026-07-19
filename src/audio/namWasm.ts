@@ -1,4 +1,5 @@
 import type { EffectInstance } from './effects/types';
+import { levelDbToGain } from './level';
 import { NAM_AMP_DEFAULTS } from './nam';
 
 /**
@@ -125,7 +126,7 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
   mid.gain.value = pctToDb(d.mid, 12);
   treble.gain.value = pctToDb(d.treble, 12);
   presence.gain.value = (d.presence / 100) * 8;
-  masterGain.gain.value = d.master / 100;
+  masterGain.gain.value = levelDbToGain(d.master);
 
   let worklet: AudioWorkletNode | null = null;
   let disposed = false;
@@ -207,7 +208,7 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
           presence.gain.setTargetAtTime((value / 100) * 8, t, SMOOTH);
           break;
         case 'master':
-          masterGain.gain.setTargetAtTime(value / 100, t, SMOOTH);
+          masterGain.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
           break;
       }
     },
