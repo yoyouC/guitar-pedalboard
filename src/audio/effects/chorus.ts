@@ -17,15 +17,17 @@ export const chorusEffect: EffectDefinition = {
     const input = ctx.createGain();
     const output = ctx.createGain();
 
-    // 干路:直连 output,增益恒为 1
+    // 干湿等功率交叉淡化:dry = cos(θ), wet = sin(θ), θ = mix·π/2
+    // 任意 mix 下合成电平均不超标(旧实现 dry 恒 1,同相叠加峰值可达 2×)
+    const mixAngle = (v: number) => (v / 100) * (Math.PI / 2);
     const dryGain = ctx.createGain();
-    dryGain.gain.value = 1;
+    dryGain.gain.value = Math.cos(mixAngle(50));
+    const wetGain = ctx.createGain();
+    wetGain.gain.value = Math.sin(mixAngle(50)); // mix 默认 50%
 
     // 湿路:基准延迟 20ms,由 LFO 调制 delayTime
     const delay = ctx.createDelay(BASE_DELAY + MAX_DEPTH);
     delay.delayTime.value = BASE_DELAY;
-    const wetGain = ctx.createGain();
-    wetGain.gain.value = 0.5; // mix 默认 50%
 
     // LFO:sine → depthGain → delay.delayTime
     const lfo = ctx.createOscillator();
@@ -56,7 +58,8 @@ export const chorusEffect: EffectDefinition = {
             depthGain.gain.setTargetAtTime((value / 100) * MAX_DEPTH, t, SMOOTHING);
             break;
           case 'mix':
-            wetGain.gain.setTargetAtTime(value / 100, t, SMOOTHING);
+            dryGain.gain.setTargetAtTime(Math.cos(mixAngle(value)), t, SMOOTHING);
+            wetGain.gain.setTargetAtTime(Math.sin(mixAngle(value)), t, SMOOTHING);
             break;
         }
       },

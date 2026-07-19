@@ -33,6 +33,9 @@ class AudioEngine {
   ctx: AudioContext | null = null;
   inputAnalyser: AnalyserNode | null = null;
   outputAnalyser: AnalyserNode | null = null;
+  /** 箱头/箱体输出侧的电平表抽头(随图谱重建更新) */
+  ampAnalyser: AnalyserNode | null = null;
+  cabAnalyser: AnalyserNode | null = null;
 
   private inputGain: GainNode | null = null;
   private masterGain: GainNode | null = null;
@@ -43,6 +46,7 @@ class AudioEngine {
   private testTimer: number | null = null;
 
   private instances: { uid: string; inst: EffectInstance }[] = [];
+  private moduleAnalysers = new Map<string, AnalyserNode>();
   private chain: ChainSpec[] = [];
   private ampInstance: EffectInstance | null = null;
   private ampSpec: AmpSpec | null = null;
@@ -236,6 +240,11 @@ class AudioEngine {
     found?.inst.update(key, value);
   }
 
+  /** 某模块输出侧的电平表节点(不存在则 null) */
+  getModuleAnalyser(uid: string): AnalyserNode | null {
+    return this.moduleAnalysers.get(uid) ?? null;
+  }
+
   /** 设置/替换箱头(结构变化,重建图) */
   setAmp(spec: AmpSpec | null): void {
     this.ampSpec = spec;
@@ -264,6 +273,7 @@ class AudioEngine {
 
     this.instances.forEach((i) => i.inst.dispose());
     this.instances = [];
+    this.moduleAnalysers.clear();
     if (this.ampInstance) {
       this.ampInstance.dispose();
       this.ampInstance = null;
@@ -272,6 +282,8 @@ class AudioEngine {
       this.cabInstance.dispose();
       this.cabInstance = null;
     }
+    this.ampAnalyser = null;
+    this.cabAnalyser = null;
 
     // 断开 inputGain 全部下游(含 analyser 与旧链),再按新链重连
     this.inputGain.disconnect();
@@ -285,6 +297,11 @@ class AudioEngine {
         for (const [k, v] of Object.entries(spec.values)) inst.update(k, v);
         prev.connect(inst.input);
         prev = inst.output;
+        // 模块输出电平表抽头(仅测量,不影响音频路径)
+        const tap = ctx.createAnalyser();
+        tap.fftSize = 1024;
+        inst.output.connect(tap);
+        this.moduleAnalysers.set(spec.uid, tap);
         this.instances.push({ uid: spec.uid, inst });
       }
       // 箱头位于效果链之后(踏板 → 箱头的真实路由)
@@ -294,6 +311,9 @@ class AudioEngine {
         prev.connect(amp.input);
         prev = amp.output;
         this.ampInstance = amp;
+        this.ampAnalyser = ctx.createAnalyser();
+        this.ampAnalyser.fftSize = 1024;
+        amp.output.connect(this.ampAnalyser);
       }
       // 箱体位于箱头之后、输出之前(关闭即 DI 直通)
       if (this.cabSpec && this.cabSpec.enabled) {
@@ -302,6 +322,9 @@ class AudioEngine {
         prev.connect(cab.input);
         prev = cab.output;
         this.cabInstance = cab;
+        this.cabAnalyser = ctx.createAnalyser();
+        this.cabAnalyser.fftSize = 1024;
+        cab.output.connect(this.cabAnalyser);
       }
     }
     prev.connect(this.outputAnalyser);
