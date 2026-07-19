@@ -33,6 +33,18 @@ export const KOREN_12AX7: KorenParams = {
   kvb: 300,
 };
 
+/**
+ * 6V6 功率管的近似 Koren 参数(调音用经验拟合,非 datasheet 精确值):
+ * 低 mu、宽线性区,用于单端后级。
+ */
+export const KOREN_6V6_APPROX: KorenParams = {
+  mu: 9.7,
+  ex: 1.35,
+  kg: 1030,
+  kp: 48,
+  kvb: 1200,
+};
+
 /** Koren 板流方程,Vgk/Vpk 单位 V,返回 A */
 export function korenPlateCurrent(p: KorenParams, vgk: number, vpk: number): number {
   if (vpk <= 0) return 0;
@@ -54,6 +66,10 @@ export interface TriodeStageOptions {
   Co?: number;     // 输出耦合电容 F,默认 22nF
   Rload?: number;  // 输出负载,默认 1M
   koren?: KorenParams;
+  /** 栅极驱动源内阻(栅漏/上级阻抗),默认 68k;配合栅流钳位 */
+  Rs?: number;
+  /** 是否启用栅流钳位(Vgk>0.7V 时栅极导通),默认 true */
+  gridClamp?: boolean;
 }
 
 const MAX_ITER = 12;
@@ -68,11 +84,18 @@ export class TriodeStage {
   private readonly Rload: number;
   private readonly T: number;
   private readonly koren: KorenParams;
+  private readonly Rs: number;
+  private readonly gridClamp: boolean;
+  /** 栅极导通等效正向电阻 */
+  private static readonly R_GRID = 1000;
+  /** 栅极导通阈值 */
+  private static readonly V_GRID_ON = 0.7;
 
   // 状态
   private iHk = 0;   // 阴极电容历史电流(梯形伴随)
   private vCkPrev = 0;
   private iCkPrev = 0;
+  private vkPrev = 0; // 上一样本阴极电压(栅流钳位用,一样本延迟可接受)
   private vcOut = 0; // 输出耦合电容电压
   private iOutPrev = 0;
   private ipPrev = 0.0012; // 初始猜测:~1.2mA 静态点
@@ -86,16 +109,34 @@ export class TriodeStage {
     this.Co = opts.Co ?? 22e-9;
     this.Rload = opts.Rload ?? 1e6;
     this.koren = opts.koren ?? KOREN_12AX7;
+    this.Rs = opts.Rs ?? 68e3;
+    this.gridClamp = opts.gridClamp ?? true;
 
     this.Gk = Ck > 0 ? (2 * Ck) / this.T : 0;
     this.Rkk = 1 / (1 / Rk + this.Gk);
   }
 
   /**
+   * 栅流钳位:Vgk 超过约 0.7V 时栅极开始导通,
+   * 栅压被源内阻 Rs 与导通电阻 R_GRID 分压钳住——
+   * 这是电子管过载"温暖钳位"的主要来源之一。
+   */
+  private clampGrid(vg: number): number {
+    if (!this.gridClamp) return vg;
+    const vgk = vg - this.vkPrev;
+    if (vgk <= TriodeStage.V_GRID_ON) return vg;
+    const rOn = TriodeStage.R_GRID;
+    const vOn = this.vkPrev + TriodeStage.V_GRID_ON;
+    return (vg / this.Rs + vOn / rOn) / (1 / this.Rs + 1 / rOn);
+  }
+
+  /**
    * 处理一个样本。vg 为栅极电压(V,小信号吉他电平),
    * 返回经耦合电容后的输出电压(V)。
    */
-  process(vg: number): number {
+  process(vgIn: number): number {
+    // 栅流钳位(基于上一样本阴极电压)
+    const vg = this.clampGrid(vgIn);
     // 步骤开始:由上一状态推出电容历史电流 Ih = -Gc·v[n-1] - i[n-1]
     this.iHk = this.Gk > 0 ? -this.Gk * this.vCkPrev - this.iCkPrev : 0;
 
@@ -123,6 +164,7 @@ export class TriodeStage {
     const iCk = this.Gk > 0 ? this.Gk * vk + this.iHk : 0;
     this.vCkPrev = vk;
     this.iCkPrev = iCk;
+    this.vkPrev = vk;
 
     // 板极电压 → 耦合电容 Co → Rload(理想电压源驱动的线性 RC,梯形精确解)
     const vp = this.Bplus - ip * this.Rp;
