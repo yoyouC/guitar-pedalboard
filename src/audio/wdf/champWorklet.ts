@@ -12,6 +12,7 @@
  * 三极管求解逻辑与 src/audio/wdf/triode.ts 一致——改动请三边同步。
  */
 const processorSource = `
+(() => {
 const KOREN_12AX7 = { mu: 100, ex: 1.4, kg: 1060, kp: 600, kvb: 300 };
 const KOREN_6V6 = { mu: 9.7, ex: 1.35, kg: 1030, kp: 48, kvb: 1200 };
 const OS = 4, NT = 48;
@@ -230,6 +231,7 @@ class WdfChampProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('wdf-champ', WdfChampProcessor);
+})();
 `;
 
 let loaded = false;

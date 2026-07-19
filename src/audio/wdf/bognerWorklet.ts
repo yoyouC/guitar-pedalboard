@@ -12,6 +12,7 @@
  * 三极管求解与重采样逻辑同 src/audio/wdf/triode.ts、resample.ts。
  */
 const processorSource = `
+(() => {
 const KOREN_12AX7 = { mu: 100, ex: 1.4, kg: 1060, kp: 600, kvb: 300 };
 const KOREN_EL34 = { mu: 11, ex: 1.35, kg: 1030, kp: 42, kvb: 1200 };
 const OS = 4, NT = 48;
@@ -232,6 +233,7 @@ class WdfBognerProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('wdf-bogner', WdfBognerProcessor);
+})();
 `;
 
 let loaded = false;
