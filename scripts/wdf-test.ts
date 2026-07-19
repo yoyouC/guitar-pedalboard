@@ -4,6 +4,7 @@
  * 2) 全链(级1→级2→6V6→输出变压器):与 worklet 同构,链稳定、有界
  */
 import { TriodeStage, KOREN_6V6_APPROX, KOREN_EL34_APPROX } from '../src/audio/wdf/triode.ts';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
 
 const FS = 48000 * 4; // 4x 过采样等效速率
 const T = 1 / FS;
@@ -120,6 +121,84 @@ for (const [gain, label] of [[1, 'GAIN=1'], [20, 'GAIN=20(中)'], [40, 'GAIN=40(
   if (Math.abs(s.max) > 1.5 || Math.abs(s.min) > 1.5) {
     throw new Error(`Bogner 链输出越界(±1.5): ${label}`);
   }
+}
+
+console.log('== 4) 混叠对比:线性插值 vs 多相 FIR(Champ 链,GAIN=15)==');
+{
+  const BASE = 48000;
+  const DRIVE = 15;
+  const N = 8192;
+  // 频率取采样窗整数倍,消除 DFT 泄漏:bin = 171 → 1001.95Hz
+  const HARM_BIN = 171;
+  const FREQ = (BASE * HARM_BIN) / N;
+
+  function makeChampOsChain() {
+    const st1 = new TriodeStage({ fs: FS, Rk: 820, Ck: 0, Rs: 68e3 });
+    const st2 = new TriodeStage({ fs: FS, Rs: 100e3 });
+    const pw = new TriodeStage({
+      fs: FS, koren: KOREN_6V6_APPROX, Bplus: 285, Rp: 5e3, Rk: 250, Ck: 0,
+      Co: 1e-3, Rload: 1e6, Rs: 220e3,
+    });
+    const xf = makeXformer();
+    return (xOs: number) => xf(pw.process(st2.process(st1.process(xOs * DRIVE) * 0.08) * 0.25)) / 250;
+  }
+
+  /** 用指定重采样方案跑 0.5s 建立 + N 样本,返回基率输出 */
+  function render(mode: 'linear' | 'poly'): Float64Array {
+    const chain = makeChampOsChain();
+    const fir = makeAntiAliasFIR();
+    const up = new Upsampler4x(fir);
+    const down = new Decimator4x(fir);
+    const total = BASE / 2 + N;
+    const out = new Float64Array(N);
+    const osBuf = new Float32Array(OS_FACTOR);
+    let x0 = 0;
+    const osOut = [0, 0, 0, 0];
+    for (let n = 0; n < total; n++) {
+      const x = 0.3 * Math.sin((2 * Math.PI * FREQ * n) / BASE);
+      if (mode === 'linear') {
+        for (let k = 1; k <= OS_FACTOR; k++) {
+          osOut[k - 1] = chain(x0 + ((x - x0) * k) / OS_FACTOR);
+        }
+        if (n >= BASE / 2) out[n - BASE / 2] = (osOut[0] + osOut[1] + osOut[2] + osOut[3]) / OS_FACTOR;
+      } else {
+        up.process(osBuf, x);
+        for (let k = 0; k < OS_FACTOR; k++) osOut[k] = chain(osBuf[k]);
+        // 降采样器必须每样本都走(否则 FIR 历史为空,建立期污染测量)
+        const y = down.process(osOut[0], osOut[1], osOut[2], osOut[3]);
+        if (n >= BASE / 2) out[n - BASE / 2] = y;
+      }
+      x0 = x;
+    }
+    return out;
+  }
+
+  /** 朴素 DFT 计算非谐波(镜像)能量占比 dB(精确周期,无泄漏) */
+  function imageDb(y: Float64Array): number {
+    const N2 = y.length;
+    const harmBins = new Set<number>();
+    for (let h = 0; h * HARM_BIN < N2 / 2; h++) {
+      for (let d = -1; d <= 1; d++) harmBins.add(h * HARM_BIN + d);
+    }
+    let eTotal = 0, eHarm = 0;
+    for (let k = 1; k < N2 / 2; k++) {
+      let re = 0, im = 0;
+      for (let n = 0; n < N2; n++) {
+        const a = (-2 * Math.PI * k * n) / N2;
+        re += y[n] * Math.cos(a);
+        im += y[n] * Math.sin(a);
+      }
+      const e = re * re + im * im;
+      eTotal += e;
+      if (harmBins.has(k)) eHarm += e;
+    }
+    return 10 * Math.log10(Math.max(1e-20, (eTotal - eHarm) / eTotal));
+  }
+
+  const dbLinear = imageDb(render('linear'));
+  const dbPoly = imageDb(render('poly'));
+  console.log(`线性插值镜像能量比: ${dbLinear.toFixed(1)} dB`);
+  console.log(`多相 FIR 镜像能量比: ${dbPoly.toFixed(1)} dB`);
 }
 
 console.log('全部通过 ✓');

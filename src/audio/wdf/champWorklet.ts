@@ -6,15 +6,15 @@
  *   → 级间衰减 → 12AX7 级 2(全旁路)
  *   → 6V6 单端后级(近似 Koren 功率管)→ 输出变压器(80Hz HP + 6.5kHz LP)
  *   → MASTER → 输出
- *   内部 4x 过采样(线性插值升采样 / 4 抽头对称 FIR 降采样)。
- *   各级均带栅流钳位(Vgk>0.7V 栅极导通,源内阻分压)。
+ *   内部 4x 过采样:多相升采样 + 31 阶 Blackman-sinc FIR 抗混叠降采样
+ *   (与 src/audio/wdf/resample.ts 同构)。每通道独立链路状态。
  *
- * 处理器源码为纯 JS 字符串,与 src/audio/wdf/triode.ts(TS 参考实现,
- * 可用 npm run wdf:test 数值验证)保持逻辑一致——改动请两边同步。
+ * 三极管求解逻辑与 src/audio/wdf/triode.ts 一致——改动请三边同步。
  */
 const processorSource = `
 const KOREN_12AX7 = { mu: 100, ex: 1.4, kg: 1060, kp: 600, kvb: 300 };
 const KOREN_6V6 = { mu: 9.7, ex: 1.35, kg: 1030, kp: 48, kvb: 1200 };
+const OS = 4, NT = 48;
 
 function korenIp(P, vgk, vpk) {
   if (vpk <= 0) return 0;
@@ -23,6 +23,70 @@ function korenIp(P, vgk, vpk) {
   const e1 = (vpk / P.kp) * softplus;
   if (e1 <= 0) return 0;
   return Math.pow(e1, P.ex) / P.kg;
+}
+
+function makeFIR() {
+  const M = NT - 1;
+  const fc = 0.09;
+  const h = new Float32Array(NT);
+  let sum = 0;
+  for (let n = 0; n < NT; n++) {
+    const x = n - M / 2;
+    const sinc = x === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * x) / (Math.PI * x);
+    const w = 0.42 - 0.5 * Math.cos((2 * Math.PI * n) / M) + 0.08 * Math.cos((4 * Math.PI * n) / M);
+    h[n] = sinc * w;
+    sum += h[n];
+  }
+  for (let n = 0; n < NT; n++) h[n] /= sum;
+  return h;
+}
+
+class Up4 {
+  constructor(h) {
+    this.p = [];
+    const mLen = NT / OS;
+    for (let k = 0; k < OS; k++) {
+      const pk = new Float32Array(mLen);
+      for (let m = 0; m < mLen; m++) pk[m] = OS * h[k + OS * m];
+      this.p.push(pk);
+    }
+    this.hist = new Float32Array(mLen);
+    this.idx = 0;
+  }
+  process(out, xn) {
+    this.idx = (this.idx - 1 + this.hist.length) % this.hist.length;
+    this.hist[this.idx] = xn;
+    for (let k = 0; k < OS; k++) {
+      const pk = this.p[k];
+      let acc = 0, j = this.idx;
+      for (let m = 0; m < pk.length; m++) {
+        acc += pk[m] * this.hist[j];
+        j = (j + 1) % this.hist.length;
+      }
+      out[k] = acc;
+    }
+  }
+}
+
+class Down4 {
+  constructor(h) {
+    this.h = h;
+    this.hist = new Float32Array(NT);
+    this.idx = 0;
+  }
+  process(y0, y1, y2, y3) {
+    const ys = [y0, y1, y2, y3];
+    for (let k = 0; k < OS; k++) {
+      this.idx = (this.idx - 1 + NT) % NT;
+      this.hist[this.idx] = ys[k];
+    }
+    let acc = 0, j = this.idx;
+    for (let m = 0; m < NT; m++) {
+      acc += this.h[m] * this.hist[j];
+      j = (j + 1) % NT;
+    }
+    return acc;
+  }
 }
 
 class TriodeStage {
@@ -92,8 +156,6 @@ class TriodeStage {
   }
 }
 
-const OS = 4;
-
 class WdfChampProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
@@ -104,70 +166,64 @@ class WdfChampProcessor extends AudioWorkletProcessor {
 
   constructor() {
     super();
-    const fs = sampleRate * OS;
-    this.stage1 = new TriodeStage(fs, { Rk: 820, Ck: 0, Rs: 68e3 });
-    this.stage2 = new TriodeStage(fs, { Rs: 100e3 });
-    // 6V6 单端后级:低 mu 功率管,5k 反射负载,大耦合电容近似透明
-    this.power = new TriodeStage(fs, {
-      koren: KOREN_6V6, Bplus: 285, Rp: 5e3, Rk: 250, Ck: 0,
-      Co: 1e-3, Rload: 1e6, Rs: 220e3,
-    });
-    this.prevInput = 0;
-    // 输出变压器单极点滤波器状态(80Hz HP + 6.5kHz LP)
-    this.xfHpX1 = 0;
-    this.xfHpY1 = 0;
-    this.xfLpY1 = 0;
-    // 降采样 FIR 历史
-    this.fir = [0, 0, 0, 0];
+    this.fir = makeFIR();
+    this.chains = [];
   }
 
-  transformer(x) {
+  createChain() {
+    const fs = sampleRate * OS;
+    return {
+      st1: new TriodeStage(fs, { Rk: 820, Ck: 0, Rs: 68e3 }),
+      st2: new TriodeStage(fs, { Rs: 100e3 }),
+      pw: new TriodeStage(fs, {
+        koren: KOREN_6V6, Bplus: 285, Rp: 5e3, Rk: 250, Ck: 0,
+        Co: 1e-3, Rload: 1e6, Rs: 220e3,
+      }),
+      up: new Up4(this.fir),
+      down: new Down4(this.fir),
+      xfHpX1: 0, xfHpY1: 0, xfLpY1: 0,
+    };
+  }
+
+  transformer(c, x) {
     const fs = sampleRate * OS;
     const T = 1 / fs;
-    // HP 80Hz: y = a*(y1 + x - x1), a = RC/(RC+T), RC = 1/(2π·80)
     const rcHp = 1 / (2 * Math.PI * 80);
     const aHp = rcHp / (rcHp + T);
-    const yHp = aHp * (this.xfHpY1 + x - this.xfHpX1);
-    this.xfHpX1 = x;
-    this.xfHpY1 = yHp;
-    // LP 6.5kHz: y = y1 + a*(x - y1), a = T/(RC+T)
+    const yHp = aHp * (c.xfHpY1 + x - c.xfHpX1);
+    c.xfHpX1 = x;
+    c.xfHpY1 = yHp;
     const rcLp = 1 / (2 * Math.PI * 6500);
     const aLp = T / (rcLp + T);
-    const yLp = this.xfLpY1 + aLp * (yHp - this.xfLpY1);
-    this.xfLpY1 = yLp;
-    return yLp;
+    c.xfLpY1 = c.xfLpY1 + aLp * (yHp - c.xfLpY1);
+    return c.xfLpY1;
   }
 
   process(inputs, outputs, params) {
     const input = inputs[0];
     const output = outputs[0];
     if (!input || !input.length) return true;
+    while (this.chains.length < input.length) this.chains.push(this.createChain());
 
-    const drive = 1 + (params.gain[0] / 100) * 29; // GAIN: 1 ~ 30
-    const master = (params.master[0] / 100) * 1.2; // MASTER: 0 ~ 1.2
-    const FIR = [0.125, 0.375, 0.375, 0.125];
+    const drive = 1 + (params.gain[0] / 100) * 29;
+    const master = (params.master[0] / 100) * 1.2;
+    const osIn = new Float32Array(OS);
+    const osOut = new Float32Array(OS);
 
     for (let ch = 0; ch < input.length; ch++) {
+      const c = this.chains[ch];
       const inp = input[ch];
       const out = output[ch];
-      let x0 = this.prevInput;
       for (let i = 0; i < inp.length; i++) {
-        for (let k = 1; k <= OS; k++) {
-          const x = x0 + ((inp[i] - x0) * k) / OS;
-          const s1 = this.stage1.process(x * drive);
-          // 级间衰减(板压摆幅 → 后级栅极合适区间)
-          const s2 = this.stage2.process(s1 * 0.08);
-          // 后级栅极驱动(缩放到 6V6 栅压区间)
-          const p = this.power.process(s2 * 0.25);
-          // 输出变压器 + 归一化(板压摆幅数百 V)
-          this.fir[k - 1] = this.transformer(p) / 250;
+        c.up.process(osIn, inp[i]);
+        for (let k = 0; k < OS; k++) {
+          const s1 = c.st1.process(osIn[k] * drive);
+          const s2 = c.st2.process(s1 * 0.08);
+          const p = c.pw.process(s2 * 0.25);
+          osOut[k] = this.transformer(c, p) / 250;
         }
-        out[i] =
-          (FIR[0] * this.fir[0] + FIR[1] * this.fir[1] +
-           FIR[2] * this.fir[2] + FIR[3] * this.fir[3]) * master;
-        x0 = inp[i];
+        out[i] = c.down.process(osOut[0], osOut[1], osOut[2], osOut[3]) * master;
       }
-      this.prevInput = x0;
     }
     return true;
   }
