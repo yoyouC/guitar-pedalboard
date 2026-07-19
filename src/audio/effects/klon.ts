@@ -1,4 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './types';
+import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
 
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
@@ -23,7 +24,6 @@ function makeGermaniumCurve(k: number): Float32Array<ArrayBuffer> {
 
 const gainToPreGain = (v: number) => 1 + (v / 100) * 49; // 1 ~ 50
 const trebleToDb = (v: number) => ((v - 50) / 50) * TREBLE_RANGE_DB; // -10 ~ +10 dB
-const levelToOutputGain = (v: number) => (v / 100) * 1.2;
 
 /**
  * Klon 风格透明过载:干声并联混合(clean blend)+ 锗管软削波 +
@@ -36,7 +36,7 @@ export const klonEffect: EffectDefinition = {
   params: [
     { key: 'gain', label: 'GAIN', min: 0, max: 100, step: 1, defaultValue: 35 },
     { key: 'treble', label: 'TREBLE', min: 0, max: 100, step: 1, defaultValue: 50 },
-    { key: 'level', label: 'LEVEL', min: 0, max: 100, step: 1, defaultValue: 65 },
+    { key: 'level', label: 'LEVEL', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: -19.5, unit: 'dB' },
   ],
   create(ctx: AudioContext): EffectInstance {
     const input = ctx.createGain();
@@ -59,7 +59,7 @@ export const klonEffect: EffectDefinition = {
     treble.gain.value = trebleToDb(50);
     wetGain.gain.value = 1;
     dryGain.gain.value = DRY_BLEND;
-    output.gain.value = levelToOutputGain(65);
+    output.gain.value = levelDbToGain(-19.5);
 
     // 削波路径:input → preGain → 锗管削波 → treble → wetGain → output
     input.connect(preGain);
@@ -84,7 +84,7 @@ export const klonEffect: EffectDefinition = {
             treble.gain.setTargetAtTime(trebleToDb(value), t, SMOOTH);
             break;
           case 'level':
-            output.gain.setTargetAtTime(levelToOutputGain(value), t, SMOOTH);
+            output.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
             break;
         }
       },

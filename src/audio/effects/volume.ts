@@ -1,7 +1,6 @@
 import type { EffectDefinition, EffectInstance } from './types';
+import { LEVEL_DB_MAX, VOLUME_DB_MIN, levelDbToGain } from '../level';
 
-/** level 0~100 → output.gain 0~1.2 */
-const LEVEL_TO_GAIN = 1.2 / 100;
 /** pan -50~+50 → panner.pan -1~+1 */
 const PAN_TO_PAN = 1 / 50;
 
@@ -13,11 +12,11 @@ export const volumeEffect: EffectDefinition = {
     {
       key: 'level',
       label: 'Level',
-      min: 0,
-      max: 100,
-      step: 1,
-      defaultValue: 80,
-      unit: '%',
+      min: VOLUME_DB_MIN,
+      max: LEVEL_DB_MAX,
+      step: 0.5,
+      defaultValue: 0,
+      unit: 'dB',
     },
     {
       key: 'pan',
@@ -34,7 +33,7 @@ export const volumeEffect: EffectDefinition = {
     const panner = ctx.createStereoPanner();
 
     // 静态初始值
-    output.gain.value = 80 * LEVEL_TO_GAIN;
+    output.gain.value = levelDbToGain(0, VOLUME_DB_MIN);
     panner.pan.value = 0;
 
     input.connect(panner);
@@ -47,7 +46,7 @@ export const volumeEffect: EffectDefinition = {
         const now = ctx.currentTime;
         switch (key) {
           case 'level':
-            output.gain.setTargetAtTime(value * LEVEL_TO_GAIN, now, 0.03);
+            output.gain.setTargetAtTime(levelDbToGain(value, VOLUME_DB_MIN), now, 0.03);
             break;
           case 'pan':
             panner.pan.setTargetAtTime(value * PAN_TO_PAN, now, 0.03);

@@ -220,6 +220,13 @@ input[type='text'] {
   display: block;
 }
 
+.gain-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  cursor: help;
+}
+
 .bypass-btn.bypassed {
   background: #7a3535;
   border-color: #a05050;
