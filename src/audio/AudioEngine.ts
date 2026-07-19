@@ -1,6 +1,7 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
 import { loadNoiseGate } from './noiseGateWorklet';
 import { loadChampWdf } from './wdf/champWorklet';
+import { loadBognerWdf } from './wdf/bognerWorklet';
 
 /** 引擎重建链条所需的快照 */
 export interface ChainSpec {
@@ -91,6 +92,11 @@ class AudioEngine {
       await loadChampWdf(ctx);
     } catch (e) {
       console.warn('WDF Champ worklet 加载失败,该箱头将不可用:', e);
+    }
+    try {
+      await loadBognerWdf(ctx);
+    } catch (e) {
+      console.warn('WDF Bogner worklet 加载失败,该箱头将不可用:', e);
     }
     this.rebuildGraph();
   }

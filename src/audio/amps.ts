@@ -1,5 +1,4 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
-
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
 
@@ -355,6 +354,7 @@ export const AMP_REGISTRY: EffectDefinition[] = [
   makeAmpDef('recto', 'Modern Recto', '#b03a2e'),
   makeAmpDef('chime', 'AC Chime', '#2e8b57'),
   wdfChampDef(),
+  wdfBognerDef(),
 ];
 
 /**
@@ -402,4 +402,106 @@ export function getAmpDef(id: string): EffectDefinition {
   const def = AMP_REGISTRY.find((d) => d.id === id);
   if (!def) throw new Error(`未知箱头型号: ${id}`);
   return def;
+}
+
+/**
+ * WDF Bogner(实验):Ecstasy 高增益通道风格,三级 12AX7 级联(含冷偏置级)
+ * + EL34 后级。worklet 负责 WDF 前级/后级与 GAIN;音色栈/MASTER 用原生节点。
+ */
+function wdfBognerDef(): EffectDefinition {
+  const DEFAULTS = { gain: 55, bass: 50, mid: 60, treble: 60, presence: 55, master: 60 };
+  return {
+    id: 'wdfbogner',
+    name: 'WDF Bogner ⚗',
+    color: '#1c1c1e',
+    params: [
+      { key: 'gain', label: 'GAIN', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.gain },
+      { key: 'bass', label: 'BASS', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.bass },
+      { key: 'mid', label: 'MID', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.mid },
+      { key: 'treble', label: 'TREBLE', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.treble },
+      { key: 'presence', label: 'PRESENCE', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.presence },
+      { key: 'master', label: 'MASTER', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.master },
+    ],
+    create(ctx: AudioContext): EffectInstance {
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+
+      let node: AudioWorkletNode | null = null;
+      // Bogner 中频前置 voicing
+      const voicing = ctx.createBiquadFilter();
+      voicing.type = 'peaking';
+      voicing.frequency.value = 800;
+      voicing.Q.value = 1.1;
+      voicing.gain.value = 2.5;
+      // 音色栈
+      const bass = ctx.createBiquadFilter();
+      bass.type = 'lowshelf';
+      bass.frequency.value = 120;
+      const mid = ctx.createBiquadFilter();
+      mid.type = 'peaking';
+      mid.frequency.value = 700;
+      mid.Q.value = 1;
+      const treble = ctx.createBiquadFilter();
+      treble.type = 'highshelf';
+      treble.frequency.value = 3200;
+      const presence = ctx.createBiquadFilter();
+      presence.type = 'highshelf';
+      presence.frequency.value = 5000;
+      const masterGain = ctx.createGain();
+
+      const pctToDb = (v: number) => ((v - 50) / 50) * 12;
+      bass.gain.value = pctToDb(DEFAULTS.bass);
+      mid.gain.value = pctToDb(DEFAULTS.mid);
+      treble.gain.value = pctToDb(DEFAULTS.treble);
+      presence.gain.value = (DEFAULTS.presence / 100) * 8;
+      masterGain.gain.value = DEFAULTS.master / 100;
+
+      try {
+        node = new AudioWorkletNode(ctx, 'wdf-bogner');
+        input.connect(node);
+        node.connect(voicing);
+      } catch (e) {
+        console.warn('WDF Bogner worklet 未就绪,直通:', e);
+        input.connect(voicing);
+      }
+      voicing.connect(bass);
+      bass.connect(mid);
+      mid.connect(treble);
+      treble.connect(presence);
+      presence.connect(masterGain);
+      masterGain.connect(output);
+
+      return {
+        input,
+        output,
+        update(key, value) {
+          const t = ctx.currentTime;
+          switch (key) {
+            case 'gain':
+              node?.parameters.get('gain')?.setTargetAtTime(value, t, 0.03);
+              break;
+            case 'bass':
+              bass.gain.setTargetAtTime(pctToDb(value), t, 0.03);
+              break;
+            case 'mid':
+              mid.gain.setTargetAtTime(pctToDb(value), t, 0.03);
+              break;
+            case 'treble':
+              treble.gain.setTargetAtTime(pctToDb(value), t, 0.03);
+              break;
+            case 'presence':
+              presence.gain.setTargetAtTime((value / 100) * 8, t, 0.03);
+              break;
+            case 'master':
+              masterGain.gain.setTargetAtTime(value / 100, t, 0.03);
+              break;
+          }
+        },
+        dispose() {
+          [input, node, voicing, bass, mid, treble, presence, masterGain, output]
+            .forEach((n) => n?.disconnect());
+        },
+      };
+    },
+  };
 }

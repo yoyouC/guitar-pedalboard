@@ -45,6 +45,15 @@ export const KOREN_6V6_APPROX: KorenParams = {
   kvb: 1200,
 };
 
+/** EL34 功率管的近似 Koren 参数(经验拟合):比 6V6 略高 mu、更早的膝点 */
+export const KOREN_EL34_APPROX: KorenParams = {
+  mu: 11,
+  ex: 1.35,
+  kg: 1030,
+  kp: 42,
+  kvb: 1200,
+};
+
 /** Koren 板流方程,Vgk/Vpk 单位 V,返回 A */
 export function korenPlateCurrent(p: KorenParams, vgk: number, vpk: number): number {
   if (vpk <= 0) return 0;
