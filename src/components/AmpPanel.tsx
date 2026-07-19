@@ -3,6 +3,11 @@ import type { EffectDefinition } from '../audio/effects/types';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 
+interface NamModelOption {
+  id: string;
+  name: string;
+}
+
 interface AmpPanelProps {
   ampId: string;
   enabled: boolean;
@@ -12,6 +17,12 @@ interface AmpPanelProps {
   onSelect: (ampId: string) => void;
   onToggle: () => void;
   onParam: (key: string, value: number) => void;
+  /** NAM 类箱头(nam / nam-wasm)专用:模型清单、当前模型源 id、自定义模型名、模型切换与本地文件加载回调 */
+  namModels?: NamModelOption[];
+  namSourceId?: string;
+  namCustomName?: string | null;
+  onNamModelSelect?: (id: string) => void;
+  onNamModelFile?: (file: File) => void;
 }
 
 function getDef(ampId: string): EffectDefinition {
@@ -19,7 +30,7 @@ function getDef(ampId: string): EffectDefinition {
 }
 
 /** 箱头模拟面板:型号选择 + 拟物箱头(tolex 外壳 + 旋钮排 + 电源开关) */
-export function AmpPanel({ ampId, enabled, values, analyser, showMeters, onSelect, onToggle, onParam }: AmpPanelProps) {
+export function AmpPanel({ ampId, enabled, values, analyser, showMeters, onSelect, onToggle, onParam, namModels, namSourceId, namCustomName, onNamModelSelect, onNamModelFile }: AmpPanelProps) {
   const def = getDef(ampId);
 
   return (
@@ -36,6 +47,38 @@ export function AmpPanel({ ampId, enabled, values, analyser, showMeters, onSelec
           </button>
         ))}
       </div>
+
+      {namModels && onNamModelFile && onNamModelSelect && (
+        <div className="nam-model-row">
+          <select
+            className="nam-model-select"
+            value={namSourceId}
+            onChange={(e) => onNamModelSelect(e.target.value)}
+          >
+            {namModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+            {namSourceId === 'custom' && (
+              <option value="custom">{namCustomName ?? '自定义模型'}(自定义)</option>
+            )}
+          </select>
+          <label className="nam-load-btn">
+            加载 .nam…
+            <input
+              type="file"
+              accept=".nam,application/json"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onNamModelFile(f);
+                e.target.value = '';
+              }}
+            />
+          </label>
+        </div>
+      )}
 
       <div className={`amp-head amp-${ampId} ${enabled ? 'amp-on' : 'amp-off'}`}>
         <div className="amp-top">

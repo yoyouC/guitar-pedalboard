@@ -65,6 +65,13 @@ export const noiseGateEffect: EffectDefinition = {
       input.disconnect();
       output.disconnect();
       if (gateNode) {
+        // 通知处理器停止渲染(返回 false),防止僵尸 worklet 空转音频线程
+        try {
+          gateNode.port.postMessage({ type: 'suspend' });
+          gateNode.port.onmessage = null;
+        } catch {
+          /* 端口已关闭 */
+        }
         gateNode.disconnect();
         gateNode = null;
       }

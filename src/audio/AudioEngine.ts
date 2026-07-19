@@ -1,5 +1,7 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
 import { loadNoiseGate } from './noiseGateWorklet';
+import { loadNamWorklet } from './namWorklet';
+import { loadNamWasmWorklet } from './namWasmWorklet';
 
 /** 引擎重建链条所需的快照 */
 export interface ChainSpec {
@@ -85,6 +87,16 @@ class AudioEngine {
       await loadNoiseGate(ctx);
     } catch (e) {
       console.warn('NoiseGate worklet 加载失败,该效果将不可用:', e);
+    }
+    try {
+      await loadNamWorklet(ctx);
+    } catch (e) {
+      console.warn('NAM worklet 加载失败,NAM 箱头将回退为直通:', e);
+    }
+    try {
+      await loadNamWasmWorklet(ctx);
+    } catch (e) {
+      console.warn('NAM WASM worklet 加载失败,NAM WaveNet 箱头将回退为直通:', e);
     }
     this.rebuildGraph();
   }
@@ -332,3 +344,8 @@ class AudioEngine {
 }
 
 export const audioEngine = AudioEngine.instance;
+
+// 开发调试:允许通过 window.__audioEngine 检查引擎状态(CDP 调试用)
+if (import.meta.env.DEV) {
+  (window as unknown as Record<string, unknown>).__audioEngine = audioEngine;
+}

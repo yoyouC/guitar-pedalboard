@@ -166,6 +166,31 @@ input → 高通(preHpHz,切低频保持紧实)
 
 6 个固定旋钮:`gain/bass/mid/treble/presence/master`(0~100)。`makeAmpDef()` 包装成 `EffectDefinition` 进入 `AMP_REGISTRY`,`getAmpDef(id)` 查找。新增箱头:优先在 `AMP_MODELS` 加配置;不够用时加 `customCreate`。
 
+### 4.4 NAM Capture(nam,Neural Amp Modeler / LSTM)
+
+`src/audio/nam.ts` + `src/audio/namProcessor.js`,以快照式神经网络模型(`.nam` 文件,JSON + 权重)驱动:
+
+- **推理在 AudioWorklet**:`namProcessor.js` 纯 JS 逐样本跑 LSTM(权重布局与 NAM Core C++ `NAM/lstm.cpp` 一致:行主序拼接 W、ifgo 门序、权重内含初始状态 h0/c0,末尾 head)。经 Blob 内联加载(`namWorklet.ts`),`AudioEngine.init()` 中与噪声门并行 `await`;加载失败兜底直通。denormal 用输入微小 DC + 状态 FTZ 处理。
+- **模型流转**:`parseNamModel()` 校验架构(仅 LSTM,WaveNet 需 WASM 方案)、声道数、权重总数,折入 `head_scale`;模块级缓存 `Map<source, Promise<NamModel>>`,避免 `rebuildGraph` 重复下载/解析。`createNamAmp` 同步建 worklet 节点,模型异步就绪后经 `port.postMessage` 热更新;换模型走结构重建(`namVersion` 计入 `structureKey`)。
+- **旋钮语义**(capture 本身无旋钮):GAIN=模型输入激励(±12dB,50 为单位增益),BASS/MID/TREBLE/PRESENCE=模型后 biquad 音色栈,MASTER=输出电平。
+- **响度归一化**:模型就绪后按 `metadata.loudness` 施加 makeup(`-18LUFS - loudness`,钳制 [-12, +36]dB,与官方插件默认的 Normalized 输出模式一致);无 loudness 元数据时增益为 1。注意 NAM capture 的电平普遍远低于手工箱头,不做归一化会"几乎没有声音"。
+- **UI**:`AmpPanel` 在 `ampId === 'nam'` 时显示内置模型下拉(`BUNDLED_NAM_MODELS` 清单,`setNamModelSource` 切换)+ 本地 `.nam` 文件加载入口(`loadNamModelFromFile`,加载后以下拉中的 "自定义" 项表示)。
+- **内置模型**:`public/models/` 共 5 个 LSTM capture(来源/许可见 `ATTRIBUTION.md`,含 CC BY-NC-ND 与 GPLv3 文件,公开发布前需核对)。默认 `lstm-demo.nam`(NAM Core 官方 example,MIT,hidden=3 的测试 capture,音质有限)。
+- **验证**:`node scripts/verify-nam-lstm.mjs` 在 Node 中 eval 真实 worklet 源码,与 C++ 语义的朴素参考实现逐样本对比(误差 < 1e-4);H=32 实测约占单核 22%。
+- **已知限制**:仅 LSTM 架构(社区多数高质量 capture 为 WaveNet);采样率不匹配(模型默认 48kHz)仅告警不重采样;`input_size > 1` 的 conditioning 输入固定为 0。
+
+### 4.5 NAM WaveNet(nam-wasm,WASM 全架构)
+
+`src/audio/namWasm.ts` + `src/audio/namWasmProcessor.js` + `public/nam-wasm/`,方案 B:**在 AudioWorklet 内运行 NAM Core 官方 C++**(emscripten 编译为 WASM),支持全部架构(WaveNet/LSTM/ConvNet/Container)。
+
+- **WASM 构建**(自有工具链,非官方模块):tone-3000 官方模块(t3k-wasm-module)会自建 AudioContext 且需 COOP/COEP(SharedArrayBuffer),无法嵌入本引擎,因此用极简绑定 `wasm/nam-dsp-binding.cpp`(仅 `setDsp(json)` + `processAudio(in,out,n)`,不碰 Web Audio)+ `wasm/build-nam-wasm.sh`(em++,依赖 /tmp/emsdk 与 /tmp/nam-wasm-src 源码树)产出 `nam-wasm-glue.js`(33KB)+ `nam-wasm-glue.wasm`(650KB)。单线程、无 SAB,无需特殊响应头。
+- **加载链路**:worklet 无 `importScripts`,故 `namWasmWorklet.ts` 把 glue + 处理器拼成单 Blob `addModule`;wasm 字节由主线程 fetch 后经 `port.postMessage` 传入,worklet 内以 `instantiateWasm` 覆盖实例化(不依赖 worklet 内 fetch/XHR)。模型 .nam JSON 全文送 `_setDsp`。
+- **旋钮/归一化/重建语义与 nam.ts 完全一致**(drive → worklet → normalizeGain → 音色栈 → master);UI 共用模型选择行,两套清单:`BUNDLED_NAM_MODELS`(LSTM)/ `BUNDLED_WAVENET_MODELS`(WaveNet),本地文件加载在 nam-wasm 下接受任意架构。
+- **对齐官方模块的两个细节**:模型加载后 `prewarm()`(静默驱动内部状态到位);输出经 10Hz DC blocker(系数按 `_setSampleRate` 的实际采样率计算,WaveNet 常见缓慢 DC 漂移)。
+- **僵尸节点防护**:worklet 断开连接后 Chrome 仍可能继续调用其 `process()`,因此三个 worklet(nam/nam-wasm/noiseGate)都支持 `suspend` 消息——宿主实例 `dispose()` 时通知处理器返回 `false`,让节点立即停止渲染,防止空转音频线程(对 ~19% 单核的 WaveNet 实例尤其重要)。
+- **验证**:`node scripts/verify-nam-wasm.cjs` —— ① lstm-demo 经 WASM 与经纯 JS 参考实现对拍,误差 ~2e-7(两条路线互相印证);② WaveNet 标准模型推理 100s 音频耗时 19s(约单核 19%),静音与大声输入耗时接近(无 denormal 悬崖),实时余量充足。
+- **已知限制**:采样率不匹配仅告警;conditioned 模型的条件输入未接(NAM Core 支持,但 UI 未暴露);无 DC blocker(官方模块有,本项目输出侧已有箱体高通与限幅器)。
+
 ## 5. 箱体(`src/audio/cabs.ts`)
 
 纯频响整形(无卷积 IR),拓扑固定:

@@ -1,4 +1,6 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
+import { createNamAmp, NAM_AMP_DEFAULTS } from './nam';
+import { createNamWasmAmp } from './namWasm';
 
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
@@ -354,6 +356,22 @@ export const AMP_REGISTRY: EffectDefinition[] = [
   makeAmpDef('crunch', 'British Crunch', '#c8a24a'),
   makeAmpDef('recto', 'Modern Recto', '#b03a2e'),
   makeAmpDef('chime', 'AC Chime', '#2e8b57'),
+  // NAM LSTM 神经网络箱头(见 nam.ts):GAIN=输入激励,音色栈为模型后 EQ
+  {
+    id: 'nam',
+    name: 'NAM Capture',
+    color: '#4a3a6b',
+    params: AMP_PARAMS(NAM_AMP_DEFAULTS),
+    create: createNamAmp,
+  },
+  // NAM WASM 箱头(见 namWasm.ts):NAM Core 全架构(WaveNet/LSTM/…)
+  {
+    id: 'nam-wasm',
+    name: 'NAM WaveNet',
+    color: '#2e5a8b',
+    params: AMP_PARAMS(NAM_AMP_DEFAULTS),
+    create: createNamWasmAmp,
+  },
 ];
 
 export function getAmpDef(id: string): EffectDefinition {
