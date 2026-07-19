@@ -1,5 +1,6 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
 import { loadNoiseGate } from './noiseGateWorklet';
+import { loadChampWdf } from './wdf/champWorklet';
 
 /** 引擎重建链条所需的快照 */
 export interface ChainSpec {
@@ -85,6 +86,11 @@ class AudioEngine {
       await loadNoiseGate(ctx);
     } catch (e) {
       console.warn('NoiseGate worklet 加载失败,该效果将不可用:', e);
+    }
+    try {
+      await loadChampWdf(ctx);
+    } catch (e) {
+      console.warn('WDF Champ worklet 加载失败,该箱头将不可用:', e);
     }
     this.rebuildGraph();
   }

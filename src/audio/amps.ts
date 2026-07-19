@@ -354,7 +354,49 @@ export const AMP_REGISTRY: EffectDefinition[] = [
   makeAmpDef('crunch', 'British Crunch', '#c8a24a'),
   makeAmpDef('recto', 'Modern Recto', '#b03a2e'),
   makeAmpDef('chime', 'AC Chime', '#2e8b57'),
+  wdfChampDef(),
 ];
+
+/**
+ * WDF Champ(实验):5F1 风格,两级 12AX7 WDF 共阴极级 + 单端后级。
+ * AudioWorklet 实现,加载失败兜底直通。
+ */
+function wdfChampDef(): EffectDefinition {
+  return {
+    id: 'wdfchamp',
+    name: 'WDF Champ ⚗',
+    color: '#7d3c98',
+    params: [
+      { key: 'gain', label: 'GAIN', min: 0, max: 100, step: 1, defaultValue: 50 },
+      { key: 'master', label: 'MASTER', min: 0, max: 100, step: 1, defaultValue: 60 },
+    ],
+    create(ctx: AudioContext): EffectInstance {
+      const input = ctx.createGain();
+      const output = ctx.createGain();
+      let node: AudioWorkletNode | null = null;
+      try {
+        node = new AudioWorkletNode(ctx, 'wdf-champ');
+        input.connect(node);
+        node.connect(output);
+      } catch (e) {
+        console.warn('WDF Champ worklet 未就绪,直通:', e);
+        input.connect(output);
+      }
+      return {
+        input,
+        output,
+        update(key, value) {
+          node?.parameters.get(key)?.setTargetAtTime(value, ctx.currentTime, 0.03);
+        },
+        dispose() {
+          input.disconnect();
+          node?.disconnect();
+          output.disconnect();
+        },
+      };
+    },
+  };
+}
 
 export function getAmpDef(id: string): EffectDefinition {
   const def = AMP_REGISTRY.find((d) => d.id === id);
