@@ -318,6 +318,31 @@ console.log(await evaluate(switchJcm));
 await sleep(3000);
 console.log(JSON.stringify((await evaluate(sampleLevels)).amp));
 
+console.log('\n== 步骤 10: 双模型隔离(NAM TS 单块 + NAM 箱头各自加载各自模型)==');
+// 箱头选 jcm2000-clean,测单块与箱头电平;再切 jcm900-g12,箱头变、单块应不变
+console.log(await evaluate(clickButton('NAM WaveNet')));
+await sleep(1500);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'jcm2000-clean');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'amp → jcm2000-clean';
+})()`));
+await sleep(3000);
+const pedalRms = async () => (await sampleModuleAvg('pedal')).match(/avgRmsDb=(-?[\d.]+)/)?.[1];
+const ampRms = async () => (await evaluate(sampleLevels)).amp.rmsDb;
+console.log('jcm2000-clean: pedal=', await pedalRms(), 'amp=', await ampRms());
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'jcm900-g12');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'amp → jcm900-g12';
+})()`));
+await sleep(3000);
+console.log('jcm900-g12:   pedal=', await pedalRms(), 'amp=', await ampRms());
+
 console.log('\n== 页面 console 输出 ==');
 for (const l of consoleLogs) console.log(l);
 
