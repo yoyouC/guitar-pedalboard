@@ -13,8 +13,10 @@
 | `ac10-wavenet.nam` | Vox AC10 WaveNet capture(方案 B 内置) | [tone-3000/neural-amp-modeler-wasm](https://github.com/tone-3000/neural-amp-modeler-wasm) `ui/public/models/ac10.nam` | 未标明,仅本地评估 |
 | `deluxe-wavenet.nam` | Fender Deluxe Reverb WaveNet capture(方案 B 内置) | 同上 `ui/public/models/deluxe.nam` | 未标明,仅本地评估 |
 | `namknobs/*.nam`(comp/ts_full/rat/gr/ds1/ff/mxr) | NAMKnobs 条件化单块(upstream_v2,旋钮=条件输入通道) | [drockthedoc/NAMKnobs](https://github.com/drockthedoc/NAMKnobs) `offline_cond_nam/out/upstream_v2/` | **未标明(仓库无 LICENSE),仅本地评估,勿再分发** |
-| `jcm800-the-sound.nam` / `jcm800-the-goods.nam` | JCM800-2203 MODIFIED HI 前级 capture([PRE] 系列,amp-only,适合接箱体模拟) | [andremichelle/openDAW](https://github.com/andremichelle/openDAW) `packages/app/nam-test/public/` | 未标明,仅本地评估 |
-| `jcm2000-clean.nam` / `jcm2000-crunch.nam` / `jcm900-dualverb-g12.nam` | Tim R 的 Marshall JCM2000/JCM900 系列 capture | [pelennor2170/NAM_models](https://github.com/pelennor2170/NAM_models) | **GPL-3.0** |
+| `jcm2000-clean.nam` / `jcm2000-crunch.nam` / `jcm900-dualverb-g12.nam` / `jcm900-dualverb-g16.nam` | Tim R 的 Marshall JCM2000/JCM900 系列 capture | [pelennor2170/NAM_models](https://github.com/pelennor2170/NAM_models) | **GPL-3.0** |
+
+注:曾内置 openDAW 的 `[PRE] JCM800-2203-MODIFIED-HI` 两个模型,实测为哑弹
+(输出与输入电平脱钩、高频占比异常,疑似测试用生成物,metadata 为占位符),已移除。
 
 注:以上模型按 NAM 惯例均为 48kHz 采样率训练。BossLSTM 系列在多个仓库中流转,
 上游作者为 NAM 社区;DeluxeReverb 无 loudness 元数据,输出电平可能偏低。

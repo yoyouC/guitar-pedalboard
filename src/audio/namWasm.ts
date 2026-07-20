@@ -20,11 +20,10 @@ export interface BundledNamWasmModel {
 export const BUNDLED_WAVENET_MODELS: BundledNamWasmModel[] = [
   { id: 'wavenet-ac10', name: 'Vox AC10 (WaveNet)', url: `${import.meta.env.BASE_URL}models/ac10-wavenet.nam` },
   { id: 'wavenet-deluxe', name: 'Deluxe Reverb (WaveNet)', url: `${import.meta.env.BASE_URL}models/deluxe-wavenet.nam` },
-  { id: 'jcm800-sound', name: 'JCM800 · The Sound', url: `${import.meta.env.BASE_URL}models/jcm800-the-sound.nam` },
-  { id: 'jcm800-goods', name: 'JCM800 · The Goods', url: `${import.meta.env.BASE_URL}models/jcm800-the-goods.nam` },
   { id: 'jcm2000-clean', name: 'JCM2000 Clean', url: `${import.meta.env.BASE_URL}models/jcm2000-clean.nam` },
   { id: 'jcm2000-crunch', name: 'JCM2000 Crunch', url: `${import.meta.env.BASE_URL}models/jcm2000-crunch.nam` },
   { id: 'jcm900-g12', name: 'JCM900 HiGain G12', url: `${import.meta.env.BASE_URL}models/jcm900-dualverb-g12.nam` },
+  { id: 'jcm900-g16', name: 'JCM900 HiGain G16', url: `${import.meta.env.BASE_URL}models/jcm900-dualverb-g16.nam` },
 ];
 
 /** .nam 文件的元数据(响度归一化与显示用,架构无关) */
