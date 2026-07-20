@@ -15,6 +15,10 @@
 | `namknobs/*.nam`(comp/ts_full/rat/gr/ds1/ff/mxr) | NAMKnobs 条件化单块(upstream_v2,旋钮=条件输入通道) | [drockthedoc/NAMKnobs](https://github.com/drockthedoc/NAMKnobs) `offline_cond_nam/out/upstream_v2/` | **未标明(仓库无 LICENSE),仅本地评估,勿再分发** |
 | `jcm2000-clean.nam` / `jcm2000-crunch.nam` / `jcm900-dualverb-g12.nam` / `jcm900-dualverb-g16.nam` | Tim R 的 Marshall JCM2000/JCM900 系列 capture | [pelennor2170/NAM_models](https://github.com/pelennor2170/NAM_models) | **GPL-3.0** |
 | `helga-5150-blockletter.nam` / `helga-6505-red.nam` | Helga B 的 Peavey 5150/6505+ capture | 同上 | **GPL-3.0** |
+| `fender-twinverb.nam` / `peavey-5152-clean.nam` | Tim R 的 Fender TwinVerb / Peavey 5152 清音 capture | 同上 | **GPL-3.0** |
+| `vox-ac15.nam` | Phillipe P 的 Vox AC15(JonAr1)capture | 同上 | **GPL-3.0** |
+| `friedman-shirley-clean.nam` | Sascha S 的 Dirty Shirley Mini 清音 capture | 同上 | **GPL-3.0** |
+| `laney-gh100s.nam` | Phillipe P 的 Laney GH100S(Iommi 签名款)crunch capture | 同上 | **GPL-3.0** |
 | `bug1990-lead.nam` | Phillipe P 的 Bugera 1990(JCM800 风格)Lead capture | 同上 | **GPL-3.0** |
 | `sovtek-mig50.nam` | Mikhail K 的 Sovtek MIG50 capture | 同上 | **GPL-3.0** |
 | `orange-rockerverb.nam` | Tom C 的 Orange Rockerverb(Axe FX 2)capture | 同上 | **GPL-3.0** |

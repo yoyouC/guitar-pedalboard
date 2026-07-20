@@ -18,15 +18,23 @@ export interface BundledNamWasmModel {
 }
 
 export const BUNDLED_WAVENET_MODELS: BundledNamWasmModel[] = [
+  // 清音
   { id: 'wavenet-ac10', name: 'Vox AC10 (WaveNet)', url: `${import.meta.env.BASE_URL}models/ac10-wavenet.nam` },
   { id: 'wavenet-deluxe', name: 'Deluxe Reverb (WaveNet)', url: `${import.meta.env.BASE_URL}models/deluxe-wavenet.nam` },
+  { id: 'fender-twinverb', name: 'Fender TwinVerb', url: `${import.meta.env.BASE_URL}models/fender-twinverb.nam` },
+  { id: 'peavey-5152-clean', name: '5152 Clean', url: `${import.meta.env.BASE_URL}models/peavey-5152-clean.nam` },
+  { id: 'vox-ac15', name: 'Vox AC15', url: `${import.meta.env.BASE_URL}models/vox-ac15.nam` },
+  { id: 'friedman-shirley-clean', name: 'Dirty Shirley Clean', url: `${import.meta.env.BASE_URL}models/friedman-shirley-clean.nam` },
   { id: 'jcm2000-clean', name: 'JCM2000 Clean', url: `${import.meta.env.BASE_URL}models/jcm2000-clean.nam` },
+  // crunch / 中增益
   { id: 'jcm2000-crunch', name: 'JCM2000 Crunch', url: `${import.meta.env.BASE_URL}models/jcm2000-crunch.nam` },
+  { id: 'laney-gh100s', name: 'Laney GH100S Crunch', url: `${import.meta.env.BASE_URL}models/laney-gh100s.nam` },
+  { id: 'orange-rockerverb', name: 'Orange Rockerverb', url: `${import.meta.env.BASE_URL}models/orange-rockerverb.nam` },
+  { id: 'sovtek-mig50', name: 'Sovtek MIG50', url: `${import.meta.env.BASE_URL}models/sovtek-mig50.nam` },
+  // 高增益
   { id: 'jcm900-g12', name: 'JCM900 HiGain G12', url: `${import.meta.env.BASE_URL}models/jcm900-dualverb-g12.nam` },
   { id: 'jcm900-g16', name: 'JCM900 HiGain G16', url: `${import.meta.env.BASE_URL}models/jcm900-dualverb-g16.nam` },
   { id: 'bug1990-lead', name: 'Bug1990 Lead (JCM800系)', url: `${import.meta.env.BASE_URL}models/bug1990-lead.nam` },
-  { id: 'sovtek-mig50', name: 'Sovtek MIG50', url: `${import.meta.env.BASE_URL}models/sovtek-mig50.nam` },
-  { id: 'orange-rockerverb', name: 'Orange Rockerverb', url: `${import.meta.env.BASE_URL}models/orange-rockerverb.nam` },
   { id: '5150-blockletter', name: '5150 Block Letter', url: `${import.meta.env.BASE_URL}models/helga-5150-blockletter.nam` },
   { id: '6505-red', name: '6505+ Red Ch', url: `${import.meta.env.BASE_URL}models/helga-6505-red.nam` },
 ];
