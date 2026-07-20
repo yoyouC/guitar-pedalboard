@@ -265,16 +265,25 @@ const addNamTs = `(() => {
 })()`;
 console.log(await evaluate(addNamTs));
 await sleep(4000); // wasm 初始化 + 模型加载
-const sampleModule = (label) => `(() => {
-  const e = window.__audioEngine;
-  const uids = [...e.moduleAnalysers.keys()];
-  const uid = uids[uids.length - 1];
-  const a = e.moduleAnalysers.get(uid);
-  const b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b);
-  let s = 0; for (const v of b) s += v * v;
-  return '${label} uid=' + uid.slice(0, 8) + ' rmsDb=' + (20 * Math.log10(Math.sqrt(s / b.length) + 1e-12)).toFixed(1);
-})()`;
-console.log(await evaluate(sampleModule('drive=0.5')));
+const sampleModuleAvg = async (label) => {
+  // 10 次采样平均(riff 是动态循环,单窗口读数噪声大)
+  const expr = `(async () => {
+    const e = window.__audioEngine;
+    const uids = [...e.moduleAnalysers.keys()];
+    const uid = uids[uids.length - 1];
+    const a = e.moduleAnalysers.get(uid);
+    const b = new Float32Array(a.fftSize);
+    let s = 0, n = 0;
+    for (let i = 0; i < 10; i++) {
+      a.getFloatTimeDomainData(b);
+      for (const v of b) { s += v * v; n++; }
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return '${label} uid=' + uid.slice(0, 8) + ' avgRmsDb=' + (20 * Math.log10(Math.sqrt(s / n) + 1e-12)).toFixed(1);
+  })()`;
+  return evaluate(expr, true);
+};
+console.log(await sampleModuleAvg('drive=0.5'));
 console.log(await evaluate(`(() => {
   const e = window.__audioEngine;
   const uids = [...e.moduleAnalysers.keys()];
@@ -282,7 +291,16 @@ console.log(await evaluate(`(() => {
   return 'drive → 1.0';
 })()`));
 await sleep(800);
-console.log(await evaluate(sampleModule('drive=1.0')));
+console.log(await sampleModuleAvg('drive=1.0'));
+// 回到 0.5:应与初次加载读数一致(验证初始条件不再丢失)
+console.log(await evaluate(`(() => {
+  const e = window.__audioEngine;
+  const uids = [...e.moduleAnalysers.keys()];
+  e.updateParam(uids[uids.length - 1], 'drive', 0.5);
+  return 'drive → 0.5';
+})()`));
+await sleep(800);
+console.log(await sampleModuleAvg('drive=0.5(复归)'));
 console.log('链条输出:', JSON.stringify((await evaluate(sampleLevels)).output));
 
 console.log('\n== 步骤 9: NAM WaveNet 切换到 JCM800 模型 ==');

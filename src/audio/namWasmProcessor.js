@@ -18,6 +18,7 @@ class NamWasmProcessor extends AudioWorkletProcessor {
     super();
     this.errorReported = false;
     this.suspended = false;
+    this.pendingCond = null;
     this.port.onmessage = (e) => {
       const msg = e.data;
       if (msg.type === 'init') this.init(msg);
@@ -43,6 +44,11 @@ class NamWasmProcessor extends AudioWorkletProcessor {
       namInPtr = namModule._malloc(NAM_BLOCK * 4);
       namOutPtr = namModule._malloc(NAM_BLOCK * 4);
       namModule._setSampleRate(sampleRate); // worklet 全局采样率,用于 DC blocker
+      if (this.pendingCond) {
+        // 补发就绪前被排队的条件值
+        this.setConditioning({ values: this.pendingCond });
+        this.pendingCond = null;
+      }
       this.port.postMessage({ type: 'ready' });
     } catch (err) {
       namModule = null;
@@ -70,7 +76,11 @@ class NamWasmProcessor extends AudioWorkletProcessor {
   }
 
   setConditioning(msg) {
-    if (!namModule) return;
+    if (!namModule) {
+      // 模块未初始化:排队,init 完成后补发(否则初始条件被静默丢弃)
+      this.pendingCond = msg.values;
+      return;
+    }
     const v = msg.values;
     if (!v || !v.length) return;
     const ptr = namModule._malloc(v.length * 4);
