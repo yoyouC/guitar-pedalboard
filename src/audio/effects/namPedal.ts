@@ -162,4 +162,23 @@ export const NAM_PEDAL_EFFECTS: EffectDefinition[] = [
     labels: { distortion: 'DIST' },
     defaults: { distortion: 0.5 },
   }),
+  // 快照单块(pelennor2170/NAM_models,GPL-3.0;固定旋钮位的 capture,仅 LEVEL)
+  makeNamPedalDef('namSd1', 'NAM SD-1', '#c8a24a', {
+    modelUrl: `${import.meta.env.BASE_URL}models/snapshot-pedals/boss-sd1.nam`,
+    controls: [],
+    labels: {},
+    defaults: {},
+  }),
+  makeNamPedalDef('namFortin', 'NAM Fortin', '#7a7a7a', {
+    modelUrl: `${import.meta.env.BASE_URL}models/snapshot-pedals/fortin-grind.nam`,
+    controls: [],
+    labels: {},
+    defaults: {},
+  }),
+  makeNamPedalDef('namKlone', 'NAM Klone', '#8a8f98', {
+    modelUrl: `${import.meta.env.BASE_URL}models/snapshot-pedals/klone.nam`,
+    controls: [],
+    labels: {},
+    defaults: {},
+  }),
 ];

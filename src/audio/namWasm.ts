@@ -24,6 +24,11 @@ export const BUNDLED_WAVENET_MODELS: BundledNamWasmModel[] = [
   { id: 'jcm2000-crunch', name: 'JCM2000 Crunch', url: `${import.meta.env.BASE_URL}models/jcm2000-crunch.nam` },
   { id: 'jcm900-g12', name: 'JCM900 HiGain G12', url: `${import.meta.env.BASE_URL}models/jcm900-dualverb-g12.nam` },
   { id: 'jcm900-g16', name: 'JCM900 HiGain G16', url: `${import.meta.env.BASE_URL}models/jcm900-dualverb-g16.nam` },
+  { id: 'bug1990-lead', name: 'Bug1990 Lead (JCM800系)', url: `${import.meta.env.BASE_URL}models/bug1990-lead.nam` },
+  { id: 'sovtek-mig50', name: 'Sovtek MIG50', url: `${import.meta.env.BASE_URL}models/sovtek-mig50.nam` },
+  { id: 'orange-rockerverb', name: 'Orange Rockerverb', url: `${import.meta.env.BASE_URL}models/orange-rockerverb.nam` },
+  { id: '5150-blockletter', name: '5150 Block Letter', url: `${import.meta.env.BASE_URL}models/helga-5150-blockletter.nam` },
+  { id: '6505-red', name: '6505+ Red Ch', url: `${import.meta.env.BASE_URL}models/helga-6505-red.nam` },
 ];
 
 /** .nam 文件的元数据(响度归一化与显示用,架构无关) */
