@@ -123,10 +123,10 @@ for (const [gain, label] of [[1, 'GAIN=1'], [20, 'GAIN=20(中)'], [40, 'GAIN=40(
   }
 }
 
-console.log('== 4) 混叠对比:线性插值 vs 多相 FIR(Champ 链,GAIN=15)==');
+console.log('== 4) 混叠对比:线性插值 vs 多相 FIR(Champ 链,GAIN=2,避开物理 motorboating)==');
 {
   const BASE = 48000;
-  const DRIVE = 15;
+  const DRIVE = 2;
   const N = 8192;
   // 频率取采样窗整数倍,消除 DFT 泄漏:bin = 171 → 1001.95Hz
   const HARM_BIN = 171;
@@ -199,6 +199,7 @@ console.log('== 4) 混叠对比:线性插值 vs 多相 FIR(Champ 链,GAIN=15)=='
   const dbPoly = imageDb(render('poly'));
   console.log(`线性插值镜像能量比: ${dbLinear.toFixed(1)} dB`);
   console.log(`多相 FIR 镜像能量比: ${dbPoly.toFixed(1)} dB`);
+  if (dbPoly > dbLinear + 5) throw new Error(`多相 FIR 未优于线性插值: ${dbPoly.toFixed(1)} vs ${dbLinear.toFixed(1)}`);
 }
 
 console.log('全部通过 ✓');

@@ -95,16 +95,14 @@ export class TriodeStage {
   private readonly koren: KorenParams;
   private readonly Rs: number;
   private readonly gridClamp: boolean;
-  /** 栅极导通等效正向电阻 */
-  private static readonly R_GRID = 1000;
-  /** 栅极导通阈值 */
-  private static readonly V_GRID_ON = 0.7;
+  /** 栅流模型参数(与 spice DGRID 一致:Is=1e-9, nVt=1.6×25.85mV) */
+  private static readonly IG_IS = 1e-9;
+  private static readonly IG_NVT = 1.6 * 25.85e-3;
 
   // 状态
   private iHk = 0;   // 阴极电容历史电流(梯形伴随)
   private vCkPrev = 0;
   private iCkPrev = 0;
-  private vkPrev = 0; // 上一样本阴极电压(栅流钳位用,一样本延迟可接受)
   private vcOut = 0; // 输出耦合电容电压
   private iOutPrev = 0;
   private ipPrev = 0.0012; // 初始猜测:~1.2mA 静态点
@@ -125,38 +123,56 @@ export class TriodeStage {
     this.Rkk = 1 / (1 / Rk + this.Gk);
   }
 
-  /**
-   * 栅流钳位:Vgk 超过约 0.7V 时栅极开始导通,
-   * 栅压被源内阻 Rs 与导通电阻 R_GRID 分压钳住——
-   * 这是电子管过载"温暖钳位"的主要来源之一。
-   */
-  private clampGrid(vg: number): number {
-    if (!this.gridClamp) return vg;
-    const vgk = vg - this.vkPrev;
-    if (vgk <= TriodeStage.V_GRID_ON) return vg;
-    const rOn = TriodeStage.R_GRID;
-    const vOn = this.vkPrev + TriodeStage.V_GRID_ON;
-    return (vg / this.Rs + vOn / rOn) / (1 / this.Rs + 1 / rOn);
+  /** 二极管式栅流:ig = Is·(e^(vgk/nVt) - 1),vgk ≤ 0 时为 0 */
+  private gridCurrent(vgk: number): number {
+    if (vgk <= 0) return 0;
+    const x = Math.min(vgk / TriodeStage.IG_NVT, 20); // 防 exp 溢出
+    return TriodeStage.IG_IS * (Math.exp(x) - 1);
   }
+
+  /**
+   * 栅流钳位(隐式):给定源电压与当前阴极电压,定点迭代解
+   * vg = vgSrc - Rs·ig(vg - vk)。在 Newton 内部对每次候选 ip 调用,
+   * 消除状态延迟——延迟版本会在高激励下产生极限环(非谐波噪声)。
+   */
+  private solveGrid(vgSrc: number, vk: number): number {
+    if (!this.gridClamp) return vgSrc;
+    let vg = vgSrc;
+    for (let gi = 0; gi < 4; gi++) {
+      const ig = this.gridCurrent(vg - vk);
+      if (ig < 1e-12) break;
+      const vgNew = vgSrc - this.Rs * ig;
+      // 阻尼半步,防大步长振荡
+      const next = vg + (vgNew - vg) * 0.5;
+      if (Math.abs(next - vg) < 1e-5) {
+        vg = next;
+        break;
+      }
+      vg = next;
+    }
+    return vg;
+  }
+
+  /** 当前样本的栅极源电压(residual 内联栅流用) */
+  private vgSrc = 0;
 
   /**
    * 处理一个样本。vg 为栅极电压(V,小信号吉他电平),
    * 返回经耦合电容后的输出电压(V)。
    */
   process(vgIn: number): number {
-    // 栅流钳位(基于上一样本阴极电压)
-    const vg = this.clampGrid(vgIn);
+    this.vgSrc = vgIn;
     // 步骤开始:由上一状态推出电容历史电流 Ih = -Gc·v[n-1] - i[n-1]
     this.iHk = this.Gk > 0 ? -this.Gk * this.vCkPrev - this.iCkPrev : 0;
 
-    // Newton 解 Ip:F(Ip) = Ip - f(vg - Vk(Ip), B+ - Ip·Rp - Vk(Ip)) = 0
+    // Newton 解 Ip:F(Ip) = Ip - f(vg(Vk(Ip)) - Vk(Ip), B+ - Ip·Rp - Vk(Ip)) = 0
     let ip = this.ipPrev;
     for (let iter = 0; iter < MAX_ITER; iter++) {
-      const f0 = this.residual(vg, ip);
+      const f0 = this.residual(ip);
       if (Math.abs(f0) < TOL) break;
       // 数值 Jacobian(步长按电流尺度取)
       const h = Math.max(1e-7, Math.abs(ip) * 1e-5);
-      const df = (this.residual(vg, ip + h) - f0) / h;
+      const df = (this.residual(ip + h) - f0) / h;
       if (df === 0 || !Number.isFinite(df)) break;
       // 阻尼步进,防止大步长发散
       let step = f0 / df;
@@ -173,7 +189,6 @@ export class TriodeStage {
     const iCk = this.Gk > 0 ? this.Gk * vk + this.iHk : 0;
     this.vCkPrev = vk;
     this.iCkPrev = iCk;
-    this.vkPrev = vk;
 
     // 板极电压 → 耦合电容 Co → Rload(理想电压源驱动的线性 RC,梯形精确解)
     const vp = this.Bplus - ip * this.Rp;
@@ -189,9 +204,11 @@ export class TriodeStage {
     return vp - vc;
   }
 
-  private residual(vg: number, ip: number): number {
+  private residual(ip: number): number {
     const vk = (ip - this.iHk) * this.Rkk;
     const vp = this.Bplus - ip * this.Rp;
+    // 隐式栅流:栅压随阴极电压即时变化,无状态延迟
+    const vg = this.solveGrid(this.vgSrc, vk);
     return ip - korenPlateCurrent(this.koren, vg - vk, vp - vk);
   }
 }

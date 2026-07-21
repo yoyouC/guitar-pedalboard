@@ -1,0 +1,78 @@
+WDF Bogner 参考电路(L4 评测:3x12AX7 级联 + EL34 后级)
+* 与 src/audio/wdf/bognerWorklet.ts 同构:130Hz 输入 HP、级间衰减、
+* 冷偏置级、90Hz/6kHz 输出变压器。首行为标题。
+
+* --- Koren 三极管子电路(12AX7:mu=100 ex=1.4 kg=1060 kp=600 kvb=300) ---
+.subckt T12AX7 a g k
+B1 a k I = (max((max(v(a,k),0)/600)*(log(1+exp(-abs(600*(0.01+v(g,k)/sqrt(300+v(a,k)*v(a,k))))))+max(600*(0.01+v(g,k)/sqrt(300+v(a,k)*v(a,k))),0)),0))**1.4/1060
+Dg g cn DGRID
+Rc cn k 1000
+.ends
+
+* --- Koren EL34 近似(mu=11 ex=1.35 kg=1030 kp=42 kvb=1200) ---
+.subckt TEL34 a g k
+B1 a k I = (max((max(v(a,k),0)/42)*(log(1+exp(-abs(42*(0.0909+v(g,k)/sqrt(1200+v(a,k)*v(a,k))))))+max(42*(0.0909+v(g,k)/sqrt(1200+v(a,k)*v(a,k))),0)),0))**1.35/1030
+Dg g cn DGRID
+Rc cn k 1000
+.ends
+
+.model DGRID D(IS=1e-9 N=1.6)
+
+* --- 电源与输入 ---
+Vb b 0 300
+Vbp bp 0 350
+Vin vin 0 SIN(0 1.0 1000 0 0 90)
+
+* 输入 HP 130Hz(12.2n × 100k)
+Cin vin hpin 12.2n
+Rin hpin 0 100k
+
+* --- 级1:12AX7,Rk 2.7k + Ck 0.68u 部分旁路,Rs 34k ---
+Rg1 hpin g1 34k
+Rp1 b p1 100k
+X1 p1 g1 k1 T12AX7
+Rk1 k1 0 2.7k
+Ck1 k1 0 0.68u
+
+* 耦合 + 级间衰减 0.06(940k/60k)
+Co1 p1 g2a 22n
+Ra1 g2a g2 940k
+Rb1 g2 0 60k
+
+* --- 级2:12AX7,Rk 10k 无旁路(冷偏置) ---
+Rp2 b p2 100k
+X2 p2 g2 k2 T12AX7
+Rk2 k2 0 10k
+
+* 耦合 + 级间衰减 0.10(900k/100k)
+Co2 p2 g3a 22n
+Ra2 g3a g3 900k
+Rb2 g3 0 100k
+
+* --- 级3:12AX7,Rk 820 + Ck 22u 全旁路 ---
+Rp3 b p3 100k
+X3 p3 g3 k3 T12AX7
+Rk3 k3 0 820
+Ck3 k3 0 22u
+
+* 耦合 + 级间衰减 0.22(780k/220k)
+Co3 p3 g4a 22n
+Ra3 g4a g4 780k
+Rb3 g4 0 220k
+
+* --- EL34 后级:B+ 350V,Rp 4k(反射负载),Rk 250 ---
+Rp4 bp p4 4k
+X4 p4 g4 k4 TEL34
+Rk4 k4 0 250
+
+* --- 输出变压器:90Hz HP(17.7n×100k)→ 缓冲 → 6kHz LP(1k×26.5n) ---
+Ctx p4 tx 17.7n
+Rtx tx 0 100k
+Ebuf txb 0 tx 0 1
+Rlp txb out 1k
+Clp out 0 26.5n
+Rl out 0 1Meg
+
+.tran 20.8333u 185.33m 100m 20.8333u
+.print tran v(p1) v(p2) v(p3) v(p4) v(tx) v(out)
+.end

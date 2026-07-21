@@ -112,28 +112,39 @@ class TriodeStage {
     this.ipPrev = 0.0012;
   }
 
-  clampGrid(vg) {
-    const vgk = vg - this.vkPrev;
-    if (vgk <= 0.7) return vg;
-    const vOn = this.vkPrev + 0.7;
-    return (vg / this.Rs + vOn / 1000) / (1 / this.Rs + 1 / 1000);
+  solveGrid(vgSrc, vk) {
+    // 隐式二极管栅流:Newton 内嵌,无状态延迟(延迟版高激励下产生极限环)
+    let vg = vgSrc;
+    for (let gi = 0; gi < 4; gi++) {
+      const vgk = vg - vk;
+      if (vgk <= 0) break;
+      const x = Math.min(vgk / 0.0414, 20);
+      const ig = 1e-9 * (Math.exp(x) - 1);
+      if (ig < 1e-12) break;
+      const vgNew = vgSrc - this.Rs * ig;
+      const next = vg + (vgNew - vg) * 0.5;
+      if (Math.abs(next - vg) < 1e-5) { vg = next; break; }
+      vg = next;
+    }
+    return vg;
   }
 
-  residual(vg, ip) {
+  residual(ip) {
     const vk = (ip - this.iHk) * this.Rkk;
     const vp = this.Bplus - ip * this.Rp;
+    const vg = this.solveGrid(this.vgSrc, vk);
     return ip - korenIp(this.koren, vg - vk, vp - vk);
   }
 
   process(vgIn) {
-    const vg = this.clampGrid(vgIn);
+    this.vgSrc = vgIn;
     this.iHk = this.Gk > 0 ? -this.Gk * this.vCkPrev - this.iCkPrev : 0;
     let ip = this.ipPrev;
     for (let iter = 0; iter < 12; iter++) {
-      const f0 = this.residual(vg, ip);
+      const f0 = this.residual(ip);
       if (Math.abs(f0) < 1e-9) break;
       const h = Math.max(1e-7, Math.abs(ip) * 1e-5);
-      const df = (this.residual(vg, ip + h) - f0) / h;
+      const df = (this.residual(ip + h) - f0) / h;
       if (df === 0 || !Number.isFinite(df)) break;
       let step = f0 / df;
       if (step > 0.005) step = 0.005;
