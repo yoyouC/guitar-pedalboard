@@ -16,9 +16,15 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.gain = 0;
+    this.suspended = false;
+    this.port.onmessage = (e) => {
+      if (e.data && e.data.type === 'suspend') this.suspended = true;
+    };
   }
 
   process(inputs, outputs, params) {
+    // 已废弃(宿主实例 dispose):返回 false 停止渲染,避免僵尸节点空转
+    if (this.suspended) return false;
     const input = inputs[0];
     const output = outputs[0];
     if (!input || !input.length || !input[0].length) return true;

@@ -161,7 +161,8 @@ class WdfChampProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
       { name: 'gain', defaultValue: 50, minValue: 0, maxValue: 100 },
-      { name: 'master', defaultValue: 60, minValue: 0, maxValue: 100 },
+      // 线性增益(dB 域由外层转换),默认 -6dB ≈ 0.5
+      { name: 'master', defaultValue: 0.5, minValue: 0, maxValue: 2 },
     ];
   }
 
@@ -207,7 +208,7 @@ class WdfChampProcessor extends AudioWorkletProcessor {
     while (this.chains.length < input.length) this.chains.push(this.createChain());
 
     const drive = 1 + (params.gain[0] / 100) * 29;
-    const master = (params.master[0] / 100) * 1.2;
+    const master = params.master[0]; // 线性增益,外层已做 dB 转换
     const osIn = new Float32Array(OS);
     const osOut = new Float32Array(OS);
 

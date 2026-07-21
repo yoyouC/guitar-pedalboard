@@ -1,4 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './types';
+import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
 
 const CURVE_LENGTH = 1024;
 /** 曲线陡峭度:fuzz 量越大,波形越接近方波 */
@@ -22,7 +23,6 @@ function makeFuzzCurve(k: number): Float32Array<ArrayBuffer> {
 
 const fuzzToPreGain = (v: number) => 1 + (v / 100) * 59; // 1 ~ 60
 const fuzzToK = (v: number) => CURVE_K_MIN + (v / 100) * (CURVE_K_MAX - CURVE_K_MIN);
-const levelToOutputGain = (v: number) => (v / 100) * 1.2;
 
 /** Fuzz 法兹:方波化硬削波 + 音色的经典单块 */
 export const fuzzEffect: EffectDefinition = {
@@ -32,7 +32,7 @@ export const fuzzEffect: EffectDefinition = {
   params: [
     { key: 'fuzz', label: 'Fuzz', min: 0, max: 100, step: 1, defaultValue: 65 },
     { key: 'tone', label: 'Tone', min: 400, max: 6000, step: 50, defaultValue: 2200, unit: 'Hz' },
-    { key: 'level', label: 'Level', min: 0, max: 100, step: 1, defaultValue: 55 },
+    { key: 'level', label: 'Level', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: -18, unit: 'dB' },
   ],
   create(ctx: AudioContext): EffectInstance {
     const input = ctx.createGain();
@@ -48,7 +48,7 @@ export const fuzzEffect: EffectDefinition = {
     tone.type = 'lowpass';
     tone.frequency.value = 2200;
     tone.Q.value = 0.7;
-    output.gain.value = levelToOutputGain(55);
+    output.gain.value = levelDbToGain(-18);
 
     // input → preGain → WaveShaper → tone(lowpass) → output
     input.connect(preGain);
@@ -71,7 +71,7 @@ export const fuzzEffect: EffectDefinition = {
             tone.frequency.setTargetAtTime(value, t, SMOOTH);
             break;
           case 'level':
-            output.gain.setTargetAtTime(levelToOutputGain(value), t, SMOOTH);
+            output.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
             break;
         }
       },

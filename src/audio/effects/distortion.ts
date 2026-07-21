@@ -1,4 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './types';
+import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
 
 /** 硬削波阈值,|x| 超过该值处截平 */
 const CLIP_THRESHOLD = 0.4;
@@ -22,11 +23,6 @@ function gainToPreGain(value: number): number {
   return 1 + (value / 100) * 99;
 }
 
-/** level 参数 0~100 映射到 output.gain 0~1.2 */
-function levelToOutputGain(value: number): number {
-  return (value / 100) * 1.2;
-}
-
 export const distortionEffect: EffectDefinition = {
   id: 'distortion',
   name: 'Distortion',
@@ -34,7 +30,7 @@ export const distortionEffect: EffectDefinition = {
   params: [
     { key: 'gain', label: 'Gain', min: 0, max: 100, step: 1, defaultValue: 60 },
     { key: 'tone', label: 'Tone', min: 500, max: 8000, step: 50, defaultValue: 2500, unit: 'Hz' },
-    { key: 'level', label: 'Level', min: 0, max: 100, step: 1, defaultValue: 60 },
+    { key: 'level', label: 'Level', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: -18, unit: 'dB' },
   ],
   create(ctx: AudioContext): EffectInstance {
     const input = ctx.createGain();
@@ -50,7 +46,7 @@ export const distortionEffect: EffectDefinition = {
     tone.type = 'lowpass';
     tone.frequency.value = 2500;
     tone.Q.value = 0.7;
-    output.gain.value = levelToOutputGain(60);
+    output.gain.value = levelDbToGain(-18);
 
     // input → preGain → WaveShaper → tone(lowpass) → output
     input.connect(preGain);
@@ -71,7 +67,7 @@ export const distortionEffect: EffectDefinition = {
             tone.frequency.setTargetAtTime(value, t, SMOOTHING);
             break;
           case 'level':
-            output.gain.setTargetAtTime(levelToOutputGain(value), t, SMOOTHING);
+            output.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTHING);
             break;
         }
       },

@@ -16,6 +16,7 @@ import { tremoloEffect } from './tremolo';
 import { delayEffect } from './delay';
 import { reverbEffect } from './reverb';
 import { volumeEffect } from './volume';
+import { NAM_PEDAL_EFFECTS } from './namPedal';
 
 /** 效果器目录,按吉他信号链常见顺序排列 */
 export const EFFECT_REGISTRY: EffectDefinition[] = [
@@ -36,6 +37,8 @@ export const EFFECT_REGISTRY: EffectDefinition[] = [
   delayEffect,
   reverbEffect,
   volumeEffect,
+  // NAMKnobs 条件化单块(见 namPedal.ts)
+  ...NAM_PEDAL_EFFECTS,
 ];
 
 export function getEffectDef(id: string): EffectDefinition {

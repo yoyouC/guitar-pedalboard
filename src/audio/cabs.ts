@@ -1,4 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
+import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from './level';
 
 const SMOOTH = 0.03;
 
@@ -24,7 +25,7 @@ const CAB_MODELS: Record<string, CabModelConfig> = {
     peakGainDb: 2,
     peakQ: 1.2,
     lpHz: 6000,
-    defaults: { level: 80 },
+    defaults: { level: -1 },
   },
   blue2x12: {
     // 2x12 Celestion Blue(Vox 类):中高频“钟声”、温润
@@ -35,7 +36,7 @@ const CAB_MODELS: Record<string, CabModelConfig> = {
     peakGainDb: 3,
     peakQ: 1.3,
     lpHz: 5500,
-    defaults: { level: 80 },
+    defaults: { level: -1.5 },
   },
   gb4x12: {
     // 4x12 Greenback(Marshall 1960):低频共振厚、2.8k 临场峰
@@ -46,7 +47,7 @@ const CAB_MODELS: Record<string, CabModelConfig> = {
     peakGainDb: 4,
     peakQ: 1.2,
     lpHz: 5000,
-    defaults: { level: 80 },
+    defaults: { level: -2 },
   },
   v304x12: {
     // 4x12 Vintage 30:攻击性上中频尖峰、现代高增益标配
@@ -57,7 +58,7 @@ const CAB_MODELS: Record<string, CabModelConfig> = {
     peakGainDb: 5,
     peakQ: 1.5,
     lpHz: 4800,
-    defaults: { level: 80 },
+    defaults: { level: -2 },
   },
 };
 
@@ -88,14 +89,14 @@ function createCab(ctx: AudioContext, cfg: CabModelConfig): EffectInstance {
   const chain: AudioNode[] = [input, hp, lowBump, peak, lp1, lp2, output];
   for (let i = 0; i < chain.length - 1; i++) chain[i].connect(chain[i + 1]);
 
-  output.gain.value = (cfg.defaults.level / 100) * 1.2;
+  output.gain.value = levelDbToGain(cfg.defaults.level);
 
   return {
     input,
     output,
     update(key, value) {
       if (key === 'level') {
-        output.gain.setTargetAtTime((value / 100) * 1.2, ctx.currentTime, SMOOTH);
+        output.gain.setTargetAtTime(levelDbToGain(value), ctx.currentTime, SMOOTH);
       }
     },
     dispose() {
@@ -111,7 +112,7 @@ function makeCabDef(id: string, name: string, color: string): EffectDefinition {
     name,
     color,
     params: [
-      { key: 'level', label: 'LEVEL', min: 0, max: 100, step: 1, defaultValue: cfg.defaults.level },
+      { key: 'level', label: 'LEVEL', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: cfg.defaults.level, unit: 'dB' },
     ],
     create: (ctx) => createCab(ctx, cfg),
   };

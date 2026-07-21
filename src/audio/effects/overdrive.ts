@@ -1,4 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './types';
+import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
 
 /** drive 参数(0~100)映射 preGain 增益范围 1~50 */
 const PRE_GAIN_MIN = 1;
@@ -8,19 +9,16 @@ const PRE_GAIN_MAX = 50;
 const CURVE_K_MIN = 1;
 const CURVE_K_MAX = 50;
 
-/** level 参数(0~100)映射输出增益 0~2 */
-const LEVEL_GAIN_MAX = 1.2;
-
 /** WaveShaper 曲线采样点数 */
 const CURVE_POINTS = 1024;
 
 /** 参数平滑时间常数(s),契约要求 0.01~0.05 */
 const SMOOTHING_TIME = 0.03;
 
-/** 参数默认值(与下方 params 声明保持一致) */
+/** 参数默认值(与下方 params 声明保持一致);LEVEL 由 calibrate-levels 离线校准 */
 const DEFAULT_DRIVE = 50;
 const DEFAULT_TONE = 3000;
-const DEFAULT_LEVEL = 70;
+const DEFAULT_LEVEL = -19;
 
 function mapLinear(
   value: number,
@@ -49,7 +47,7 @@ export const overdriveEffect: EffectDefinition = {
   params: [
     { key: 'drive', label: 'Drive', min: 0, max: 100, step: 1, defaultValue: DEFAULT_DRIVE, unit: '%' },
     { key: 'tone', label: 'Tone', min: 500, max: 8000, step: 50, defaultValue: DEFAULT_TONE, unit: 'Hz' },
-    { key: 'level', label: 'Level', min: 0, max: 100, step: 1, defaultValue: DEFAULT_LEVEL, unit: '%' },
+    { key: 'level', label: 'Level', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: DEFAULT_LEVEL, unit: 'dB' },
   ],
 
   create(ctx: AudioContext): EffectInstance {
@@ -67,7 +65,7 @@ export const overdriveEffect: EffectDefinition = {
     tone.type = 'lowpass';
     tone.frequency.value = DEFAULT_TONE;
     tone.Q.value = 0.707;
-    output.gain.value = mapLinear(DEFAULT_LEVEL, 0, 100, 0, LEVEL_GAIN_MAX);
+    output.gain.value = levelDbToGain(DEFAULT_LEVEL);
 
     input.connect(preGain);
     preGain.connect(shaper);
@@ -90,11 +88,7 @@ export const overdriveEffect: EffectDefinition = {
           tone.frequency.setTargetAtTime(value, now, SMOOTHING_TIME);
           break;
         case 'level':
-          output.gain.setTargetAtTime(
-            mapLinear(value, 0, 100, 0, LEVEL_GAIN_MAX),
-            now,
-            SMOOTHING_TIME,
-          );
+          output.gain.setTargetAtTime(levelDbToGain(value), now, SMOOTHING_TIME);
           break;
       }
     };

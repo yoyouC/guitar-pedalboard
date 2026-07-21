@@ -1,4 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './types';
+import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
 
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
@@ -31,7 +32,6 @@ const driveToGain = (v: number) => 1 + (v / 100) * 99; // 1 ~ 100
 /** Filter 值 0~100 → 截止频率,指数映射,值越大频率越低(反向) */
 const filterToFreq = (v: number) =>
   FILTER_MAX_HZ * Math.pow(FILTER_MIN_HZ / FILTER_MAX_HZ, v / 100);
-const levelToOutputGain = (v: number) => (v / 100) * 1.2;
 
 /**
  * Pro Co RAT 风格失真:高增益运放 → 硅二极管对地硬削波 →
@@ -44,7 +44,7 @@ export const ratEffect: EffectDefinition = {
   params: [
     { key: 'drive', label: 'DIST', min: 0, max: 100, step: 1, defaultValue: 55 },
     { key: 'filter', label: 'FILTER', min: 0, max: 100, step: 1, defaultValue: 35 },
-    { key: 'level', label: 'LEVEL', min: 0, max: 100, step: 1, defaultValue: 60 },
+    { key: 'level', label: 'LEVEL', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: -19.5, unit: 'dB' },
   ],
   create(ctx: AudioContext): EffectInstance {
     const input = ctx.createGain();
@@ -70,7 +70,7 @@ export const ratEffect: EffectDefinition = {
     filter.type = 'lowpass';
     filter.Q.value = 0.7;
     filter.frequency.value = filterToFreq(35);
-    output.gain.value = levelToOutputGain(60);
+    output.gain.value = levelDbToGain(-19.5);
 
     // input → 削波前高通(1.5k) → drive → 反馈边角软化 → 硬削波
     //      → LM308 摆率软化 → Filter(反向) → output
@@ -95,7 +95,7 @@ export const ratEffect: EffectDefinition = {
             filter.frequency.setTargetAtTime(filterToFreq(value), t, SMOOTH);
             break;
           case 'level':
-            output.gain.setTargetAtTime(levelToOutputGain(value), t, SMOOTH);
+            output.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
             break;
         }
       },

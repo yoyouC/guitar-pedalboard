@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import type { InputSourceType } from '../audio/AudioEngine';
+import { INPUT_TARGET_DB } from '../audio/level';
 import { LevelMeter } from './LevelMeter';
 
 interface TopBarProps {
@@ -103,7 +104,14 @@ export function TopBar(props: TopBarProps) {
               onChange={(e) => props.onInputGain(Number(e.target.value))}
             />
           </label>
-          <LevelMeter analyser={props.showMeters ? props.inputAnalyser : null} label="IN" />
+          <LevelMeter
+            analyser={props.showMeters ? props.inputAnalyser : null}
+            label="IN"
+            targetBandDb={INPUT_TARGET_DB}
+          />
+          <span className="gain-hint" title="输入校准:用力弹奏并调 GAIN,让峰值刻度进入绿色目标带">
+            峰值进绿区
+          </span>
         </div>
       </div>
 

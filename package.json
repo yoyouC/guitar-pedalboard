@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "wdf:test": "node scripts/wdf-test.ts"
+    "wdf:test": "node scripts/wdf-test.ts",
+    "calibrate": "node scripts/calibrate-levels.mjs"
   },
   "dependencies": {
     "react": "^19.2.7",

@@ -4,6 +4,13 @@ import type { InputSourceType } from './audio/AudioEngine';
 import { getEffectDef } from './audio/effects';
 import { getAmpDef } from './audio/amps';
 import { getCabDef } from './audio/cabs';
+import { BUNDLED_NAM_MODELS, loadNamModelFromFile, setNamModelSource } from './audio/nam';
+import {
+  BUNDLED_WAVENET_MODELS,
+  loadNamWasmModelFromFile,
+  setNamWasmModelSource,
+} from './audio/namWasm';
+import { AMP_CATEGORIES, getAmpModelEntry } from './audio/ampCategories';
 import type { ChainItem, Preset } from './state/store';
 import {
   createChainItem,
@@ -56,6 +63,19 @@ export default function App() {
     defaultCabValues('gb4x12'),
   );
 
+  // 箱头分类(4 类)与每类记住的型号(key = `${kind}:${ref}`,见 ampCategories.ts)
+  const [ampCategoryId, setAmpCategoryId] = useState('crunch');
+  const [ampModelKeys, setAmpModelKeys] = useState<Record<string, string>>({
+    clean: 'builtin:clean',
+    chime: 'builtin:chime',
+    crunch: 'builtin:crunch',
+    recto: 'builtin:recto',
+  });
+
+  // NAM 箱头:当前模型源 id(自定义文件时为 'custom')与模型版本(换模型 = 结构变化,重建音频图)
+  const [namCustomName, setNamCustomName] = useState<string | null>(null);
+  const [namVersion, setNamVersion] = useState(0);
+
   const [inputType, setInputType] = useState<InputSourceType | null>(null);
   const [engineReady, setEngineReady] = useState(false);
   const [inputGain, setInputGain] = useState(1);
@@ -93,8 +113,8 @@ export default function App() {
   const structureKey = useMemo(
     () =>
       chain.map((i) => `${i.uid}:${i.effectId}:${i.enabled}`).join('|') +
-      `|bypass:${globalBypass}|amp:${ampId}:${ampEnabled}|cab:${cabId}:${cabEnabled}`,
-    [chain, globalBypass, ampId, ampEnabled, cabId, cabEnabled],
+      `|bypass:${globalBypass}|amp:${ampId}:${ampEnabled}|cab:${cabId}:${cabEnabled}|namv:${namVersion}`,
+    [chain, globalBypass, ampId, ampEnabled, cabId, cabEnabled, namVersion],
   );
 
   useEffect(() => {
@@ -215,10 +235,48 @@ export default function App() {
 
   // ---------- 箱头 ----------
 
-  const handleAmpSelect = useCallback((id: string) => {
-    setAmpId(id);
-    setAmpValues(defaultAmpValues(id));
+  // 应用一个箱头型号(key = `${kind}:${ref}`,见 ampCategories.ts;ref 为 'custom' 时源已由文件加载设置)
+  const applyAmpModel = useCallback((key: string) => {
+    const sep = key.indexOf(':');
+    const kind = key.slice(0, sep);
+    const ref = key.slice(sep + 1);
+    if (kind === 'builtin') {
+      setAmpId(ref);
+      setAmpValues(defaultAmpValues(ref));
+      return;
+    }
+    if (kind === 'nam-lstm') {
+      const m = BUNDLED_NAM_MODELS.find((x) => x.id === ref);
+      if (m) setNamModelSource(m.url);
+      setAmpId('nam');
+      setAmpValues(defaultAmpValues('nam'));
+      setNamVersion((v) => v + 1);
+    } else {
+      const m = BUNDLED_WAVENET_MODELS.find((x) => x.id === ref);
+      if (m) setNamWasmModelSource(m.url);
+      setAmpId('nam-wasm');
+      setAmpValues(defaultAmpValues('nam-wasm'));
+      setNamVersion((v) => v + 1);
+    }
   }, []);
+
+  // 切分类 tab:恢复该类记住的型号
+  const handleCategorySelect = useCallback(
+    (categoryId: string) => {
+      setAmpCategoryId(categoryId);
+      applyAmpModel(ampModelKeys[categoryId] ?? AMP_CATEGORIES.find((c) => c.id === categoryId)!.models[0].key);
+    },
+    [ampModelKeys, applyAmpModel],
+  );
+
+  // 类内选型号:记住并应用
+  const handleModelSelect = useCallback(
+    (key: string) => {
+      setAmpModelKeys((cur) => ({ ...cur, [ampCategoryId]: key }));
+      applyAmpModel(key);
+    },
+    [ampCategoryId, applyAmpModel],
+  );
 
   const handleAmpToggle = useCallback(() => {
     setAmpEnabled((e) => !e);
@@ -228,6 +286,24 @@ export default function App() {
     setAmpValues((cur) => ({ ...cur, [key]: value }));
     audioEngine.updateAmpParam(key, value);
   }, []);
+
+  // NAM:加载本地 .nam 模型(JS 实现仅 LSTM,WASM 实现支持全架构),成功后置为当前类的型号
+  const handleNamModelFile = useCallback(
+    async (file: File) => {
+      try {
+        const isWasm = ampId === 'nam-wasm';
+        const loader = isWasm ? loadNamWasmModelFromFile : loadNamModelFromFile;
+        const model = await loader(file);
+        setNamCustomName(model.displayName);
+        const kind = isWasm ? 'nam-wasm' : 'nam-lstm';
+        setAmpModelKeys((cur) => ({ ...cur, [ampCategoryId]: `${kind}:custom` }));
+        setNamVersion((v) => v + 1);
+      } catch (e) {
+        alert(`加载 .nam 模型失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    },
+    [ampId, ampCategoryId],
+  );
 
   // ---------- 箱体 ----------
 
@@ -335,14 +411,18 @@ export default function App() {
       </main>
 
       <AmpPanel
-        ampId={ampId}
+        categoryId={ampCategoryId}
+        modelKey={ampModelKeys[ampCategoryId]}
         enabled={ampEnabled}
         values={ampValues}
         analyser={engineReady ? audioEngine.ampAnalyser : null}
         showMeters={showMeters}
-        onSelect={handleAmpSelect}
+        onCategorySelect={handleCategorySelect}
+        onModelSelect={handleModelSelect}
         onToggle={handleAmpToggle}
         onParam={handleAmpParam}
+        namCustomName={namCustomName}
+        onNamModelFile={handleNamModelFile}
       />
 
       <CabPanel
@@ -363,7 +443,8 @@ export default function App() {
 
       <footer className="app-footer">
         信号流向:输入 → {chain.map((i) => getEffectDef(i.effectId).name).join(' → ')}
-        {ampEnabled && ` → ${getAmpDef(ampId).name}`}
+        {ampEnabled &&
+          ` → ${getAmpModelEntry(ampModelKeys[ampCategoryId])?.name ?? getAmpDef(ampId).name}`}
         {cabEnabled && ` → ${getCabDef(cabId).name}`} → 输出
         {globalBypass && '(全局 Bypass 中)'}
         {!inputType && <span className="hint"> — 请在上方选择一个输入源开始</span>}

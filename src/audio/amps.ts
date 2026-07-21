@@ -1,4 +1,8 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
+import { createNamAmp, NAM_AMP_DEFAULTS } from './nam';
+import { createNamWasmAmp } from './namWasm';
+import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from './level';
+
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
 
@@ -58,7 +62,7 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 600,
     voicingGainDb: -2,
     powerClipK: 1.2,
-    defaults: { gain: 40, bass: 55, mid: 45, treble: 65, presence: 50, master: 55 },
+    defaults: { gain: 40, bass: 55, mid: 45, treble: 65, presence: 50, master: -14.5 },
   },
   crunch: {
     // Marshall Plexi/JCM800 类:中频突出、经典碎音(定制链路,见 createCrunchAmp)
@@ -68,7 +72,7 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 800,
     voicingGainDb: 3,
     powerClipK: 2,
-    defaults: { gain: 60, bass: 50, mid: 65, treble: 60, presence: 55, master: 55 },
+    defaults: { gain: 60, bass: 50, mid: 65, treble: 60, presence: 55, master: -20.5 },
     customCreate: createCrunchAmp,
   },
   recto: {
@@ -79,7 +83,7 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 500,
     voicingGainDb: -3,
     powerClipK: 2.5,
-    defaults: { gain: 70, bass: 60, mid: 40, treble: 60, presence: 60, master: 55 },
+    defaults: { gain: 70, bass: 60, mid: 40, treble: 60, presence: 60, master: -20 },
   },
   chime: {
     // Vox AC30 类:中高频“钟声”感、柔顺过载
@@ -89,7 +93,7 @@ const AMP_MODELS: Record<string, AmpModelConfig> = {
     voicingFreq: 1200,
     voicingGainDb: 2.5,
     powerClipK: 1.8,
-    defaults: { gain: 55, bass: 45, mid: 55, treble: 65, presence: 65, master: 55 },
+    defaults: { gain: 55, bass: 45, mid: 55, treble: 65, presence: 65, master: -19.5 },
   },
 };
 
@@ -142,7 +146,7 @@ function createAmp(ctx: AudioContext, cfg: AmpModelConfig): EffectInstance {
   mid.gain.value = pctToDb(d.mid, 12);
   treble.gain.value = pctToDb(d.treble, 12);
   presence.gain.value = (d.presence / 100) * 8;
-  masterGain.gain.value = d.master / 100;
+  masterGain.gain.value = levelDbToGain(d.master);
 
   input.connect(preHp);
   preHp.connect(preGain);
@@ -178,7 +182,7 @@ function createAmp(ctx: AudioContext, cfg: AmpModelConfig): EffectInstance {
           presence.gain.setTargetAtTime((value / 100) * 8, t, SMOOTH);
           break;
         case 'master':
-          masterGain.gain.setTargetAtTime(value / 100, t, SMOOTH);
+          masterGain.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
           break;
       }
     },
@@ -284,7 +288,7 @@ function createCrunchAmp(ctx: AudioContext): EffectInstance {
   mid.gain.value = pctToDb(d.mid, 12);
   treble.gain.value = pctToDb(d.treble, 12);
   presence.gain.value = (d.presence / 100) * 8;
-  masterGain.gain.value = d.master / 100;
+  masterGain.gain.value = levelDbToGain(d.master);
 
   const chain: AudioNode[] = [
     input, leanHp, preGain, stage1, millerLp1, brightShelf,
@@ -317,7 +321,7 @@ function createCrunchAmp(ctx: AudioContext): EffectInstance {
           presence.gain.setTargetAtTime((value / 100) * 8, t, SMOOTH);
           break;
         case 'master':
-          masterGain.gain.setTargetAtTime(value / 100, t, SMOOTH);
+          masterGain.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
           break;
       }
     },
@@ -333,7 +337,7 @@ const AMP_PARAMS = (d: AmpModelConfig['defaults']) => [
   { key: 'mid', label: 'MID', min: 0, max: 100, step: 1, defaultValue: d.mid },
   { key: 'treble', label: 'TREBLE', min: 0, max: 100, step: 1, defaultValue: d.treble },
   { key: 'presence', label: 'PRESENCE', min: 0, max: 100, step: 1, defaultValue: d.presence },
-  { key: 'master', label: 'MASTER', min: 0, max: 100, step: 1, defaultValue: d.master },
+  { key: 'master', label: 'MASTER', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: d.master, unit: 'dB' },
 ];
 
 function makeAmpDef(id: string, name: string, color: string): EffectDefinition {
@@ -355,6 +359,22 @@ export const AMP_REGISTRY: EffectDefinition[] = [
   makeAmpDef('chime', 'AC Chime', '#2e8b57'),
   wdfChampDef(),
   wdfBognerDef(),
+  // NAM LSTM 神经网络箱头(见 nam.ts):GAIN=输入激励,音色栈为模型后 EQ
+  {
+    id: 'nam',
+    name: 'NAM Capture',
+    color: '#4a3a6b',
+    params: AMP_PARAMS(NAM_AMP_DEFAULTS),
+    create: createNamAmp,
+  },
+  // NAM WASM 箱头(见 namWasm.ts):NAM Core 全架构(WaveNet/LSTM/…)
+  {
+    id: 'nam-wasm',
+    name: 'NAM WaveNet',
+    color: '#2e5a8b',
+    params: AMP_PARAMS(NAM_AMP_DEFAULTS),
+    create: createNamWasmAmp,
+  },
 ];
 
 /**
@@ -368,7 +388,7 @@ function wdfChampDef(): EffectDefinition {
     color: '#7d3c98',
     params: [
       { key: 'gain', label: 'GAIN', min: 0, max: 100, step: 1, defaultValue: 50 },
-      { key: 'master', label: 'MASTER', min: 0, max: 100, step: 1, defaultValue: 60 },
+      { key: 'master', label: 'MASTER', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: -6, unit: 'dB' },
     ],
     create(ctx: AudioContext): EffectInstance {
       const input = ctx.createGain();
@@ -382,11 +402,18 @@ function wdfChampDef(): EffectDefinition {
         console.warn('WDF Champ worklet 未就绪,直通:', e);
         input.connect(output);
       }
+      // 初始 master(dB 域 → 线性)
+      node?.parameters.get('master')?.setValueAtTime(levelDbToGain(-6), ctx.currentTime);
       return {
         input,
         output,
         update(key, value) {
-          node?.parameters.get(key)?.setTargetAtTime(value, ctx.currentTime, 0.03);
+          const t = ctx.currentTime;
+          if (key === 'master') {
+            node?.parameters.get('master')?.setTargetAtTime(levelDbToGain(value), t, 0.03);
+          } else {
+            node?.parameters.get(key)?.setTargetAtTime(value, t, 0.03);
+          }
         },
         dispose() {
           input.disconnect();
@@ -409,7 +436,7 @@ export function getAmpDef(id: string): EffectDefinition {
  * + EL34 后级。worklet 负责 WDF 前级/后级与 GAIN;音色栈/MASTER 用原生节点。
  */
 function wdfBognerDef(): EffectDefinition {
-  const DEFAULTS = { gain: 55, bass: 50, mid: 60, treble: 60, presence: 55, master: 60 };
+  const DEFAULTS = { gain: 55, bass: 50, mid: 60, treble: 60, presence: 55, master: -6 };
   return {
     id: 'wdfbogner',
     name: 'WDF Bogner ⚗',
@@ -420,7 +447,7 @@ function wdfBognerDef(): EffectDefinition {
       { key: 'mid', label: 'MID', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.mid },
       { key: 'treble', label: 'TREBLE', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.treble },
       { key: 'presence', label: 'PRESENCE', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.presence },
-      { key: 'master', label: 'MASTER', min: 0, max: 100, step: 1, defaultValue: DEFAULTS.master },
+      { key: 'master', label: 'MASTER', min: LEVEL_DB_MIN, max: LEVEL_DB_MAX, step: 0.5, defaultValue: DEFAULTS.master, unit: 'dB' },
     ],
     create(ctx: AudioContext): EffectInstance {
       const input = ctx.createGain();
@@ -454,7 +481,7 @@ function wdfBognerDef(): EffectDefinition {
       mid.gain.value = pctToDb(DEFAULTS.mid);
       treble.gain.value = pctToDb(DEFAULTS.treble);
       presence.gain.value = (DEFAULTS.presence / 100) * 8;
-      masterGain.gain.value = DEFAULTS.master / 100;
+      masterGain.gain.value = levelDbToGain(DEFAULTS.master);
 
       try {
         node = new AudioWorkletNode(ctx, 'wdf-bogner');
@@ -493,7 +520,7 @@ function wdfBognerDef(): EffectDefinition {
               presence.gain.setTargetAtTime((value / 100) * 8, t, 0.03);
               break;
             case 'master':
-              masterGain.gain.setTargetAtTime(value / 100, t, 0.03);
+              masterGain.gain.setTargetAtTime(levelDbToGain(value), t, 0.03);
               break;
           }
         },
