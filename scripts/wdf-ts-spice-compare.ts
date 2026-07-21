@@ -65,7 +65,7 @@ for (let n = 0; n < totalN; n++) {
   if (n >= BASE / 100) wdfOut.push(y);
 }
 
-// 对齐:spice 记录起点为 10ms,WDF 同步;再做微调互相关对齐(±4 样本)
+// 对齐:spice 记录起点为 10ms,WDF 同步;互相关对齐(±48 样本,覆盖重采样群延迟)
 function rmse(a: number[], b: number[], off: number): number {
   let s = 0;
   const n = Math.min(a.length, b.length - Math.abs(off));
@@ -76,7 +76,7 @@ function rmse(a: number[], b: number[], off: number): number {
   return Math.sqrt(s / n);
 }
 let best = { off: 0, err: Infinity };
-for (let off = -4; off <= 4; off++) {
+for (let off = -48; off <= 48; off++) {
   const e = rmse(spiceOut, wdfOut, off);
   if (e < best.err) best = { off, err: e };
 }

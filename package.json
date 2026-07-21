@@ -9,7 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "wdf:test": "node scripts/wdf-test.ts",
-    "calibrate": "node scripts/calibrate-levels.mjs"
+    "calibrate": "node scripts/calibrate-levels.mjs",
+    "wdf:ts-eval": "node scripts/wdf-ts-eval.ts",
+    "wdf:ts-spice": "node scripts/wdf-ts-spice-compare.ts"
   },
   "dependencies": {
     "react": "^19.2.7",

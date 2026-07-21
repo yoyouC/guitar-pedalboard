@@ -28,7 +28,7 @@ Rload out 0 1Meg
 
 .model D1N4148 D(IS=2.52e-9 N=1.752 RS=0.5)
 
-* 瞬态:10ms 建立舍去,记录后 8192 点 @ 48kHz(20.8333us)
-.tran 20.8333u 30m 10m 20.8333u
+* 瞬态:10ms 建立舍去,记录后 4096 点 @ 48kHz(20.8333us)
+.tran 20.8333u 95.33m 10m 20.8333u
 .print tran v(out) v(in)
 .end
