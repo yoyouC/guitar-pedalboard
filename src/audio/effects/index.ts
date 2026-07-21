@@ -3,6 +3,7 @@ import { noiseGateEffect } from './noiseGate';
 import { compressorEffect } from './compressor';
 import { overdriveEffect } from './overdrive';
 import { ts808Effect } from './ts808';
+import { ts808WdfEffect } from './ts808wdf';
 import { klonEffect } from './klon';
 import { distortionEffect } from './distortion';
 import { ratEffect } from './rat';
@@ -25,6 +26,7 @@ export const EFFECT_REGISTRY: EffectDefinition[] = [
   klonEffect,
   overdriveEffect,
   ts808Effect,
+  ts808WdfEffect,
   distortionEffect,
   ratEffect,
   fuzzEffect,

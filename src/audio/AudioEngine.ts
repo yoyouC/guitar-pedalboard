@@ -2,6 +2,7 @@ import type { EffectDefinition, EffectInstance } from './effects/types';
 import { loadNoiseGate } from './noiseGateWorklet';
 import { loadChampWdf } from './wdf/champWorklet';
 import { loadBognerWdf } from './wdf/bognerWorklet';
+import { loadTs808Wdf } from './wdf/ts808Worklet';
 import { loadNamWorklet } from './namWorklet';
 import { loadNamWasmWorklet } from './namWasmWorklet';
 
@@ -102,6 +103,11 @@ class AudioEngine {
       await loadBognerWdf(ctx);
     } catch (e) {
       console.warn('WDF Bogner worklet 加载失败,该箱头将不可用:', e);
+    }
+    try {
+      await loadTs808Wdf(ctx);
+    } catch (e) {
+      console.warn('TS808 WDF worklet 加载失败,该单块将不可用:', e);
     }
     try {
       await loadNamWorklet(ctx);

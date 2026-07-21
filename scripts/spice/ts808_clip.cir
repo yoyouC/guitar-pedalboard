@@ -1,0 +1,34 @@
+* TS808 削波级参考电路(L4 评测用)
+* 同相运放 + 反并联 1N4148 反馈 + 720Hz Z1 高通 + 723Hz 无源 LP
+* 运行: ngspice -b ts808_clip.cir
+
+* 输入:50mV / 1kHz 正弦(与 WDF 评测一致)
+Vin in 0 SIN(0 0.05 1000 0 0 90)
+
+* 理想运放子电路
+.subckt OPAMP inp inn out
+Rin inp inn 1e12
+E1 4 0 inp inn 1e5
+Ro 4 out 10
+.ends
+
+* 削波级(drive=0.5 → Rf = 51k + 250k)
+XU1 in inn clip OPAMP
+R4 inn c3n 4.7k
+C3 c3n 0 0.047u
+D1 clip inn D1N4148
+D2 inn clip D1N4148
+C4 clip inn 51p
+Rf clip inn 301k
+
+* 音色级无源低通(1k × 0.22uF = 723Hz)
+R7 clip out 1k
+C5 out 0 0.22u
+Rload out 0 1Meg
+
+.model D1N4148 D(IS=2.52e-9 N=1.752 RS=0.5)
+
+* 瞬态:10ms 建立舍去,记录后 8192 点 @ 48kHz(20.8333us)
+.tran 20.8333u 30m 10m 20.8333u
+.print tran v(out) v(in)
+.end
