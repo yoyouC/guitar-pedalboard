@@ -192,6 +192,16 @@ input → 高通(preHpHz,切低频保持紧实)
 - **voice 实例隔离(关键约束)**:wasm 模块/模型/I/O 缓冲必须挂在处理器实例上(`this.module` 等),绝不能用脚本级全局变量——同一 worklet 全局作用域里多个 'nam-wasm' 节点(单块+箱头)共享全局状态时会互相覆盖模型,链条退化为"同一模型串联两次"(曾导致 NAM 单块接 NAM 箱头声音异常的根因;CDP 步骤 10 双模型隔离用例防回归)。
 - **已知限制**:采样率不匹配仅告警;conditioned 模型的条件输入未接(NAM Core 支持,但 UI 未暴露);无 DC blocker(官方模块有,本项目输出侧已有箱体高通与限幅器)。
 
+### 4.6 箱头分类(`src/audio/ampCategories.ts`)
+
+4 个分类 tab:**Fender Clean / Vox / Marshall Crunch / High Gain**,分类 id 与皮肤 CSS 类同名(`amp-clean/chime/crunch/recto`)。类内型号下拉统一三类来源:
+
+- `builtin`:内置手工建模(clean/chime/crunch/recto);
+- `nam-lstm`:`BUNDLED_NAM_MODELS`(纯 JS LSTM);
+- `nam-wasm`:`BUNDLED_WAVENET_MODELS`(WASM 全架构,或"加载 .nam"的自定义文件,记为 `${kind}:custom`)。
+
+型号寻址 `${kind}:${ref}`;App 侧状态 `ampCategoryId` + `ampModelKeys`(每类记住选中型号),`applyAmpModel` 按 kind 分发:`setAmpId`(built-in)或设置模型源 + `setAmpId('nam'/'nam-wasm')` + bump `namVersion` 重建。AmpPanel 按分类渲染 tab 与型号 select,新增 capture 只需往对应分类的 `models` 数组加一行。
+
 ## 5. NAM 单块(`src/audio/effects/namPedal.ts`,NAMKnobs 条件化)
 
 NAMKnobs(upstream_v2)的**条件化单块**——旋钮是模型的条件输入,不再是模型外 EQ:

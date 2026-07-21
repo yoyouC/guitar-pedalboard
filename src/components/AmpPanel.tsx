@@ -1,69 +1,62 @@
-import { AMP_REGISTRY } from '../audio/amps';
-import type { EffectDefinition } from '../audio/effects/types';
+import { AMP_CATEGORIES } from '../audio/ampCategories';
+import { getAmpDef } from '../audio/amps';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 
-interface NamModelOption {
-  id: string;
-  name: string;
-}
-
 interface AmpPanelProps {
-  ampId: string;
+  categoryId: string;
+  modelKey: string;
   enabled: boolean;
   values: Record<string, number>;
   analyser: AnalyserNode | null;
   showMeters: boolean;
-  onSelect: (ampId: string) => void;
+  onCategorySelect: (categoryId: string) => void;
+  onModelSelect: (modelKey: string) => void;
   onToggle: () => void;
   onParam: (key: string, value: number) => void;
-  /** NAM 类箱头(nam / nam-wasm)专用:模型清单、当前模型源 id、自定义模型名、模型切换与本地文件加载回调 */
-  namModels?: NamModelOption[];
-  namSourceId?: string;
+  /** NAM 型号(nam-lstm / nam-wasm)的自定义模型名与本地 .nam 加载回调 */
   namCustomName?: string | null;
-  onNamModelSelect?: (id: string) => void;
   onNamModelFile?: (file: File) => void;
 }
 
-function getDef(ampId: string): EffectDefinition {
-  return AMP_REGISTRY.find((d) => d.id === ampId) ?? AMP_REGISTRY[0];
-}
-
-/** 箱头模拟面板:型号选择 + 拟物箱头(tolex 外壳 + 旋钮排 + 电源开关) */
-export function AmpPanel({ ampId, enabled, values, analyser, showMeters, onSelect, onToggle, onParam, namModels, namSourceId, namCustomName, onNamModelSelect, onNamModelFile }: AmpPanelProps) {
-  const def = getDef(ampId);
+/** 箱头模拟面板:4 个分类 tab(Fender Clean / Vox / Marshall Crunch / High Gain)+ 类内型号选择 */
+export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, showMeters, onCategorySelect, onModelSelect, onToggle, onParam, namCustomName, onNamModelFile }: AmpPanelProps) {
+  const category = AMP_CATEGORIES.find((c) => c.id === categoryId) ?? AMP_CATEGORIES[0];
+  const model = category.models.find((m) => m.key === modelKey) ?? category.models[0];
+  const def = getAmpDef(model.kind === 'nam-lstm' ? 'nam' : model.kind === 'nam-wasm' ? 'nam-wasm' : model.ref);
+  const isNam = model.kind !== 'builtin';
 
   return (
     <div className="amp-section">
       <div className="amp-selector">
         <span className="section-title">箱头模拟</span>
-        {AMP_REGISTRY.map((d) => (
+        {AMP_CATEGORIES.map((c) => (
           <button
-            key={d.id}
-            className={`amp-tab ${d.id === ampId ? 'active' : ''}`}
-            onClick={() => onSelect(d.id)}
+            key={c.id}
+            className={`amp-tab ${c.id === categoryId ? 'active' : ''}`}
+            onClick={() => onCategorySelect(c.id)}
           >
-            {d.name}
+            {c.name}
           </button>
         ))}
       </div>
 
-      {namModels && onNamModelFile && onNamModelSelect && (
-        <div className="nam-model-row">
-          <select
-            className="nam-model-select"
-            value={namSourceId}
-            onChange={(e) => onNamModelSelect(e.target.value)}
-          >
-            {namModels.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-            {namSourceId === 'custom' && (
-              <option value="custom">{namCustomName ?? '自定义模型'}(自定义)</option>
-            )}
-          </select>
+      <div className="nam-model-row">
+        <select
+          className="nam-model-select"
+          value={modelKey}
+          onChange={(e) => onModelSelect(e.target.value)}
+        >
+          {category.models.map((m) => (
+            <option key={m.key} value={m.key}>
+              {m.name}
+            </option>
+          ))}
+          {isNam && modelKey.endsWith(':custom') && (
+            <option value={modelKey}>{namCustomName ?? '自定义模型'}(自定义)</option>
+          )}
+        </select>
+        {isNam && onNamModelFile && (
           <label className="nam-load-btn">
             加载 .nam…
             <input
@@ -77,12 +70,12 @@ export function AmpPanel({ ampId, enabled, values, analyser, showMeters, onSelec
               }}
             />
           </label>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className={`amp-head amp-${ampId} ${enabled ? 'amp-on' : 'amp-off'}`}>
+      <div className={`amp-head amp-${category.id} ${enabled ? 'amp-on' : 'amp-off'}`}>
         <div className="amp-top">
-          <span className="amp-brand">{def.name}</span>
+          <span className="amp-brand">{model.name}</span>
           <span className="amp-top-right">
             {enabled && showMeters && <MiniMeter analyser={analyser} />}
             <span className={`amp-jewel ${enabled ? 'jewel-on' : ''}`} />

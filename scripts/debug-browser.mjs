@@ -343,6 +343,32 @@ console.log(await evaluate(`(() => {
 await sleep(3000);
 console.log('jcm900-g12:   pedal=', await pedalRms(), 'amp=', await ampRms());
 
+console.log('\n== 步骤 11: 箱头分类 UI(分类 tab + 类内型号)==');
+const setModel = (key) => `(() => {
+  const sel = document.querySelector('.nam-model-select');
+  if (!sel) return '型号下拉不存在';
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, '${key}');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → ${key}';
+})()`;
+// Fender Clean → fender-twinverb(NAM WASM)
+console.log(await evaluate(clickButton('Fender Clean')));
+await sleep(1200);
+console.log(await evaluate(setModel('nam-wasm:fender-twinverb')));
+await sleep(2500);
+console.log('twinverb amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+// Marshall Crunch → 内置建模(builtin)
+console.log(await evaluate(clickButton('Marshall Crunch')));
+await sleep(1200);
+console.log('builtin crunch amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+// High Gain → 5150
+console.log(await evaluate(clickButton('High Gain')));
+await sleep(1200);
+console.log(await evaluate(setModel('nam-wasm:5150-blockletter')));
+await sleep(2500);
+console.log('5150 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+
 console.log('\n== 页面 console 输出 ==');
 for (const l of consoleLogs) console.log(l);
 
