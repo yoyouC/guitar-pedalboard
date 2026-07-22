@@ -97,7 +97,7 @@ class TriodeStage {
     this.Rp = opts.Rp ?? 100e3;
     const Rk = opts.Rk ?? 1.5e3;
     const Ck = opts.Ck ?? 22e-6;
-    this.Co = opts.Co ?? 22e-9;
+    this.Co = opts.Co ?? 4.7e-9;
     this.Rload = opts.Rload ?? 1e6;
     this.koren = opts.koren ?? KOREN_12AX7;
     this.Rs = opts.Rs ?? 68e3;

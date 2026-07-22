@@ -72,7 +72,7 @@ export interface TriodeStageOptions {
   Rp?: number;     // 板极电阻,默认 100k
   Rk?: number;     // 阴极电阻,默认 1.5k
   Ck?: number;     // 阴极旁路电容 F,默认 22uF;0 = 无旁路
-  Co?: number;     // 输出耦合电容 F,默认 22nF
+  Co?: number;     // 输出耦合电容 F,默认 4.7nF(抬高耦合转角抑制 motorboating)
   Rload?: number;  // 输出负载,默认 1M
   koren?: KorenParams;
   /** 栅极驱动源内阻(栅漏/上级阻抗),默认 68k;配合栅流钳位 */
@@ -113,7 +113,7 @@ export class TriodeStage {
     this.Rp = opts.Rp ?? 100e3;
     const Rk = opts.Rk ?? 1.5e3;
     const Ck = opts.Ck ?? 22e-6;
-    this.Co = opts.Co ?? 22e-9;
+    this.Co = opts.Co ?? 4.7e-9;
     this.Rload = opts.Rload ?? 1e6;
     this.koren = opts.koren ?? KOREN_12AX7;
     this.Rs = opts.Rs ?? 68e3;

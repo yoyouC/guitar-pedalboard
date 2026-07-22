@@ -35,7 +35,7 @@ Rk1 k1 0 2.7k
 Ck1 k1 0 0.68u
 
 * 耦合 + 级间衰减 0.06(940k/60k)
-Co1 p1 g2a 22n
+Co1 p1 g2a 4.7n
 Ra1 g2a g2 940k
 Rb1 g2 0 60k
 
@@ -45,7 +45,7 @@ X2 p2 g2 k2 T12AX7
 Rk2 k2 0 10k
 
 * 耦合 + 级间衰减 0.10(900k/100k)
-Co2 p2 g3a 22n
+Co2 p2 g3a 4.7n
 Ra2 g3a g3 900k
 Rb2 g3 0 100k
 
@@ -56,7 +56,7 @@ Rk3 k3 0 820
 Ck3 k3 0 22u
 
 * 耦合 + 级间衰减 0.22(780k/220k)
-Co3 p3 g4a 22n
+Co3 p3 g4a 4.7n
 Ra3 g4a g4 780k
 Rb3 g4 0 220k
 
