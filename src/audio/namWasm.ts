@@ -2,6 +2,7 @@ import type { EffectInstance } from './effects/types';
 import { levelDbToGain } from './level';
 import { NAM_AMP_DEFAULTS } from './nam';
 import { createNamWasmVoice } from './namWasmVoice';
+import { reportAmpLoad, resetAmpLoad } from './loadProgress';
 
 /**
  * NAM WASM 箱头(WaveNet 等全架构):
@@ -234,6 +235,7 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
   if (voice && pack) {
     drive.gain.value = 1; // 扫档包:输入激励固定 unity,GAIN 旋钮用于切档
     // 预载全部档位(串行;每档 setDsp ~0.2-0.5s,一次性支付,之后切档零成本)
+    reportAmpLoad({ phase: 'loading', done: 0, total: stages.length, label: `${pack.name} 初始化` });
     (async () => {
       for (let i = 0; i < stages.length; i++) {
         if (disposed) return;
@@ -249,37 +251,43 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
             activeIdx = i;
             applyStageLevel(i);
           }
+          reportAmpLoad({ phase: 'loading', done: i + 1, total: stages.length, label: `预载 g${stages[i].gain}` });
           console.info(`[nam-wasm] 扫档预载 ${i + 1}/${stages.length} (g${stages[i].gain})`);
         } catch (e) {
           console.warn(`[nam-wasm] 扫档档位 g${stages[i].gain} 加载失败:`, e);
         }
       }
+      if (!disposed) reportAmpLoad({ phase: 'ready', done: stages.length, total: stages.length, label: '' });
     })();
   } else if (voice) {
-    voice.ready
-      .then(() => {
+    reportAmpLoad({ phase: 'loading', done: 0, total: 2, label: '加载模型' });
+    const source = currentSource;
+    loadModelText(source)
+      .then((json) => {
         if (disposed) return;
-        const source = currentSource;
-        loadModelText(source)
-          .then((json) => {
-            if (disposed) return;
-            voice.sendModel(json);
-            const meta = metadataCache.get(source) ?? parseMetadata(json);
-            if (meta.loudness !== null) {
-              const makeupDb = Math.min(36, Math.max(-12, -18 - meta.loudness));
-              normalizeGain.gain.setTargetAtTime(
-                Math.pow(10, makeupDb / 20),
-                ctx.currentTime,
-                SMOOTH,
-              );
-              console.info(
-                `[nam-wasm] 模型 "${meta.displayName}" 响度 ${meta.loudness.toFixed(1)}LUFS,归一化补偿 ${makeupDb.toFixed(1)}dB`,
-              );
-            }
+        reportAmpLoad({ phase: 'loading', done: 1, total: 2, label: '装载模型' });
+        voice.sendModel(json);
+        const meta = metadataCache.get(source) ?? parseMetadata(json);
+        if (meta.loudness !== null) {
+          const makeupDb = Math.min(36, Math.max(-12, -18 - meta.loudness));
+          normalizeGain.gain.setTargetAtTime(
+            Math.pow(10, makeupDb / 20),
+            ctx.currentTime,
+            SMOOTH,
+          );
+          console.info(
+            `[nam-wasm] 模型 "${meta.displayName}" 响度 ${meta.loudness.toFixed(1)}LUFS,归一化补偿 ${makeupDb.toFixed(1)}dB`,
+          );
+        }
+        // 槽位 0 真正装载完毕才置 ready
+        voice
+          .stageReady(0)
+          .then(() => {
+            if (!disposed) reportAmpLoad({ phase: 'ready', done: 2, total: 2, label: '' });
           })
-          .catch((e) => console.warn('[nam-wasm] 模型加载失败:', e));
+          .catch(() => {});
       })
-      .catch(() => {});
+      .catch((e) => console.warn('[nam-wasm] 模型加载失败:', e));
   }
 
   return {
@@ -322,6 +330,7 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
     dispose() {
       disposed = true;
       voice?.dispose();
+      resetAmpLoad();
       [input, drive, normalizeGain, bass, mid, treble, presence, masterGain, output].forEach((n) =>
         n?.disconnect(),
       );

@@ -1,6 +1,8 @@
+import { useSyncExternalStore } from 'react';
 import { AMP_CATEGORIES } from '../audio/ampCategories';
 import { getAmpDef } from '../audio/amps';
 import { NAM_SWEEP_PACKS } from '../audio/namWasm';
+import { getAmpLoadState, subscribeAmpLoad } from '../audio/loadProgress';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 
@@ -22,6 +24,7 @@ interface AmpPanelProps {
 
 /** 箱头模拟面板:4 个分类 tab(Fender Clean / Vox / Marshall Crunch / High Gain)+ 类内型号选择 */
 export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, showMeters, onCategorySelect, onModelSelect, onToggle, onParam, namCustomName, onNamModelFile }: AmpPanelProps) {
+  const loadState = useSyncExternalStore(subscribeAmpLoad, getAmpLoadState);
   const category = AMP_CATEGORIES.find((c) => c.id === categoryId) ?? AMP_CATEGORIES[0];
   const model = category.models.find((m) => m.key === modelKey) ?? category.models[0];
   const def = getAmpDef(
@@ -86,6 +89,23 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
           </label>
         )}
       </div>
+
+      {loadState.phase === 'loading' && (
+        <div
+          className="amp-loadbar"
+          role="progressbar"
+          aria-valuenow={loadState.done}
+          aria-valuemax={loadState.total}
+        >
+          <div
+            className="amp-loadbar-fill"
+            style={{ width: `${loadState.total ? (loadState.done / loadState.total) * 100 : 0 }%` }}
+          />
+          <span className="amp-loadbar-label">
+            {loadState.label || '加载中…'} {loadState.done}/{loadState.total}
+          </span>
+        </div>
+      )}
 
       <div className={`amp-head amp-${category.id} ${enabled ? 'amp-on' : 'amp-off'}`}>
         <div className="amp-top">

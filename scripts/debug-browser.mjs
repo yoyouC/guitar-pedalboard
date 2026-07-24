@@ -421,6 +421,32 @@ console.log(await evaluate(`(() => {
 await sleep(5000);
 console.log('bassman 默认档 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
 
+console.log('\n== 步骤 13: 加载进度条 ==');
+console.log(await evaluate(clickButton('Marshall Crunch')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:jcm800-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → jcm800-sweep';
+})()`));
+await sleep(1500);
+for (let i = 0; i < 8; i++) {
+  const t = await evaluate(`(() => {
+    const bar = document.querySelector('.amp-loadbar');
+    if (!bar) return '无';
+    const label = bar.querySelector('.amp-loadbar-label')?.textContent ?? '';
+    const width = bar.querySelector('.amp-loadbar-fill')?.style.width ?? '';
+    return '"' + label + '" ' + width;
+  })()`);
+  console.log(`  t+${((i + 1) * 0.4).toFixed(1)}s: ${t}`);
+  if (t === '无' && i > 2) break;
+  await sleep(400);
+}
+await sleep(3000);
+console.log('加载完成后:', await evaluate(`document.querySelector('.amp-loadbar') ? '仍存在(应消失!)' : '已消失 ✓'`));
+
 console.log('\n== 页面 console 输出 ==');
 for (const l of consoleLogs) console.log(l);
 
