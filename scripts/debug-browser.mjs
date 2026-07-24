@@ -447,6 +447,41 @@ for (let i = 0; i < 8; i++) {
 await sleep(3000);
 console.log('加载完成后:', await evaluate(`document.querySelector('.amp-loadbar') ? '仍存在(应消失!)' : '已消失 ✓'`));
 
+console.log('\n== 步骤 14: 换单块/切 bypass 不重载箱头(实例复用)==');
+console.log(await evaluate(clickButton('Marshall Crunch')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:jcm800-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → jcm800-sweep';
+})()`));
+await sleep(6000);
+const countPreloadLogs = () => consoleLogs.filter((l) => l.includes('扫档预载')).length;
+const preloadAfterLoad = countPreloadLogs();
+console.log('预载完成,预载日志数:', preloadAfterLoad);
+// 加一个 overdrive 单块(结构变化)
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.add-effect select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'overdrive');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'added overdrive';
+})()`));
+await sleep(1500);
+console.log('加单块后预载日志数:', countPreloadLogs(), '(应不变)');
+console.log('加单块后进度条存在?', await evaluate(`!!document.querySelector('.amp-loadbar')`), '(应 false)');
+console.log('加单块后箱头电平:', JSON.stringify((await evaluate(sampleLevels)).amp));
+// bypass 切两次
+console.log(await evaluate(clickButton('Bypass')));
+await sleep(600);
+console.log(await evaluate(clickButton('已 Bypass')));
+await sleep(1000);
+console.log('bypass 往返后预载日志数:', countPreloadLogs(), '(应不变)');
+console.log('bypass 往返后箱头电平:', JSON.stringify((await evaluate(sampleLevels)).amp));
+console.log('预载日志终值:', countPreloadLogs(), '/ 初始:', preloadAfterLoad);
+
 console.log('\n== 页面 console 输出 ==');
 for (const l of consoleLogs) console.log(l);
 

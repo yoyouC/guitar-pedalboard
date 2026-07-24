@@ -133,6 +133,8 @@ export default function App() {
       def: getAmpDef(ampId),
       enabled: ampEnabled,
       values: ampValues,
+      // def+key 相同则重建复用箱头实例(避免 NAM 模型随单块变动重复加载)
+      key: `${ampId}:${namVersion}`,
     });
     audioEngine.setCab({
       def: getCabDef(cabId),

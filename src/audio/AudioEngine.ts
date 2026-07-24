@@ -16,6 +16,11 @@ export interface AmpSpec {
   def: EffectDefinition;
   enabled: boolean;
   values: Record<string, number>;
+  /**
+   * 配置版本键:def 与 key 都相同且启用时,重建复用存活实例(不重新加载模型)。
+   * 模型/配置变化时必须换 key(如 `${ampId}:${namVersion}`)。
+   */
+  key?: string;
 }
 
 export type InputSourceType = 'mic' | 'file' | 'test';
@@ -49,10 +54,12 @@ class AudioEngine {
   private mediaStream: MediaStream | null = null;
   private testTimer: number | null = null;
 
-  private instances: { uid: string; inst: EffectInstance }[] = [];
+  private instances: { uid: string; def: EffectDefinition; inst: EffectInstance }[] = [];
   private moduleAnalysers = new Map<string, AnalyserNode>();
   private chain: ChainSpec[] = [];
   private ampInstance: EffectInstance | null = null;
+  private ampInstanceDef: EffectDefinition | null = null;
+  private ampInstanceKey: string | null = null;
   private ampSpec: AmpSpec | null = null;
   private cabInstance: EffectInstance | null = null;
   private cabSpec: AmpSpec | null = null;
@@ -286,12 +293,38 @@ class AudioEngine {
     const ctx = this.ctx;
     if (!ctx || !this.inputGain || !this.outputAnalyser) return;
 
-    this.instances.forEach((i) => i.inst.dispose());
-    this.instances = [];
+    // 1. 处置旧实例:uid+def 未变的复用(保住已加载的模型与 LFO/延迟状态),
+    //    其余销毁。复用者先断开旧下游(电平抽头/下一级),稍后按新顺序重接。
+    const kept = new Map<string, { def: EffectDefinition; inst: EffectInstance }>();
+    for (const { uid, def, inst } of this.instances) {
+      const spec = this.chain.find((s) => s.uid === uid && s.enabled && s.def === def);
+      if (spec) {
+        inst.output.disconnect();
+        kept.set(uid, { def, inst });
+      } else {
+        inst.dispose();
+      }
+    }
+    const nextInstances: { uid: string; def: EffectDefinition; inst: EffectInstance }[] = [];
     this.moduleAnalysers.clear();
+
+    // 箱头:def + key 相同且启用 → 复用(避免 NAM 模型重复加载)
+    const reuseAmp =
+      this.ampInstance !== null &&
+      this.ampSpec !== null &&
+      this.ampSpec.enabled &&
+      this.ampInstanceDef === this.ampSpec.def &&
+      this.ampInstanceKey === (this.ampSpec.key ?? null);
     if (this.ampInstance) {
-      this.ampInstance.dispose();
-      this.ampInstance = null;
+      if (reuseAmp) {
+        this.ampInstance.output.disconnect();
+        this.ampAnalyser?.disconnect();
+      } else {
+        this.ampInstance.dispose();
+        this.ampInstance = null;
+        this.ampInstanceDef = null;
+        this.ampInstanceKey = null;
+      }
     }
     if (this.cabInstance) {
       this.cabInstance.dispose();
@@ -308,7 +341,11 @@ class AudioEngine {
     if (!this.globalBypass) {
       for (const spec of this.chain) {
         if (!spec.enabled) continue;
-        const inst = spec.def.create(ctx);
+        let inst = kept.get(spec.uid)?.inst;
+        if (!inst) {
+          inst = spec.def.create(ctx);
+        }
+        // 新建与复用都回放参数(值可能已变)
         for (const [k, v] of Object.entries(spec.values)) inst.update(k, v);
         prev.connect(inst.input);
         prev = inst.output;
@@ -317,11 +354,16 @@ class AudioEngine {
         tap.fftSize = 1024;
         inst.output.connect(tap);
         this.moduleAnalysers.set(spec.uid, tap);
-        this.instances.push({ uid: spec.uid, inst });
+        nextInstances.push({ uid: spec.uid, def: spec.def, inst });
       }
       // 箱头位于效果链之后(踏板 → 箱头的真实路由)
       if (this.ampSpec && this.ampSpec.enabled) {
-        const amp = this.ampSpec.def.create(ctx);
+        let amp = this.ampInstance;
+        if (!amp) {
+          amp = this.ampSpec.def.create(ctx);
+          this.ampInstanceDef = this.ampSpec.def;
+          this.ampInstanceKey = this.ampSpec.key ?? null;
+        }
         for (const [k, v] of Object.entries(this.ampSpec.values)) amp.update(k, v);
         prev.connect(amp.input);
         prev = amp.output;
@@ -341,6 +383,12 @@ class AudioEngine {
         this.cabAnalyser.fftSize = 1024;
         cab.output.connect(this.cabAnalyser);
       }
+    }
+    if (this.globalBypass) {
+      // bypass 期间保留复用实例的归属(不接线、不重载,恢复时原样接回)
+      this.instances = [...kept.entries()].map(([uid, v]) => ({ uid, def: v.def, inst: v.inst }));
+    } else {
+      this.instances = nextInstances;
     }
     prev.connect(this.outputAnalyser);
   }
