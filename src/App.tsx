@@ -7,8 +7,10 @@ import { getCabDef } from './audio/cabs';
 import { BUNDLED_NAM_MODELS, loadNamModelFromFile, setNamModelSource } from './audio/nam';
 import {
   BUNDLED_WAVENET_MODELS,
+  NAM_SWEEP_PACKS,
   loadNamWasmModelFromFile,
   setNamWasmModelSource,
+  setNamWasmPack,
 } from './audio/namWasm';
 import { AMP_CATEGORIES, getAmpModelEntry } from './audio/ampCategories';
 import type { ChainItem, Preset } from './state/store';
@@ -131,6 +133,8 @@ export default function App() {
       def: getAmpDef(ampId),
       enabled: ampEnabled,
       values: ampValues,
+      // def+key 相同则重建复用箱头实例(避免 NAM 模型随单块变动重复加载)
+      key: `${ampId}:${namVersion}`,
     });
     audioEngine.setCab({
       def: getCabDef(cabId),
@@ -250,6 +254,12 @@ export default function App() {
       if (m) setNamModelSource(m.url);
       setAmpId('nam');
       setAmpValues(defaultAmpValues('nam'));
+      setNamVersion((v) => v + 1);
+    } else if (kind === 'nam-wasm-pack') {
+      const pack = NAM_SWEEP_PACKS[ref];
+      if (pack) setNamWasmPack(pack);
+      setAmpId('nam-wasm');
+      setAmpValues(defaultAmpValues('nam-wasm'));
       setNamVersion((v) => v + 1);
     } else {
       const m = BUNDLED_WAVENET_MODELS.find((x) => x.id === ref);

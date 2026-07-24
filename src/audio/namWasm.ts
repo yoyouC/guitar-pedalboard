@@ -2,6 +2,7 @@ import type { EffectInstance } from './effects/types';
 import { levelDbToGain } from './level';
 import { NAM_AMP_DEFAULTS } from './nam';
 import { createNamWasmVoice } from './namWasmVoice';
+import { reportAmpLoad, resetAmpLoad } from './loadProgress';
 
 /**
  * NAM WASM 箱头(WaveNet 等全架构):
@@ -51,9 +52,77 @@ const modelTextCache = new Map<string, Promise<string>>();
 const metadataCache = new Map<string, NamWasmMetadata>();
 let currentSource = BUNDLED_WAVENET_MODELS[0].url;
 
-/** 切换当前模型源(URL 或 loadNamWasmModelFromFile 生成的 file: 键) */
+/** 切换当前模型源(URL 或 loadNamWasmModelFromFile 生成的 file: 键);同时退出扫档包模式 */
 export function setNamWasmModelSource(source: string): void {
   currentSource = source;
+  currentPack = null;
+}
+
+// ---------- 增益扫档包(同一箱头多个 gain 档位的 capture 组,GAIN 旋钮切档) ----------
+
+export interface NamSweepStage {
+  /** 显示用档位标签(如 '5.5' / '10') */
+  gain: string;
+  url: string;
+}
+
+export interface NamSweepPack {
+  id: string;
+  name: string;
+  stages: NamSweepStage[];
+}
+
+const SWEEP_BASE = `${import.meta.env.BASE_URL}models/marshall-sweep`;
+const SWEEPS_BASE = `${import.meta.env.BASE_URL}models`;
+
+export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
+  'jcm800-sweep': {
+    id: 'jcm800-sweep',
+    name: 'JCM800 2203(增益扫档)',
+    stages: ['g1.0', 'g2.5', 'g4.0', 'g5.5', 'g7.0', 'g8.0', 'g9.0', 'ga10'].map((g) => ({
+      gain: g === 'ga10' ? '10' : g.slice(1),
+      url: `${SWEEP_BASE}/jcm800-high-${g}-11.4dBu.nam`,
+    })),
+  },
+  'bassman-sweep': {
+    id: 'bassman-sweep',
+    name: 'Fender Bassman 50(增益扫档)',
+    stages: ['1', '2', '3', '4', '5', '6', '7', '9'].map((g) => ({
+      gain: g,
+      url: `${SWEEPS_BASE}/bassman-sweep/g${g}.nam`,
+    })),
+  },
+  'dualterror-sweep': {
+    id: 'dualterror-sweep',
+    name: 'Orange Dual Terror(增益扫档)',
+    stages: ['1', '2', '3', '4', '5', '6', '7', '9'].map((g) => ({
+      gain: g,
+      url: `${SWEEPS_BASE}/dualterror-sweep/g${g}.nam`,
+    })),
+  },
+  'evh-green-sweep': {
+    id: 'evh-green-sweep',
+    name: 'EVH 5150 6L6 Green(增益扫档)',
+    stages: ['1', '2', '3', '4', '5', '6', '8', '10'].map((g) => ({
+      gain: g,
+      url: `${SWEEPS_BASE}/evh-green-sweep/g${g}.nam`,
+    })),
+  },
+  'recto-red-sweep': {
+    id: 'recto-red-sweep',
+    name: 'Mesa Dual Recto Red(增益扫档)',
+    stages: ['2', '2.5', '4', '5', '6', '7', '8', '10'].map((g) => ({
+      gain: g,
+      url: `${SWEEPS_BASE}/recto-red-sweep/g${g}.nam`,
+    })),
+  },
+};
+
+let currentPack: NamSweepPack | null = null;
+
+/** 进入扫档包模式(传 null 退出) */
+export function setNamWasmPack(pack: NamSweepPack | null): void {
+  currentPack = pack;
 }
 
 function loadModelText(source: string = currentSource): Promise<string> {
@@ -146,31 +215,79 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
   presence.connect(masterGain);
   masterGain.connect(output);
 
-  if (voice) {
-    voice.ready
-      .then(() => {
+  // ---------- 扫档包模式:GAIN 旋钮在预载档位间瞬时切换 ----------
+  const pack = currentPack;
+  const stages = pack?.stages ?? [];
+  const stageLoudness: (number | null)[] = stages.map(() => null);
+  const slotReady = new Set<number>();
+  let activeIdx = -1;
+  const initialIdx = pack
+    ? Math.min(stages.length - 1, Math.floor((NAM_AMP_DEFAULTS.gain / 100) * stages.length))
+    : -1;
+  const applyStageLevel = (idx: number) => {
+    const l = stageLoudness[idx];
+    if (l !== null && l !== undefined) {
+      const makeupDb = Math.min(36, Math.max(-12, -18 - l));
+      normalizeGain.gain.setTargetAtTime(Math.pow(10, makeupDb / 20), ctx.currentTime, SMOOTH);
+    }
+  };
+
+  if (voice && pack) {
+    drive.gain.value = 1; // 扫档包:输入激励固定 unity,GAIN 旋钮用于切档
+    // 预载全部档位(串行;每档 setDsp ~0.2-0.5s,一次性支付,之后切档零成本)
+    reportAmpLoad({ phase: 'loading', done: 0, total: stages.length, label: `${pack.name} 初始化` });
+    (async () => {
+      for (let i = 0; i < stages.length; i++) {
         if (disposed) return;
-        const source = currentSource;
-        loadModelText(source)
-          .then((json) => {
-            if (disposed) return;
-            voice.sendModel(json);
-            const meta = metadataCache.get(source) ?? parseMetadata(json);
-            if (meta.loudness !== null) {
-              const makeupDb = Math.min(36, Math.max(-12, -18 - meta.loudness));
-              normalizeGain.gain.setTargetAtTime(
-                Math.pow(10, makeupDb / 20),
-                ctx.currentTime,
-                SMOOTH,
-              );
-              console.info(
-                `[nam-wasm] 模型 "${meta.displayName}" 响度 ${meta.loudness.toFixed(1)}LUFS,归一化补偿 ${makeupDb.toFixed(1)}dB`,
-              );
-            }
+        try {
+          const json = await loadModelText(stages[i].url);
+          if (disposed) return;
+          stageLoudness[i] = parseMetadata(json).loudness;
+          const waiter = voice.stageReady(i);
+          voice.stageLoad(i, json, i === initialIdx);
+          await waiter;
+          slotReady.add(i);
+          if (i === initialIdx) {
+            activeIdx = i;
+            applyStageLevel(i);
+          }
+          reportAmpLoad({ phase: 'loading', done: i + 1, total: stages.length, label: `预载 g${stages[i].gain}` });
+          console.info(`[nam-wasm] 扫档预载 ${i + 1}/${stages.length} (g${stages[i].gain})`);
+        } catch (e) {
+          console.warn(`[nam-wasm] 扫档档位 g${stages[i].gain} 加载失败:`, e);
+        }
+      }
+      if (!disposed) reportAmpLoad({ phase: 'ready', done: stages.length, total: stages.length, label: '' });
+    })();
+  } else if (voice) {
+    reportAmpLoad({ phase: 'loading', done: 0, total: 2, label: '加载模型' });
+    const source = currentSource;
+    loadModelText(source)
+      .then((json) => {
+        if (disposed) return;
+        reportAmpLoad({ phase: 'loading', done: 1, total: 2, label: '装载模型' });
+        voice.sendModel(json);
+        const meta = metadataCache.get(source) ?? parseMetadata(json);
+        if (meta.loudness !== null) {
+          const makeupDb = Math.min(36, Math.max(-12, -18 - meta.loudness));
+          normalizeGain.gain.setTargetAtTime(
+            Math.pow(10, makeupDb / 20),
+            ctx.currentTime,
+            SMOOTH,
+          );
+          console.info(
+            `[nam-wasm] 模型 "${meta.displayName}" 响度 ${meta.loudness.toFixed(1)}LUFS,归一化补偿 ${makeupDb.toFixed(1)}dB`,
+          );
+        }
+        // 槽位 0 真正装载完毕才置 ready
+        voice
+          .stageReady(0)
+          .then(() => {
+            if (!disposed) reportAmpLoad({ phase: 'ready', done: 2, total: 2, label: '' });
           })
-          .catch((e) => console.warn('[nam-wasm] 模型加载失败:', e));
+          .catch(() => {});
       })
-      .catch(() => {});
+      .catch((e) => console.warn('[nam-wasm] 模型加载失败:', e));
   }
 
   return {
@@ -180,7 +297,18 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
       const t = ctx.currentTime;
       switch (key) {
         case 'gain':
-          drive.gain.setTargetAtTime(Math.pow(10, pctToDb(value, 12) / 20), t, SMOOTH);
+          if (pack) {
+            // 扫档包:GAIN = 档位选择(预载槽位瞬时切换,无加载延迟)
+            const idx = Math.min(stages.length - 1, Math.floor((value / 100) * stages.length));
+            if (idx !== activeIdx && slotReady.has(idx)) {
+              activeIdx = idx;
+              voice?.stageActive(idx);
+              applyStageLevel(idx);
+              console.info(`[nam-wasm] 增益档位 → g${stages[idx].gain}`);
+            }
+          } else {
+            drive.gain.setTargetAtTime(Math.pow(10, pctToDb(value, 12) / 20), t, SMOOTH);
+          }
           break;
         case 'bass':
           bass.gain.setTargetAtTime(pctToDb(value, 12), t, SMOOTH);
@@ -202,6 +330,7 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
     dispose() {
       disposed = true;
       voice?.dispose();
+      resetAmpLoad();
       [input, drive, normalizeGain, bass, mid, treble, presence, masterGain, output].forEach((n) =>
         n?.disconnect(),
       );

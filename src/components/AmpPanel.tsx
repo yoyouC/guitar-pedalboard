@@ -1,5 +1,8 @@
+import { useSyncExternalStore } from 'react';
 import { AMP_CATEGORIES } from '../audio/ampCategories';
 import { getAmpDef } from '../audio/amps';
+import { NAM_SWEEP_PACKS } from '../audio/namWasm';
+import { getAmpLoadState, subscribeAmpLoad } from '../audio/loadProgress';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 
@@ -21,10 +24,23 @@ interface AmpPanelProps {
 
 /** 箱头模拟面板:4 个分类 tab(Fender Clean / Vox / Marshall Crunch / High Gain)+ 类内型号选择 */
 export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, showMeters, onCategorySelect, onModelSelect, onToggle, onParam, namCustomName, onNamModelFile }: AmpPanelProps) {
+  const loadState = useSyncExternalStore(subscribeAmpLoad, getAmpLoadState);
   const category = AMP_CATEGORIES.find((c) => c.id === categoryId) ?? AMP_CATEGORIES[0];
   const model = category.models.find((m) => m.key === modelKey) ?? category.models[0];
-  const def = getAmpDef(model.kind === 'nam-lstm' ? 'nam' : model.kind === 'nam-wasm' ? 'nam-wasm' : model.ref);
+  const def = getAmpDef(
+    model.kind === 'builtin' ? model.ref : model.kind === 'nam-lstm' ? 'nam' : 'nam-wasm',
+  );
   const isNam = model.kind !== 'builtin';
+  // 扫档包:由 GAIN 旋钮值推导当前档位标签(g5.5 等)
+  const sweepPack = model.kind === 'nam-wasm-pack' ? NAM_SWEEP_PACKS[model.ref] : null;
+  const sweepStage = sweepPack
+    ? sweepPack.stages[
+        Math.min(
+          sweepPack.stages.length - 1,
+          Math.floor(((values.gain ?? 50) / 100) * sweepPack.stages.length),
+        )
+      ].gain
+    : null;
 
   return (
     <div className="amp-section">
@@ -56,7 +72,8 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
             <option value={modelKey}>{namCustomName ?? '自定义模型'}(自定义)</option>
           )}
         </select>
-        {isNam && onNamModelFile && (
+        {sweepStage !== null && <span className="nam-stage-label">档位 g{sweepStage}</span>}
+        {(model.kind === 'nam-lstm' || model.kind === 'nam-wasm') && onNamModelFile && (
           <label className="nam-load-btn">
             加载 .nam…
             <input
@@ -72,6 +89,23 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
           </label>
         )}
       </div>
+
+      {loadState.phase === 'loading' && (
+        <div
+          className="amp-loadbar"
+          role="progressbar"
+          aria-valuenow={loadState.done}
+          aria-valuemax={loadState.total}
+        >
+          <div
+            className="amp-loadbar-fill"
+            style={{ width: `${loadState.total ? (loadState.done / loadState.total) * 100 : 0 }%` }}
+          />
+          <span className="amp-loadbar-label">
+            {loadState.label || '加载中…'} {loadState.done}/{loadState.total}
+          </span>
+        </div>
+      )}
 
       <div className={`amp-head amp-${category.id} ${enabled ? 'amp-on' : 'amp-off'}`}>
         <div className="amp-top">

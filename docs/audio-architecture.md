@@ -34,7 +34,7 @@
 
 `stopSource()` 负责清理:停 `AudioBufferSourceNode`、关 `MediaStream` 轨道、清 riff 定时器。切换输入源前都会先调它,保证互斥。
 
-### 1.4 rebuildGraph:效果链的"编译器"
+### 1.4 rebuildGraph:效果链的"编译器"(实例复用)
 
 引擎不直接感知 React 状态,而是接收三份**快照**(`ChainSpec[]` / `AmpSpec` / `AmpSpec` 箱体),任何结构变化都通过全量替换快照 + `rebuildGraph()` 完成:
 
@@ -43,22 +43,24 @@ setChain(specs) / setAmp(spec) / setCab(spec) / setGlobalBypass(b)
         │
         ▼
 rebuildGraph():
-  1. 对旧实例逐个 dispose()(停 LFO、断开节点),清空模块电平表
+  1. 处置旧实例:uid+def 未变的单块【复用】(断开旧下游,待重接);其余 dispose()
+     箱头同理:def + AmpSpec.key 相同且启用【复用】,否则 dispose()
   2. inputGain.disconnect() 后重接 inputAnalyser
   3. prev = inputGain;按序遍历 chain 中 enabled 的单块:
-       inst = def.create(ctx) → 回放全部参数值 → prev.connect(inst.input) → prev = inst.output
+       复用或 def.create() 新建 → 一律回放全部参数值 → prev.connect(inst.input) → prev = inst.output
        并给每块输出挂一个 AnalyserNode 抽头(fftSize 1024,供单块迷你电平表)
-  4. 若箱头启用:同样 create + 回放参数,接在效果链之后
-  5. 若箱体启用:接在箱头之后(关闭即 DI 直通)
+  4. 若箱头启用:复用或新建(新建时记录 def 与 key),回放参数,接在效果链之后
+  5. 若箱体启用:接在箱头之后(关闭即 DI 直通;箱体便宜,一律重建)
   6. prev.connect(outputAnalyser)
-  7. globalBypass 时跳过 3~5,输入直连输出
+  7. globalBypass 时跳过 3~5,输入直连输出;复用实例保留归属,恢复后原样接回
 ```
 
 要点:
 
-- **每次重建都是全新实例**。这意味着 LFO 相位、延迟线缓冲等会被重置 —— 因此参数连续调整**绝不走这条路**,而是走 `updateParam(uid, key, value)` / `updateAmpParam(key, value)` / `updateCabParam(key, value)`,直接调用存活实例的 `update()`。
+- **实例复用(关键)**:单块按 `uid + def`、箱头按 `def + AmpSpec.key` 判定未变即复用——**增删/排序/开关其他单块、切 bypass 都不会重载 NAM 模型**(也不重置 LFO 相位/延迟线)。只有目标自身变化(换型号、toggle 自身、加载预设换新 uid)才重建。
+- **复用也回放参数**:`update(key, value)` 幂等,参数状态与 React 快照对齐;连续调整仍走 `updateParam(uid, key, value)` / `updateAmpParam` / `updateCabParam`,不触发重建。
 - 路由顺序遵循真实设备:**单块 → 箱头 → 箱体(→ 输出)**。
-- 每块单块的输出电平抽头通过 `getModuleAnalyser(uid)` 暴露给 UI。
+- 每块单块的输出电平抽头每次重建换新(旧抽头断开),通过 `getModuleAnalyser(uid)` 暴露给 UI。
 
 ### 1.5 其他输出控制
 
@@ -202,6 +204,15 @@ input → 高通(preHpHz,切低频保持紧实)
 
 型号寻址 `${kind}:${ref}`;App 侧状态 `ampCategoryId` + `ampModelKeys`(每类记住选中型号),`applyAmpModel` 按 kind 分发:`setAmpId`(built-in)或设置模型源 + `setAmpId('nam'/'nam-wasm')` + bump `namVersion` 重建。AmpPanel 按分类渲染 tab 与型号 select,新增 capture 只需往对应分类的 `models` 数组加一行。
 
+### 4.7 增益扫档包(`NAM_SWEEP_PACKS`,nam-wasm-pack)
+
+快照 capture 的 GAIN 是死的,社区的常见解法:**同一箱头按增益档位采集多个 .nam,旋钮在档位间切换**。实现(以 `jcm800-sweep` 为例,g1.0~g10 共 8 档):
+
+- **多槽位预载**:`namWasmProcessor.js` 维护槽位池(prepare → stage-load × N → stage-active),每槽独立 wasm 模块/模型/缓冲;`setDsp` 约 0.2~0.5s 的加载成本在选中型号时一次性串行预载(期间该槽直通),之后 **GAIN 旋钮切档是样本级瞬时切换**,无加载、无爆音;档位 loudness 各自归一化。
+- **GAIN 语义**:pack 模式下输入激励固定 unity,GAIN 只做档位选择(`floor(v/100 × N)` 映射槽位);非 pack 模型保持输入激励语义。面板显示当前档位标签(g5.5 等)。
+- **内存**:每槽一个 wasm 实例(INITIAL_MEMORY 16MB,可增长),8 槽 ≈ 128MB 预留(实际占用更低)。
+- **与条件化模型的关系**:扫档是"穷人的 parametric"——每档精确但离散;条件化模型(§5)连续但需要专门训练。两者互补,交叉淡化双模型会引入相位/电平伪影,故未采用。
+
 ## 5. NAM 单块(`src/audio/effects/namPedal.ts`,NAMKnobs 条件化)
 
 NAMKnobs(upstream_v2)的**条件化单块**——旋钮是模型的条件输入,不再是模型外 EQ:
@@ -252,7 +263,7 @@ input → 高通(hpHz) → 低频共振峰(lowBump) → 临场峰(peak,可调 Q)
 
 ## 9. 已知限制与注意事项
 
-- **重建即重置**:任何结构变化(增删单块、排序、toggle、换箱头/箱体、全局 bypass)都会销毁并重建全部实例 —— LFO 相位归零、delay/reverb 尾音中断。这是有意的简单设计,不是 bug。
+- **重建即重置(仅对变化的模块)**:换型号、toggle 某单块/箱头自身、加载预设(重新生成 uid)会销毁并重建对应实例 —— 该实例的 LFO 相位、延迟线缓冲、NAM 模型被重置;**未变化的实例复用不受影响**(见 §1.4)。
 - **预设只覆盖单块链**:`store.ts` 的 `Preset` 不含箱头/箱体/输入增益等全局设置。
 - **单声道化**:麦克风输入是单声道源;链内 `StereoPannerNode`/立体声 IR 可以制造立体声,但多数单块内部是单声道拓扑。
 - **电平抽头在 bypass 时消失**:单块 disabled 时不实例化,`getModuleAnalyser(uid)` 返回 `null`,迷你电平表同时隐藏(UI 已处理)。

@@ -369,6 +369,119 @@ console.log(await evaluate(setModel('nam-wasm:5150-blockletter')));
 await sleep(2500);
 console.log('5150 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
 
+console.log('\n== 步骤 12: 增益扫档包(JCM800 sweep:预载 + GAIN 切档)==');
+console.log(await evaluate(clickButton('Marshall Crunch')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:jcm800-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → jcm800-sweep(预载开始,约 3-4s)';
+})()`));
+await sleep(6000); // 8 档预载
+const ampNow = async () => (await evaluate(sampleLevels)).amp.rmsDb;
+console.log('预载后(默认档) amp:', await ampNow());
+// GAIN 拧到 0(g1.0)与 100(g10)分别测电平
+for (const g of [0, 30, 70, 100]) {
+  console.log(await evaluate(`(() => {
+    window.__audioEngine.updateAmpParam('gain', ${g});
+    return 'GAIN → ${g}';
+  })()`));
+  await sleep(600);
+  console.log('  amp:', await ampNow());
+}
+// 面板档位标签
+console.log(await evaluate(`document.querySelector('.nam-stage-label')?.textContent ?? '无档位标签'`));
+
+console.log('\n== 步骤 12b: 新扫档包(Recto Red + Bassman)==');
+console.log(await evaluate(clickButton('High Gain')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:recto-red-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → recto-red-sweep';
+})()`));
+await sleep(5000);
+console.log('recto-red 默认档 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+console.log(await evaluate(`(() => { window.__audioEngine.updateAmpParam('gain', 100); return 'GAIN → 100 (g10)'; })()`));
+await sleep(600);
+console.log('g10 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+console.log(await evaluate(clickButton('Fender Clean')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:bassman-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → bassman-sweep';
+})()`));
+await sleep(5000);
+console.log('bassman 默认档 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+
+console.log('\n== 步骤 13: 加载进度条 ==');
+console.log(await evaluate(clickButton('Marshall Crunch')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:jcm800-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → jcm800-sweep';
+})()`));
+await sleep(1500);
+for (let i = 0; i < 8; i++) {
+  const t = await evaluate(`(() => {
+    const bar = document.querySelector('.amp-loadbar');
+    if (!bar) return '无';
+    const label = bar.querySelector('.amp-loadbar-label')?.textContent ?? '';
+    const width = bar.querySelector('.amp-loadbar-fill')?.style.width ?? '';
+    return '"' + label + '" ' + width;
+  })()`);
+  console.log(`  t+${((i + 1) * 0.4).toFixed(1)}s: ${t}`);
+  if (t === '无' && i > 2) break;
+  await sleep(400);
+}
+await sleep(3000);
+console.log('加载完成后:', await evaluate(`document.querySelector('.amp-loadbar') ? '仍存在(应消失!)' : '已消失 ✓'`));
+
+console.log('\n== 步骤 14: 换单块/切 bypass 不重载箱头(实例复用)==');
+console.log(await evaluate(clickButton('Marshall Crunch')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:jcm800-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → jcm800-sweep';
+})()`));
+await sleep(6000);
+const countPreloadLogs = () => consoleLogs.filter((l) => l.includes('扫档预载')).length;
+const preloadAfterLoad = countPreloadLogs();
+console.log('预载完成,预载日志数:', preloadAfterLoad);
+// 加一个 overdrive 单块(结构变化)
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.add-effect select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'overdrive');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'added overdrive';
+})()`));
+await sleep(1500);
+console.log('加单块后预载日志数:', countPreloadLogs(), '(应不变)');
+console.log('加单块后进度条存在?', await evaluate(`!!document.querySelector('.amp-loadbar')`), '(应 false)');
+console.log('加单块后箱头电平:', JSON.stringify((await evaluate(sampleLevels)).amp));
+// bypass 切两次
+console.log(await evaluate(clickButton('Bypass')));
+await sleep(600);
+console.log(await evaluate(clickButton('已 Bypass')));
+await sleep(1000);
+console.log('bypass 往返后预载日志数:', countPreloadLogs(), '(应不变)');
+console.log('bypass 往返后箱头电平:', JSON.stringify((await evaluate(sampleLevels)).amp));
+console.log('预载日志终值:', countPreloadLogs(), '/ 初始:', preloadAfterLoad);
+
 console.log('\n== 页面 console 输出 ==');
 for (const l of consoleLogs) console.log(l);
 
