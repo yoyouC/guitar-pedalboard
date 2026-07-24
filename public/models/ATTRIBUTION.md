@@ -19,6 +19,7 @@
 | `vox-ac15.nam` | Phillipe P 的 Vox AC15(JonAr1)capture | 同上 | **GPL-3.0** |
 | `friedman-shirley-clean.nam` | Sascha S 的 Dirty Shirley Mini 清音 capture | 同上 | **GPL-3.0** |
 | `laney-gh100s.nam` | Phillipe P 的 Laney GH100S(Iommi 签名款)crunch capture | 同上 | **GPL-3.0** |
+| `marshall-sweep/*.nam`(g1.0~ga10,含 SlimmableContainer) | JCM800-2203 高增益通道增益扫档 capture 包(11.4dBu 标定,另有 3 个 SD1 boosted 变体未入库) | 用户自有文件(Desktop 的 `Marshall JCM800 2203 - updated.zip`,原始作者未考证) | 未标明,仅本地评估 |
 | `bug1990-lead.nam` | Phillipe P 的 Bugera 1990(JCM800 风格)Lead capture | 同上 | **GPL-3.0** |
 | `sovtek-mig50.nam` | Mikhail K 的 Sovtek MIG50 capture | 同上 | **GPL-3.0** |
 | `orange-rockerverb.nam` | Tom C 的 Orange Rockerverb(Axe FX 2)capture | 同上 | **GPL-3.0** |

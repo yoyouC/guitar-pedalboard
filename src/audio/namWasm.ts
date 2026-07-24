@@ -51,9 +51,44 @@ const modelTextCache = new Map<string, Promise<string>>();
 const metadataCache = new Map<string, NamWasmMetadata>();
 let currentSource = BUNDLED_WAVENET_MODELS[0].url;
 
-/** 切换当前模型源(URL 或 loadNamWasmModelFromFile 生成的 file: 键) */
+/** 切换当前模型源(URL 或 loadNamWasmModelFromFile 生成的 file: 键);同时退出扫档包模式 */
 export function setNamWasmModelSource(source: string): void {
   currentSource = source;
+  currentPack = null;
+}
+
+// ---------- 增益扫档包(同一箱头多个 gain 档位的 capture 组,GAIN 旋钮切档) ----------
+
+export interface NamSweepStage {
+  /** 显示用档位标签(如 '5.5' / '10') */
+  gain: string;
+  url: string;
+}
+
+export interface NamSweepPack {
+  id: string;
+  name: string;
+  stages: NamSweepStage[];
+}
+
+const SWEEP_BASE = `${import.meta.env.BASE_URL}models/marshall-sweep`;
+
+export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
+  'jcm800-sweep': {
+    id: 'jcm800-sweep',
+    name: 'JCM800 2203(增益扫档)',
+    stages: ['g1.0', 'g2.5', 'g4.0', 'g5.5', 'g7.0', 'g8.0', 'g9.0', 'ga10'].map((g) => ({
+      gain: g === 'ga10' ? '10' : g.slice(1),
+      url: `${SWEEP_BASE}/jcm800-high-${g}-11.4dBu.nam`,
+    })),
+  },
+};
+
+let currentPack: NamSweepPack | null = null;
+
+/** 进入扫档包模式(传 null 退出) */
+export function setNamWasmPack(pack: NamSweepPack | null): void {
+  currentPack = pack;
 }
 
 function loadModelText(source: string = currentSource): Promise<string> {
@@ -146,7 +181,48 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
   presence.connect(masterGain);
   masterGain.connect(output);
 
-  if (voice) {
+  // ---------- 扫档包模式:GAIN 旋钮在预载档位间瞬时切换 ----------
+  const pack = currentPack;
+  const stages = pack?.stages ?? [];
+  const stageLoudness: (number | null)[] = stages.map(() => null);
+  const slotReady = new Set<number>();
+  let activeIdx = -1;
+  const initialIdx = pack
+    ? Math.min(stages.length - 1, Math.floor((NAM_AMP_DEFAULTS.gain / 100) * stages.length))
+    : -1;
+  const applyStageLevel = (idx: number) => {
+    const l = stageLoudness[idx];
+    if (l !== null && l !== undefined) {
+      const makeupDb = Math.min(36, Math.max(-12, -18 - l));
+      normalizeGain.gain.setTargetAtTime(Math.pow(10, makeupDb / 20), ctx.currentTime, SMOOTH);
+    }
+  };
+
+  if (voice && pack) {
+    drive.gain.value = 1; // 扫档包:输入激励固定 unity,GAIN 旋钮用于切档
+    // 预载全部档位(串行;每档 setDsp ~0.2-0.5s,一次性支付,之后切档零成本)
+    (async () => {
+      for (let i = 0; i < stages.length; i++) {
+        if (disposed) return;
+        try {
+          const json = await loadModelText(stages[i].url);
+          if (disposed) return;
+          stageLoudness[i] = parseMetadata(json).loudness;
+          const waiter = voice.stageReady(i);
+          voice.stageLoad(i, json, i === initialIdx);
+          await waiter;
+          slotReady.add(i);
+          if (i === initialIdx) {
+            activeIdx = i;
+            applyStageLevel(i);
+          }
+          console.info(`[nam-wasm] 扫档预载 ${i + 1}/${stages.length} (g${stages[i].gain})`);
+        } catch (e) {
+          console.warn(`[nam-wasm] 扫档档位 g${stages[i].gain} 加载失败:`, e);
+        }
+      }
+    })();
+  } else if (voice) {
     voice.ready
       .then(() => {
         if (disposed) return;
@@ -180,7 +256,18 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
       const t = ctx.currentTime;
       switch (key) {
         case 'gain':
-          drive.gain.setTargetAtTime(Math.pow(10, pctToDb(value, 12) / 20), t, SMOOTH);
+          if (pack) {
+            // 扫档包:GAIN = 档位选择(预载槽位瞬时切换,无加载延迟)
+            const idx = Math.min(stages.length - 1, Math.floor((value / 100) * stages.length));
+            if (idx !== activeIdx && slotReady.has(idx)) {
+              activeIdx = idx;
+              voice?.stageActive(idx);
+              applyStageLevel(idx);
+              console.info(`[nam-wasm] 增益档位 → g${stages[idx].gain}`);
+            }
+          } else {
+            drive.gain.setTargetAtTime(Math.pow(10, pctToDb(value, 12) / 20), t, SMOOTH);
+          }
           break;
         case 'bass':
           bass.gain.setTargetAtTime(pctToDb(value, 12), t, SMOOTH);

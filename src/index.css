@@ -716,6 +716,16 @@ input[type='text'] {
   background: #2a251f;
 }
 
+/* 扫档包当前档位标签 */
+.nam-stage-label {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #2a251f;
+  border: 1px solid #3a332c;
+  color: #d8c9a8;
+  font-size: 12px;
+}
+
 .amp-head {
   border-radius: 10px;
   overflow: hidden;

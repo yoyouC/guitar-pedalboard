@@ -1,5 +1,6 @@
 import { AMP_CATEGORIES } from '../audio/ampCategories';
 import { getAmpDef } from '../audio/amps';
+import { NAM_SWEEP_PACKS } from '../audio/namWasm';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 
@@ -23,8 +24,20 @@ interface AmpPanelProps {
 export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, showMeters, onCategorySelect, onModelSelect, onToggle, onParam, namCustomName, onNamModelFile }: AmpPanelProps) {
   const category = AMP_CATEGORIES.find((c) => c.id === categoryId) ?? AMP_CATEGORIES[0];
   const model = category.models.find((m) => m.key === modelKey) ?? category.models[0];
-  const def = getAmpDef(model.kind === 'nam-lstm' ? 'nam' : model.kind === 'nam-wasm' ? 'nam-wasm' : model.ref);
+  const def = getAmpDef(
+    model.kind === 'builtin' ? model.ref : model.kind === 'nam-lstm' ? 'nam' : 'nam-wasm',
+  );
   const isNam = model.kind !== 'builtin';
+  // 扫档包:由 GAIN 旋钮值推导当前档位标签(g5.5 等)
+  const sweepPack = model.kind === 'nam-wasm-pack' ? NAM_SWEEP_PACKS[model.ref] : null;
+  const sweepStage = sweepPack
+    ? sweepPack.stages[
+        Math.min(
+          sweepPack.stages.length - 1,
+          Math.floor(((values.gain ?? 50) / 100) * sweepPack.stages.length),
+        )
+      ].gain
+    : null;
 
   return (
     <div className="amp-section">
@@ -56,7 +69,8 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
             <option value={modelKey}>{namCustomName ?? '自定义模型'}(自定义)</option>
           )}
         </select>
-        {isNam && onNamModelFile && (
+        {sweepStage !== null && <span className="nam-stage-label">档位 g{sweepStage}</span>}
+        {(model.kind === 'nam-lstm' || model.kind === 'nam-wasm') && onNamModelFile && (
           <label className="nam-load-btn">
             加载 .nam…
             <input

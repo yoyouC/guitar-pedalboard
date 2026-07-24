@@ -1,44 +1,53 @@
 /**
  * NAM WASM 的 AudioWorklet 处理器(纯 JS,经 Blob 内联加载,免构建配置)。
  *
- * 工作流程(init → model → process):
- *   1. 主线程发 {type:'init', wasmBytes}:用传入的 wasm 字节实例化本处理器
- *      专属的 wasm 模块(worklet 作用域不用 fetch,兼容性最好)。
- *   2. 主线程发 {type:'model', json}:.nam 文件原文经 _setDsp 交给 NAM Core 解析。
- *   3. process():每块 128 样本拷入 wasm 内存 → _processAudio → 拷出。
- * 无模型/未初始化时直通。绑定导出见 wasm/nam-dsp-binding.cpp。
+ * 多槽位协议(prepare → stage-load × N → stage-active):
+ *   1. {type:'prepare', wasmBytes}:暂存 wasm 字节(各槽位实例化共用)。
+ *   2. {type:'stage-load', idx, json, activate}:为槽位 idx 实例化专属 wasm
+ *      模块并加载模型(耗时 ~0.2-0.5s,preload 期一次性支付),完成后回
+ *      {type:'stage-ready', idx};activate=true 时立即切到该槽。
+ *   3. {type:'stage-active', idx}:瞬时切换活动槽(样本级,无加载,无爆音)。
+ *   4. {type:'conditioning', values}:作用于当前活动槽的条件化模型。
+ * 用途:gain 扫档包(同一箱头多个 gain 档位的 capture 预载后,GAIN 旋钮
+ * 做无级档位切换);单模型场景等价于只装载槽位 0。
  *
- * 注意:wasm 模块、模型、I/O 缓冲全部挂在处理器【实例】上(this.module 等)。
- * 每个 AudioWorkletNode 一条独立 voice——链条里多个 NAM 节点(单块+箱头)
- * 各自加载各自模型互不影响;绝不能用脚本级全局变量共享(否则后加载的
- * 模型覆盖先加载的,所有节点跑同一个模型)。
+ * 每个槽位的 wasm 模块/模型/I/O 缓冲相互独立(见 docs 的 voice 隔离约束)。
  */
 var NAM_BLOCK = 128;
 
 class NamWasmProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.module = null;
-    this.inPtr = 0;
-    this.outPtr = 0;
+    this.wasmBytes = null;
+    this.slots = [];
+    this.active = -1;
     this.errorReported = false;
     this.suspended = false;
     this.pendingCond = null;
     this.port.onmessage = (e) => {
       const msg = e.data;
-      if (msg.type === 'init') this.init(msg);
-      else if (msg.type === 'model') this.setModel(msg);
-      else if (msg.type === 'conditioning') this.setConditioning(msg);
-      else if (msg.type === 'suspend') this.suspended = true;
+      if (msg.type === 'prepare') {
+        this.wasmBytes = msg.wasmBytes;
+      } else if (msg.type === 'stage-load') {
+        this.stageLoad(msg);
+      } else if (msg.type === 'stage-active') {
+        if (this.slots[msg.idx] && this.slots[msg.idx].ready) this.active = msg.idx;
+      } else if (msg.type === 'conditioning') {
+        this.setConditioning(msg);
+      } else if (msg.type === 'suspend') {
+        this.suspended = true;
+      }
     };
   }
 
-  async init(msg) {
+  async stageLoad(msg) {
+    if (!this.wasmBytes) {
+      this.port.postMessage({ type: 'nam-wasm-error', message: 'stage-load: 未 prepare' });
+      return;
+    }
     try {
-      // NamWasmModule 工厂由拼接加载的 emscripten glue 提供(见 namWasmWorklet.ts);
-      // 每个处理器实例各持一个独立模块(独立堆内存/模型/条件状态)
-      const bytes = msg.wasmBytes;
-      this.module = await NamWasmModule({
+      const bytes = this.wasmBytes;
+      const module = await NamWasmModule({
         instantiateWasm: (imports, cb) => {
           WebAssembly.instantiate(bytes, imports).then((result) => {
             cb(result.instance || result);
@@ -46,52 +55,48 @@ class NamWasmProcessor extends AudioWorkletProcessor {
           return {};
         },
       });
-      this.inPtr = this.module._malloc(NAM_BLOCK * 4);
-      this.outPtr = this.module._malloc(NAM_BLOCK * 4);
-      this.module._setSampleRate(sampleRate); // worklet 全局采样率,用于 DC blocker
+      module._setSampleRate(sampleRate); // worklet 全局采样率,用于 DC blocker
+      const json = msg.json;
+      const len = module.lengthBytesUTF8(json) + 1;
+      const ptr = module._malloc(len);
+      module.stringToUTF8(json, ptr, len);
+      const rc = module._setDsp(ptr);
+      module._free(ptr);
+      if (rc !== 1) {
+        this.port.postMessage({ type: 'nam-wasm-error', message: `槽位 ${msg.idx}: setDsp 返回 ${rc}` });
+        return;
+      }
+      const slot = {
+        module,
+        inPtr: module._malloc(NAM_BLOCK * 4),
+        outPtr: module._malloc(NAM_BLOCK * 4),
+        ready: true,
+      };
+      this.slots[msg.idx] = slot;
+      if (msg.activate || this.active < 0) this.active = msg.idx;
       if (this.pendingCond) {
-        // 补发就绪前被排队的条件值
         this.setConditioning({ values: this.pendingCond });
         this.pendingCond = null;
       }
-      this.port.postMessage({ type: 'ready' });
+      this.port.postMessage({ type: 'stage-ready', idx: msg.idx });
     } catch (err) {
-      this.module = null;
-      this.port.postMessage({ type: 'nam-wasm-error', message: `init: ${String(err)}` });
-    }
-  }
-
-  setModel(msg) {
-    if (!this.module) {
-      this.port.postMessage({ type: 'nam-wasm-error', message: 'model: 模块未初始化' });
-      return;
-    }
-    try {
-      const json = msg.json;
-      const len = this.module.lengthBytesUTF8(json) + 1;
-      const ptr = this.module._malloc(len);
-      this.module.stringToUTF8(json, ptr, len);
-      const rc = this.module._setDsp(ptr);
-      this.module._free(ptr);
-      if (rc === 1) this.port.postMessage({ type: 'model-ready' });
-      else this.port.postMessage({ type: 'nam-wasm-error', message: `setDsp 返回 ${rc}(不支持的模型?)` });
-    } catch (err) {
-      this.port.postMessage({ type: 'nam-wasm-error', message: `model: ${String(err)}` });
+      this.port.postMessage({ type: 'nam-wasm-error', message: `槽位 ${msg.idx} 加载失败: ${String(err)}` });
     }
   }
 
   setConditioning(msg) {
-    if (!this.module) {
-      // 模块未初始化:排队,init 完成后补发(否则初始条件被静默丢弃)
+    const slot = this.active >= 0 ? this.slots[this.active] : null;
+    if (!slot || !slot.ready) {
+      // 无活动槽位:排队,首个槽位就绪后补发
       this.pendingCond = msg.values;
       return;
     }
     const v = msg.values;
     if (!v || !v.length) return;
-    const ptr = this.module._malloc(v.length * 4);
-    this.module.HEAPF32.set(v, ptr >> 2);
-    this.module._setConditioning(v.length, ptr);
-    this.module._free(ptr);
+    const ptr = slot.module._malloc(v.length * 4);
+    slot.module.HEAPF32.set(v, ptr >> 2);
+    slot.module._setConditioning(v.length, ptr);
+    slot.module._free(ptr);
   }
 
   process(inputs, outputs) {
@@ -120,11 +125,13 @@ class NamWasmProcessor extends AudioWorkletProcessor {
 
     const inp = input[0];
     const out = output[0];
-    if (this.module && inp.length === NAM_BLOCK) {
-      const heap = this.module.HEAPF32;
-      heap.set(inp, this.inPtr >> 2);
-      this.module._processAudio(this.inPtr, this.outPtr, NAM_BLOCK);
-      out.set(heap.subarray(this.outPtr >> 2, (this.outPtr >> 2) + NAM_BLOCK));
+    const slot = this.active >= 0 ? this.slots[this.active] : null;
+    if (slot && slot.ready && inp.length === NAM_BLOCK) {
+      const module = slot.module;
+      const heap = module.HEAPF32;
+      heap.set(inp, slot.inPtr >> 2);
+      module._processAudio(slot.inPtr, slot.outPtr, NAM_BLOCK);
+      out.set(heap.subarray(slot.outPtr >> 2, (slot.outPtr >> 2) + NAM_BLOCK));
     } else {
       out.set(inp);
     }

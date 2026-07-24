@@ -7,8 +7,10 @@ import { getCabDef } from './audio/cabs';
 import { BUNDLED_NAM_MODELS, loadNamModelFromFile, setNamModelSource } from './audio/nam';
 import {
   BUNDLED_WAVENET_MODELS,
+  NAM_SWEEP_PACKS,
   loadNamWasmModelFromFile,
   setNamWasmModelSource,
+  setNamWasmPack,
 } from './audio/namWasm';
 import { AMP_CATEGORIES, getAmpModelEntry } from './audio/ampCategories';
 import type { ChainItem, Preset } from './state/store';
@@ -250,6 +252,12 @@ export default function App() {
       if (m) setNamModelSource(m.url);
       setAmpId('nam');
       setAmpValues(defaultAmpValues('nam'));
+      setNamVersion((v) => v + 1);
+    } else if (kind === 'nam-wasm-pack') {
+      const pack = NAM_SWEEP_PACKS[ref];
+      if (pack) setNamWasmPack(pack);
+      setAmpId('nam-wasm');
+      setAmpValues(defaultAmpValues('nam-wasm'));
       setNamVersion((v) => v + 1);
     } else {
       const m = BUNDLED_WAVENET_MODELS.find((x) => x.id === ref);

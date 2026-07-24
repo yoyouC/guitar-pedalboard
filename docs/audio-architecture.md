@@ -202,6 +202,15 @@ input → 高通(preHpHz,切低频保持紧实)
 
 型号寻址 `${kind}:${ref}`;App 侧状态 `ampCategoryId` + `ampModelKeys`(每类记住选中型号),`applyAmpModel` 按 kind 分发:`setAmpId`(built-in)或设置模型源 + `setAmpId('nam'/'nam-wasm')` + bump `namVersion` 重建。AmpPanel 按分类渲染 tab 与型号 select,新增 capture 只需往对应分类的 `models` 数组加一行。
 
+### 4.7 增益扫档包(`NAM_SWEEP_PACKS`,nam-wasm-pack)
+
+快照 capture 的 GAIN 是死的,社区的常见解法:**同一箱头按增益档位采集多个 .nam,旋钮在档位间切换**。实现(以 `jcm800-sweep` 为例,g1.0~g10 共 8 档):
+
+- **多槽位预载**:`namWasmProcessor.js` 维护槽位池(prepare → stage-load × N → stage-active),每槽独立 wasm 模块/模型/缓冲;`setDsp` 约 0.2~0.5s 的加载成本在选中型号时一次性串行预载(期间该槽直通),之后 **GAIN 旋钮切档是样本级瞬时切换**,无加载、无爆音;档位 loudness 各自归一化。
+- **GAIN 语义**:pack 模式下输入激励固定 unity,GAIN 只做档位选择(`floor(v/100 × N)` 映射槽位);非 pack 模型保持输入激励语义。面板显示当前档位标签(g5.5 等)。
+- **内存**:每槽一个 wasm 实例(INITIAL_MEMORY 16MB,可增长),8 槽 ≈ 128MB 预留(实际占用更低)。
+- **与条件化模型的关系**:扫档是"穷人的 parametric"——每档精确但离散;条件化模型(§5)连续但需要专门训练。两者互补,交叉淡化双模型会引入相位/电平伪影,故未采用。
+
 ## 5. NAM 单块(`src/audio/effects/namPedal.ts`,NAMKnobs 条件化)
 
 NAMKnobs(upstream_v2)的**条件化单块**——旋钮是模型的条件输入,不再是模型外 EQ:

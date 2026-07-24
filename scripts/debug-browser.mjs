@@ -369,6 +369,31 @@ console.log(await evaluate(setModel('nam-wasm:5150-blockletter')));
 await sleep(2500);
 console.log('5150 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
 
+console.log('\n== 步骤 12: 增益扫档包(JCM800 sweep:预载 + GAIN 切档)==');
+console.log(await evaluate(clickButton('Marshall Crunch')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:jcm800-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → jcm800-sweep(预载开始,约 3-4s)';
+})()`));
+await sleep(6000); // 8 档预载
+const ampNow = async () => (await evaluate(sampleLevels)).amp.rmsDb;
+console.log('预载后(默认档) amp:', await ampNow());
+// GAIN 拧到 0(g1.0)与 100(g10)分别测电平
+for (const g of [0, 30, 70, 100]) {
+  console.log(await evaluate(`(() => {
+    window.__audioEngine.updateAmpParam('gain', ${g});
+    return 'GAIN → ${g}';
+  })()`));
+  await sleep(600);
+  console.log('  amp:', await ampNow());
+}
+// 面板档位标签
+console.log(await evaluate(`document.querySelector('.nam-stage-label')?.textContent ?? '无档位标签'`));
+
 console.log('\n== 页面 console 输出 ==');
 for (const l of consoleLogs) console.log(l);
 

@@ -21,7 +21,7 @@ em++ -O3 -std=c++17 -msimd128 -DNAM_SAMPLE_FLOAT -DNAM_USE_INLINE_GEMM \
   -sMODULARIZE=1 -sEXPORT_NAME=NamWasmModule \
   -sEXPORTED_FUNCTIONS=_setDsp,_setSampleRate,_setConditioning,_getNumInputChannels,_processAudio,_malloc,_free \
   -sEXPORTED_RUNTIME_METHODS=stringToUTF8,lengthBytesUTF8 \
-  -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=67108864 \
+  -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=16777216 \
   -sFILESYSTEM=0 -sENVIRONMENT=worker,node \
   -fexceptions \
   -o "${OUT_DIR}/nam-wasm-glue.js"
