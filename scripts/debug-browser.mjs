@@ -394,6 +394,33 @@ for (const g of [0, 30, 70, 100]) {
 // 面板档位标签
 console.log(await evaluate(`document.querySelector('.nam-stage-label')?.textContent ?? '无档位标签'`));
 
+console.log('\n== 步骤 12b: 新扫档包(Recto Red + Bassman)==');
+console.log(await evaluate(clickButton('High Gain')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:recto-red-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → recto-red-sweep';
+})()`));
+await sleep(5000);
+console.log('recto-red 默认档 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+console.log(await evaluate(`(() => { window.__audioEngine.updateAmpParam('gain', 100); return 'GAIN → 100 (g10)'; })()`));
+await sleep(600);
+console.log('g10 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+console.log(await evaluate(clickButton('Fender Clean')));
+await sleep(1200);
+console.log(await evaluate(`(() => {
+  const sel = document.querySelector('.nam-model-select');
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(sel, 'nam-wasm-pack:bassman-sweep');
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'model → bassman-sweep';
+})()`));
+await sleep(5000);
+console.log('bassman 默认档 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+
 console.log('\n== 页面 console 输出 ==');
 for (const l of consoleLogs) console.log(l);
 

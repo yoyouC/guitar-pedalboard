@@ -46,6 +46,7 @@ export const AMP_CATEGORIES: AmpCategory[] = [
     name: 'Fender Clean',
     models: [
       builtin('clean', 'Clean Twin(内置建模)'),
+      wasmPack('bassman-sweep', NAM_SWEEP_PACKS['bassman-sweep'].name),
       wasm('fender-twinverb', WASM_NAME.get('fender-twinverb')!),
       wasm('wavenet-deluxe', WASM_NAME.get('wavenet-deluxe')!),
       wasm('peavey-5152-clean', WASM_NAME.get('peavey-5152-clean')!),
@@ -71,6 +72,7 @@ export const AMP_CATEGORIES: AmpCategory[] = [
       wasm('jcm2000-clean', WASM_NAME.get('jcm2000-clean')!),
       wasm('jcm2000-crunch', WASM_NAME.get('jcm2000-crunch')!),
       wasmPack('jcm800-sweep', NAM_SWEEP_PACKS['jcm800-sweep'].name),
+      wasmPack('dualterror-sweep', NAM_SWEEP_PACKS['dualterror-sweep'].name),
       wasm('bug1990-lead', WASM_NAME.get('bug1990-lead')!),
       wasm('sovtek-mig50', WASM_NAME.get('sovtek-mig50')!),
       wasm('orange-rockerverb', WASM_NAME.get('orange-rockerverb')!),
@@ -85,6 +87,8 @@ export const AMP_CATEGORIES: AmpCategory[] = [
     name: 'High Gain',
     models: [
       builtin('recto', 'Modern Recto(内置建模)'),
+      wasmPack('evh-green-sweep', NAM_SWEEP_PACKS['evh-green-sweep'].name),
+      wasmPack('recto-red-sweep', NAM_SWEEP_PACKS['recto-red-sweep'].name),
       wasm('jcm900-g12', WASM_NAME.get('jcm900-g12')!),
       wasm('jcm900-g16', WASM_NAME.get('jcm900-g16')!),
       wasm('5150-blockletter', WASM_NAME.get('5150-blockletter')!),

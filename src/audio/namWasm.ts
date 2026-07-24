@@ -72,6 +72,7 @@ export interface NamSweepPack {
 }
 
 const SWEEP_BASE = `${import.meta.env.BASE_URL}models/marshall-sweep`;
+const SWEEPS_BASE = `${import.meta.env.BASE_URL}models`;
 
 export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
   'jcm800-sweep': {
@@ -80,6 +81,38 @@ export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
     stages: ['g1.0', 'g2.5', 'g4.0', 'g5.5', 'g7.0', 'g8.0', 'g9.0', 'ga10'].map((g) => ({
       gain: g === 'ga10' ? '10' : g.slice(1),
       url: `${SWEEP_BASE}/jcm800-high-${g}-11.4dBu.nam`,
+    })),
+  },
+  'bassman-sweep': {
+    id: 'bassman-sweep',
+    name: 'Fender Bassman 50(增益扫档)',
+    stages: ['1', '2', '3', '4', '5', '6', '7', '9'].map((g) => ({
+      gain: g,
+      url: `${SWEEPS_BASE}/bassman-sweep/g${g}.nam`,
+    })),
+  },
+  'dualterror-sweep': {
+    id: 'dualterror-sweep',
+    name: 'Orange Dual Terror(增益扫档)',
+    stages: ['1', '2', '3', '4', '5', '6', '7', '9'].map((g) => ({
+      gain: g,
+      url: `${SWEEPS_BASE}/dualterror-sweep/g${g}.nam`,
+    })),
+  },
+  'evh-green-sweep': {
+    id: 'evh-green-sweep',
+    name: 'EVH 5150 6L6 Green(增益扫档)',
+    stages: ['1', '2', '3', '4', '5', '6', '8', '10'].map((g) => ({
+      gain: g,
+      url: `${SWEEPS_BASE}/evh-green-sweep/g${g}.nam`,
+    })),
+  },
+  'recto-red-sweep': {
+    id: 'recto-red-sweep',
+    name: 'Mesa Dual Recto Red(增益扫档)',
+    stages: ['2', '2.5', '4', '5', '6', '7', '8', '10'].map((g) => ({
+      gain: g,
+      url: `${SWEEPS_BASE}/recto-red-sweep/g${g}.nam`,
     })),
   },
 };
