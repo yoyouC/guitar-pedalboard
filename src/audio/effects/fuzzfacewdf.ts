@@ -25,6 +25,8 @@ export const fuzzfaceWdfEffect: EffectDefinition = {
       console.warn('Fuzz Face WDF worklet 未就绪,直通:', e);
       input.connect(output);
     }
+    // 内部电平归一化:Fuzz Face 输出巨大(~36x),×0.3 防止把下游/总线限幅压死
+    output.gain.value = 0.3;
     node?.parameters.get('level')?.setValueAtTime(1, ctx.currentTime);
     return {
       input,

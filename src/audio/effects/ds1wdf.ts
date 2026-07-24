@@ -27,6 +27,9 @@ export const ds1WdfEffect: EffectDefinition = {
       console.warn('DS-1 WDF worklet 未就绪,直通:', e);
       input.connect(output);
     }
+    // 内部电平归一化:DS-1 的 TONE 中位凹陷使输出偏弱,×2.5 补偿到同级响度
+    // (只影响表现层响度,不改变 worklet 内已验证的非线性行为)
+    output.gain.value = 2.5;
     node?.parameters.get('level')?.setValueAtTime(1, ctx.currentTime);
     return {
       input,
