@@ -1,0 +1,43 @@
+* Klon Centaur 参考电路(L4 评测用)
+* 运放增益级(g=14.125,knob=0.5)+ 1N34A 锗管反并联对地削波
+* + 反相求和(湿声 27k,干声 0.5x 经 25k+27k)+ 反相还原
+* treble 平坦(0dB 高架 = 直通),level 0dB。运行: ngspice -b klon.cir
+
+* 输入:50mV / 1kHz 正弦(与 WDF 评测一致,初相 90°)
+Vin in 0 SIN(0 0.05 1000 0 0 90)
+
+* 理想运放子电路
+.subckt OPAMP inp inn out
+Rin inp inn 1e12
+E1 4 0 inp inn 1e5
+Ro 4 out 10
+.ends
+
+* 增益级(knob=0.5 → g = 1 + Rf/R1 = 14.1254)
+XU1 in inn1 vo OPAMP
+R1 inn1 0 1k
+Rf vo inn1 13.1254k
+
+* 削波网络:串联 5.6k → 反并联锗二极管对地
+Rser vo vd 5.6k
+D1 vd 0 D1N34A
+D2 0 vd D1N34A
+
+* 求和级(反相):湿声 vd 经 27k;干声 0.5·vin 经 25k(电位器源阻抗)+27k
+Rw vd inn2 27k
+Eclean cin 0 in 0 0.5
+Rsc cin cd 25k
+Rd cd inn2 27k
+XU2 0 inn2 sum0 OPAMP
+Rf2 sum0 inn2 27k
+
+* 反相还原 + 输出负载
+Eout out 0 sum0 0 -1
+Rload out 0 1Meg
+
+.model D1N34A D(IS=1e-6 N=1.3153 RS=0.5)
+
+* 瞬态:100ms 建立舍去(≥100ms 规范),记录 4096 点 @ 48kHz(20.8333us)
+.tran 20.8333u 185.33m 100m 20.8333u
+.print tran v(out) v(in)
+.end

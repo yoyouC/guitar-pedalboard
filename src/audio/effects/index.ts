@@ -4,6 +4,11 @@ import { compressorEffect } from './compressor';
 import { overdriveEffect } from './overdrive';
 import { ts808Effect } from './ts808';
 import { ts808WdfEffect } from './ts808wdf';
+import { ratWdfEffect } from './ratwdf';
+import { klonWdfEffect } from './klonwdf';
+import { ds1WdfEffect } from './ds1wdf';
+import { fuzzfaceWdfEffect } from './fuzzfacewdf';
+import { bigmuffWdfEffect } from './bigmuffwdf';
 import { klonEffect } from './klon';
 import { distortionEffect } from './distortion';
 import { ratEffect } from './rat';
@@ -27,6 +32,11 @@ export const EFFECT_REGISTRY: EffectDefinition[] = [
   overdriveEffect,
   ts808Effect,
   ts808WdfEffect,
+  klonWdfEffect,
+  ratWdfEffect,
+  ds1WdfEffect,
+  fuzzfaceWdfEffect,
+  bigmuffWdfEffect,
   distortionEffect,
   ratEffect,
   fuzzEffect,

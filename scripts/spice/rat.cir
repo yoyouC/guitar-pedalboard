@@ -1,0 +1,43 @@
+* Pro Co RAT 参考电路(L4 评测用)
+* ElectroSmash 拓扑:可变增益 LM308(1.5kHz 反馈高通 + 5.3kHz 摆率低通)
+* → R5(1k)+ 1N914 反并联对地硬削波 → FILTER 可变低通 → 输出
+* 与 src/audio/wdf/ratDistortion.ts 逐节点同构:drive=0.5(Rdist=50k),
+* filter=35(fc=7338Hz → R6+Rpot=6572Ω)。输入 50mV/1kHz 余弦。
+* 运行: ngspice -b rat.cir
+
+Vin in 0 SIN(0 0.05 1000 0 0 90)
+
+* 理想运放子电路(增益 1e6:RAT 闭环增益达 60dB,1e5 会引入 0.6% 系统误差)
+.subckt OPAMP inp inn out
+Rin inp inn 1e12
+E1 4 0 inp inn 1e6
+Ro 4 out 10
+.ends
+
+* 可变增益级:G(s) = 1 + Rdist·sC3/(1+s·R3·C3),fp=1/(2π·47·2.2µ)=1539Hz
+XU1 in inn oa OPAMP
+R3 inn c3n 47
+C3 c3n 0 2.2u
+Rdist oa inn 50k
+
+* LM308 摆率软化:5.3kHz 一阶低通(单位增益缓冲隔离,避免 Ro 参与极点)
+Ebuf oab 0 oa 0 1
+Rlp oab v2 1k
+Clp v2 0 30.018n
+
+* 二极管硬削波(RS=0:与 WDF 纯正 Shockley 方程逐项对应;mA 级电流下 RS=0.5 会有 ~2% 偏差)
+R5 v2 d 1k
+D1 d 0 D1N914
+D2 0 d D1N914
+
+* FILTER 级(filter=35 → fc=7338Hz),输出取 C6 电压;支路经 R5 对削波节点形成负载
+R6 d m6 1.5k
+Rfilt m6 out 5.072k
+C6 out 0 3.3n
+
+.model D1N914 D(IS=2.52e-9 N=1.752 RS=0)
+
+* 瞬态:100ms 建立舍去(§4.2),记录 100ms..300ms = 9600 点 @ 48kHz(200 整周期)
+.tran 20.8333u 300m 100m 20.8333u
+.print tran v(out) v(in)
+.end

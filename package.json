@@ -11,7 +11,17 @@
     "wdf:test": "node scripts/wdf-test.ts",
     "calibrate": "node scripts/calibrate-levels.mjs",
     "wdf:ts-eval": "node scripts/wdf-ts-eval.ts",
-    "wdf:ts-spice": "node scripts/wdf-ts-spice-compare.ts"
+    "wdf:ts-spice": "node scripts/wdf-ts-spice-compare.ts",
+    "wdf:rat-eval": "node scripts/wdf-rat-eval.ts",
+    "wdf:rat-spice": "node scripts/wdf-rat-spice-compare.ts",
+    "wdf:klon-eval": "node scripts/wdf-klon-eval.ts",
+    "wdf:klon-spice": "node scripts/wdf-klon-spice-compare.ts",
+    "wdf:ds1-eval": "node scripts/wdf-ds1-eval.ts",
+    "wdf:ds1-spice": "node scripts/wdf-ds1-spice-compare.ts",
+    "wdf:fuzzface-eval": "node scripts/wdf-fuzzface-eval.ts",
+    "wdf:fuzzface-spice": "node scripts/wdf-fuzzface-spice-compare.ts",
+    "wdf:bigmuff-eval": "node scripts/wdf-bigmuff-eval.ts",
+    "wdf:bigmuff-spice": "node scripts/wdf-bigmuff-spice-compare.ts"
   },
   "dependencies": {
     "react": "^19.2.7",

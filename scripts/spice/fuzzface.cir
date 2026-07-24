@@ -1,0 +1,43 @@
+* Fuzz Face 参考电路(L4 评测用)
+* 两级 NPN 锗管(AC128 类)共射;Rfb=100k 从 Q2 发射极反馈到 Q1 基极(电压反馈偏置);
+* FUZZ = Q2 发射极 1k 电位器(动片经 20uF 交流旁路到地,fuzz=0.5 → 500+500);
+* 输出取 Q2 集电极分压节点(8.2k/470 交点)经 0.01uF → 500k 负载(LEVEL 全开)。
+* 输入 Rs=10k 模拟吉他拾音源内阻(cleanup 行为相关)。
+* 运行: ngspice -b fuzzface.cir
+
+* --- 电源与输入(50mV / 1kHz,初相 90°,与 WDF 评测一致) ---
+Vcc vcc 0 9
+Vin nin 0 SIN(0 0.05 1000 0 0 90)
+Rs nin n1 10k
+Cin n1 b1 2.2u
+
+* --- Q1 级:发射极接地,集电极 33k,直耦 Q2 基极 ---
+Q1 c1 b1 0 QAC128
+Rc1 vcc c1 33k
+
+* --- Q2 级:基极 = Q1 集电极;分裂集电极负载 8.2k+470 ---
+Q2 c2 c1 e2 QAC128
+Rc2a vcc x 8.2k
+Rc2b x c2 470
+
+* --- FUZZ 电位器(1k):E2 → Rtop → 动片 w → Rbot → 地;20uF 从 w 旁路到地 ---
+Rtop e2 w 500
+Rbot w 0 500
+Ck w 0 20u
+
+* --- 电压反馈偏置:Q2 发射极 → 100k → Q1 基极 ---
+Rfb e2 b1 100k
+
+* --- 输出耦合 + LEVEL 负载 ---
+Cout x out 0.01u
+Rl out 0 500k
+
+* AC128 类锗 NPN:简化 Ebers-Moll。IS=1e-7 为锗管文献量级(AC128 实测 Vbe≈0.1~0.2V
+* @0.5mA;IS=1e-14 会给出硅管样 Vbe≈0.6V 并把 Vc2 偏置压到 1.4V,偏离经典 4.5V)。
+.model QAC128 NPN(IS=1e-7 BF=80 BR=1)
+.options TEMP=28.55
+
+* 瞬态:100ms 建立舍去,记录 8192 点 @ 48kHz(20.8333us)
+.tran 20.8333u 270.7m 100m 20.8333u
+.print tran v(out) v(nin) v(c1) v(c2)
+.end

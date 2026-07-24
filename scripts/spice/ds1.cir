@@ -1,0 +1,51 @@
+* Boss DS-1 参考电路(L4 评测:输入HP → BJT前级 → 运放可变增益 → 1N4148对地削波 → TONE交叉淡化)
+* 与 src/audio/wdf/ds1Clipper.ts / ds1Worklet.ts 同构(dist=0.5, tone=0.5)。
+* 元件值按 ElectroSmash DS-1 分析。首行为标题。
+* 运行: ngspice -b ds1.cir
+
+* 输入:50mV / 1kHz 正弦(与 WDF 评测一致)
+Vin in 0 SIN(0 0.05 1000 0 0 90)
+
+* 理想运放子电路
+.subckt OPAMP inp inn out
+Rin inp inn 1e12
+E1 4 0 inp inn 1e5
+Ro 4 out 10
+.ends
+
+* 输入耦合 HP(C1 22n × R1 470k = 15.4Hz)
+C1 in hp 0.022u
+R1 hp 0 470k
+
+* BJT 前级简化:固定增益 5 + Vsat=2V tanh 温和软削(平滑函数,不用 max() 硬折线)
+Bbst bst 0 V = 2.0*tanh(2.5*v(hp))
+
+* 运放可变增益级(dist=0.5 → Rf = 2.2k + 50k;Z1 = R12 4.7k + C8 0.47u → 72Hz HP;C7 100p 反馈 LP)
+XU1 bst inn opo OPAMP
+R12 inn c8n 4.7k
+C8 c8n 0 0.47u
+Rf opo inn 52.2k
+C7 opo inn 100p
+
+* 削波级:R17 2.2k + 反并联 1N4148 对地;Rload 4.7k = 音色网络等效中频负载
+R17 opo clip 2.2k
+D1 clip 0 D1N4148
+D2 0 clip D1N4148
+Rload clip 0 4.7k
+
+* TONE(单位增益缓冲隔离,与 WDF 的非加载交叉淡化一致):
+* LP 支路 R19 2.2k × C15 0.1u = 723Hz;HP 支路 C14 0.01u × R20 2.2k = 7.2kHz;t=0.5 等比混合
+Ebuf clipb 0 clip 0 1
+R19 clipb lp 2.2k
+C15 lp 0 0.1u
+C14 clipb hb 0.01u
+R20 hb 0 2.2k
+Bt out 0 V = 0.5*v(lp) + 0.5*v(hb)
+Rout out 0 1Meg
+
+.model D1N4148 D(IS=2.52e-9 N=1.752 RS=0.5)
+
+* 瞬态:100ms 建立舍去(≥5τ,§4.2),记录 100ms..1.1s = 48000 点 @ 48kHz(整 1000 周期)
+.tran 20.8333u 1.1 100m 20.8333u
+.print tran v(out) v(in)
+.end

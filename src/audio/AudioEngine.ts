@@ -3,6 +3,11 @@ import { loadNoiseGate } from './noiseGateWorklet';
 import { loadChampWdf } from './wdf/champWorklet';
 import { loadBognerWdf } from './wdf/bognerWorklet';
 import { loadTs808Wdf } from './wdf/ts808Worklet';
+import { loadRatWdf } from './wdf/ratWorklet';
+import { loadKlonWdf } from './wdf/klonWorklet';
+import { loadDs1Wdf } from './wdf/ds1Worklet';
+import { loadFuzzFaceWdf } from './wdf/fuzzfaceWorklet';
+import { loadBigMuffWdf } from './wdf/bigmuffWorklet';
 import { loadNamWorklet } from './namWorklet';
 import { loadNamWasmWorklet } from './namWasmWorklet';
 
@@ -115,6 +120,31 @@ class AudioEngine {
       await loadTs808Wdf(ctx);
     } catch (e) {
       console.warn('TS808 WDF worklet 加载失败,该单块将不可用:', e);
+    }
+    try {
+      await loadRatWdf(ctx);
+    } catch (e) {
+      console.warn('RAT WDF worklet 加载失败,该单块将不可用:', e);
+    }
+    try {
+      await loadKlonWdf(ctx);
+    } catch (e) {
+      console.warn('Klon WDF worklet 加载失败,该单块将不可用:', e);
+    }
+    try {
+      await loadDs1Wdf(ctx);
+    } catch (e) {
+      console.warn('DS-1 WDF worklet 加载失败,该单块将不可用:', e);
+    }
+    try {
+      await loadFuzzFaceWdf(ctx);
+    } catch (e) {
+      console.warn('Fuzz Face WDF worklet 加载失败,该单块将不可用:', e);
+    }
+    try {
+      await loadBigMuffWdf(ctx);
+    } catch (e) {
+      console.warn('Big Muff WDF worklet 加载失败,该单块将不可用:', e);
     }
     try {
       await loadNamWorklet(ctx);
