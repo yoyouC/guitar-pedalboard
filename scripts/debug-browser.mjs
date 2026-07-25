@@ -274,7 +274,7 @@ const sampleModuleAvg = async (label) => {
     const a = e.moduleAnalysers.get(uid);
     const b = new Float32Array(a.fftSize);
     let s = 0, n = 0;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 30; i++) {
       a.getFloatTimeDomainData(b);
       for (const v of b) { s += v * v; n++; }
       await new Promise(r => setTimeout(r, 100));

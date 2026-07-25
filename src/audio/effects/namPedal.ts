@@ -57,21 +57,17 @@ function createNamPedal(ctx: AudioContext, cfg: NamPedalConfig): EffectInstance 
   levelGain.connect(output);
 
   if (voice) {
-    voice.ready
-      .then(() => {
+    // 初始条件立即发送(处理器 pendingCond 排队,槽位就绪后自动补发)
+    voice.setConditioning(cond);
+    // 直接装载模型(voice.stageLoad 内部会先等 prepare;不得等待 voice.ready——
+    // 新协议里 ready 由首个 stage-ready 触发,等它会死锁:模型永远不发,工作于直通)
+    loadPedalModel(cfg.modelUrl)
+      .then((json) => {
         if (disposed) return;
-        // 初始条件必须在 wasm 就绪后发送(就绪前发送会被处理器丢弃,
-        // 导致模型一直以全 0 条件运行——knob 显示 0.5 实际 drive=0)
-        voice.setConditioning(cond);
-        loadPedalModel(cfg.modelUrl)
-          .then((json) => {
-            if (disposed) return;
-            voice.sendModel(json);
-            voice.setConditioning(cond); // 保险:模型加载后再送一次
-          })
-          .catch((e) => console.warn('[nam-pedal] 模型加载失败:', e));
+        voice.sendModel(json);
+        voice.setConditioning(cond); // 保险:模型加载后再送一次
       })
-      .catch(() => {});
+      .catch((e) => console.warn('[nam-pedal] 模型加载失败:', e));
   }
 
   return {

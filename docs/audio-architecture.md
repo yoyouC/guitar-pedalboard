@@ -220,7 +220,7 @@ NAMKnobs(upstream_v2)的**条件化单块**——旋钮是模型的条件输入,
 - **条件通道编码**:`in_channels = 1 + K`(ch0 音频,ch1..K 恒定旋钮值,0..1 覆盖训练范围,通道顺序与模型 `metadata.controls` 一致)。Comp 为 LSTM(5 通道),其余为 WaveNet(2~3 通道)。
 - **绑定多通道**:`wasm/nam-dsp-binding.cpp` 的 `setConditioning(n, values)` 维护各条件通道的常量缓冲,`processAudio` 检测到 `NumInputChannels() > 1` 时拼装多通道指针喂给 `model->process`;快照模型路径不变。
 - **单块接口**:每个模型是一个独立 `EffectDefinition`(params 按 controls 生成:旋钮 0..1 + LEVEL dB 外置增益——对齐 NAMKnobs v2 的"Level 为网络外确定增益"设计),注册进 `EFFECT_REGISTRY`,添加菜单/预设/电平表自动生效。`update(key, value)` 把旋钮值经 voice `setConditioning` 送入 worklet。
-- **voice 共享**:`namWasmVoice.ts` 统一管理 worklet 节点 + wasm 实例生命周期(init/ready/sendModel/suspend),NAM 箱头(namWasm.ts)与 NAM 单块(namPedal.ts)共用。
+- **voice 共享**:`namWasmVoice.ts` 统一管理 worklet 节点 + wasm 实例生命周期(prepare/stage-load/stage-active/suspend,所有装载消息内部先等 prepare 发出),NAM 箱头(namWasm.ts)与 NAM 单块(namPedal.ts)共用。注意:`voice.ready` 由首个 stage-ready 触发,**装载模型绝不能 await 它再发**(死锁,工作于直通)。
 - **模型**:`public/models/namknobs/`(comp/ts_full/rat/gr/ds1/ff/mxr,upstream_v2;许可未标明,仅本地评估,见 ATTRIBUTION.md)。
 - **验证**:`node scripts/verify-nam-pedal.cjs`(通道数 + 旋钮有效性 + 快照回归);CDP 步骤 8 实测浏览器内旋钮→条件通道→电平变化。
 
