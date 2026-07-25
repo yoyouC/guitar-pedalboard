@@ -1,8 +1,17 @@
 import type { EffectInstance } from './effects/types';
 import { levelDbToGain } from './level';
-import { NAM_AMP_DEFAULTS } from './nam';
 import { createNamWasmVoice } from './namWasmVoice';
 import { reportAmpLoad, resetAmpLoad } from './loadProgress';
+
+/** NAM 箱头的固定 6 旋钮默认值(GAIN 50 = 单位输入激励,MASTER dB 域见 level.ts) */
+export const NAM_AMP_DEFAULTS = {
+  gain: 50,
+  bass: 50,
+  mid: 50,
+  treble: 50,
+  presence: 50,
+  master: 0,
+};
 
 /**
  * NAM WASM 箱头(WaveNet 等全架构):
@@ -38,6 +47,12 @@ const TRACKED_WAVENET_MODELS: BundledNamWasmModel[] = [
   { id: 'bug1990-lead', name: 'Bug1990 Lead (JCM800系)', url: `${import.meta.env.BASE_URL}models/bug1990-lead.nam` },
   { id: '5150-blockletter', name: '5150 Block Letter', url: `${import.meta.env.BASE_URL}models/helga-5150-blockletter.nam` },
   { id: '6505-red', name: '6505+ Red Ch', url: `${import.meta.env.BASE_URL}models/helga-6505-red.nam` },
+  // LSTM 架构 capture(与纯 JS LSTM 引擎合并后统一由 WASM Core 运行)
+  { id: 'lstm-demo', name: 'Test LSTM · Darkglass (H=3)', url: `${import.meta.env.BASE_URL}models/lstm-demo.nam` },
+  { id: 'deluxe-3x24', name: 'Deluxe Reverb 3×24 (LSTM)', url: `${import.meta.env.BASE_URL}models/DeluxeReverb-3x24.nam` },
+  { id: 'ref-2x16', name: 'Reference LSTM 2×16', url: `${import.meta.env.BASE_URL}models/reference-lstm-2x16.nam` },
+  { id: 'boss-1x16', name: 'Boss LSTM 1×16', url: `${import.meta.env.BASE_URL}models/BossLSTM-1x16.nam` },
+  { id: 'boss-2x16', name: 'Boss LSTM 2×16', url: `${import.meta.env.BASE_URL}models/BossLSTM-2x16.nam` },
 ];
 
 export const BUNDLED_WAVENET_MODELS: BundledNamWasmModel[] = TRACKED_WAVENET_MODELS;

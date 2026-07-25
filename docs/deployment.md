@@ -7,17 +7,17 @@
 
 | 级别 | 内容 | git 跟踪 | 发布 |
 |---|---|---|---|
-| **可发布(MIT / GPL-3.0 / CC BY-NC-ND)** | `public/models/` 下全部(22 个 .nam:LSTM×5、JCM2000×2、JCM900×2、5150/6505、Bug1990、Sovtek、Rockerverb、TwinVerb、5152、AC15、Dirty Shirley、Laney、快照单块×3) | ✓ 直接提交(共 ~7MB,无需 LFS) | ✓ 随 `dist` 发布,需在 `public/models/ATTRIBUTION.md` 记录(发布检查强制) |
-| **仅本地评估(许可未标明)** | `models-local/`(增益扫档包 ×5、NAMKnobs 条件化单块 ×7、tone-3000 demo ×2) | ✗ `.gitignore`(README 除外) | ✗ 生产构建与 dist 均排除 |
+| **可发布(MIT / GPL-3.0 / CC BY-NC-ND / 作者邮件授权)** | `public/models/` 下全部(71 个 .nam,含扫档包、NAMKnobs、tone-3000 demo) | ✓ 直接提交(共 ~21MB,无需 LFS) | ✓ 随 `dist` 发布,需在 `public/models/ATTRIBUTION.md` 记录(发布检查强制) |
+| **仅本地评估(许可未标明)** | `models-local/`(预留目录,当前为空) | ✗ `.gitignore`(README 除外) | ✗ 生产构建与 dist 均排除 |
 
 `public/nam-wasm/`(emscripten 产物,676KB)随 git 跟踪——使 CI/部署不必安装
 emsdk;重编见 `wasm/build-nam-wasm.sh`。
 
 ## 2. 实现机制
 
-- **注册表门控**:`src/audio/namWasm.ts`(扫档包与 demo 模型)与
-  `src/audio/effects/namPedal.ts`(NAMKnobs)中的本地条目以 `import.meta.env.DEV`
-  门控,生产构建死代码消除,注册表与分类 UI 均不出现;
+- **注册表**:全部模型条目已获授权,`src/audio/namWasm.ts` 与
+  `src/audio/effects/namPedal.ts` 生产与本地一致(历史上的 DEV 门控已随授权
+  到位移除;`models-local/` 仅作未来"真·仅本地"文件的预留目录);
 - **dev 静态服务**:`vite.config.ts` 的 `serveLocalModels` 中间件把
   `/models-local/**` 映射到仓库根的 `models-local/`(仅 dev server;该路径不在
   publicDir,永远不会进 dist);

@@ -17,7 +17,7 @@ interface AmpPanelProps {
   onModelSelect: (modelKey: string) => void;
   onToggle: () => void;
   onParam: (key: string, value: number) => void;
-  /** NAM 型号(nam-lstm / nam-wasm)的自定义模型名与本地 .nam 加载回调 */
+  /** NAM 型号(nam-wasm)的自定义模型名与本地 .nam 加载回调 */
   namCustomName?: string | null;
   onNamModelFile?: (file: File) => void;
 }
@@ -28,7 +28,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
   const category = AMP_CATEGORIES.find((c) => c.id === categoryId) ?? AMP_CATEGORIES[0];
   const model = category.models.find((m) => m.key === modelKey) ?? category.models[0];
   const def = getAmpDef(
-    model.kind === 'builtin' ? model.ref : model.kind === 'nam-lstm' ? 'nam' : 'nam-wasm',
+    model.kind === 'builtin' ? model.ref : 'nam-wasm',
   );
   const isNam = model.kind !== 'builtin';
   // 扫档包:由 GAIN 旋钮值推导当前档位标签(g5.5 等)
@@ -73,7 +73,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
           )}
         </select>
         {sweepStage !== null && <span className="nam-stage-label">档位 g{sweepStage}</span>}
-        {(model.kind === 'nam-lstm' || model.kind === 'nam-wasm') && onNamModelFile && (
+        {model.kind === 'nam-wasm' && onNamModelFile && (
           <label className="nam-load-btn">
             加载 .nam…
             <input

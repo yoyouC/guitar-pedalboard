@@ -111,15 +111,11 @@ export function decodeShareState(encoded: string): ShareState | null {
       }
     }
 
-    // 箱头参数钳制(def 由型号 kind 解析:builtin→ref,nam-lstm→nam,其余→nam-wasm)
+    // 箱头参数钳制(def 由型号 kind 解析:builtin→ref,其余→nam-wasm)
     const resolvedKey = ampEntry ? ampModelKey : 'builtin:crunch';
     const resolvedEntry = ampEntry ?? getAmpModelEntry(resolvedKey)!;
     const ampDefId =
-      resolvedEntry.kind === 'builtin'
-        ? resolvedEntry.ref
-        : resolvedEntry.kind === 'nam-lstm'
-          ? 'nam'
-          : 'nam-wasm';
+      resolvedEntry.kind === 'builtin' ? resolvedEntry.ref : 'nam-wasm';
     const ampValues = clampValues(getAmpDef(ampDefId).params, payload.a?.v);
 
     return {

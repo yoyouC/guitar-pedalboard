@@ -1,6 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
-import { createNamAmp, NAM_AMP_DEFAULTS } from './nam';
-import { createNamWasmAmp } from './namWasm';
+import { createNamWasmAmp, NAM_AMP_DEFAULTS } from './namWasm';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from './level';
 
 const CURVE_LENGTH = 1024;
@@ -359,15 +358,7 @@ export const AMP_REGISTRY: EffectDefinition[] = [
   makeAmpDef('chime', 'AC Chime', '#2e8b57'),
   wdfChampDef(),
   wdfBognerDef(),
-  // NAM LSTM 神经网络箱头(见 nam.ts):GAIN=输入激励,音色栈为模型后 EQ
-  {
-    id: 'nam',
-    name: 'NAM Capture',
-    color: '#4a3a6b',
-    params: AMP_PARAMS(NAM_AMP_DEFAULTS),
-    create: createNamAmp,
-  },
-  // NAM WASM 箱头(见 namWasm.ts):NAM Core 全架构(WaveNet/LSTM/…)
+  // NAM 箱头(见 namWasm.ts):NAM Core WASM 全架构(WaveNet/LSTM/…)
   {
     id: 'nam-wasm',
     name: 'NAM WaveNet',

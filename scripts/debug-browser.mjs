@@ -133,13 +133,13 @@ console.log(await evaluate(clickButton('测试音源')));
 await sleep(2500);
 console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
 
-console.log('\n== 步骤 2: 点击 NAM Capture 箱头 ==');
-console.log(await evaluate(clickButton('NAM Capture')));
+console.log('\n== 步骤 2: 点击 NAM 箱头(分类:Marshall Crunch → jcm2000-clean)==');
+console.log(await evaluate(clickButton('Marshall Crunch')));
 await sleep(2500);
 console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
 
-console.log('\n== 步骤 3: 再切回 crunch 对比 ==');
-console.log(await evaluate(clickButton('British Crunch')));
+console.log('\n== 步骤 3: 再切回内置 crunch 对比 ==');
+console.log(await evaluate(clickButton('Marshall Crunch')));
 await sleep(1500);
 console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
 
@@ -147,15 +147,13 @@ console.log('\n== 步骤 4: 最小复现(独立小图,nam-lstm vs noise-gate 对
 const minimalRepro = `(async () => {
   const e = window.__audioEngine;
   const ctx = e.ctx;
-  const model = await (await fetch('/models/lstm-demo.nam')).json();
+  const modelJson = await (await fetch('/models/lstm-demo.nam')).text();
+  const wasmBytes = await (await fetch('/nam-wasm/nam-wasm-glue.wasm')).arrayBuffer();
   const rmsOf = (an) => {
     const b = new Float32Array(an.fftSize); an.getFloatTimeDomainData(b);
     let s = 0; for (const v of b) s += v * v;
     return +(20 * Math.log10(Math.sqrt(s / b.length) + 1e-12)).toFixed(1);
   };
-  const modelMsg = { type: 'model', inputSize: model.config.input_size,
-    hiddenSize: model.config.hidden_size, numLayers: model.config.num_layers,
-    weights: new Float32Array(model.weights) };
 
   // 简单对照:osc → g → node → an
   const mk = async (name, withModel) => {
@@ -165,7 +163,18 @@ const minimalRepro = `(async () => {
     const an = ctx.createAnalyser(); an.fftSize = 2048;
     const mute = ctx.createGain(); mute.gain.value = 0;
     osc.connect(g); g.connect(node); node.connect(an); an.connect(mute); mute.connect(ctx.destination);
-    if (withModel) node.port.postMessage({ ...modelMsg, weights: new Float32Array(model.weights) });
+    if (withModel) {
+      const ready = new Promise((res) => {
+        node.port.addEventListener('message', function h(e) {
+          if (e.data?.type === 'stage-ready') { node.port.removeEventListener('message', h); res(); }
+        });
+      });
+      node.port.start?.();
+      const copy = wasmBytes.slice(0);
+      node.port.postMessage({ type: 'prepare', wasmBytes: copy }, [copy]);
+      node.port.postMessage({ type: 'stage-load', idx: 0, json: modelJson, activate: true });
+      await ready;
+    }
     osc.start();
     await new Promise(r => setTimeout(r, 800));
     const rms = rmsOf(an);
@@ -173,86 +182,12 @@ const minimalRepro = `(async () => {
     return rms;
   };
 
-  // 精确复刻 createNamAmp 拓扑与接线顺序:内部先接线,上游 osc 最后接
-  const exact = async (upstreamLast) => {
-    const input = ctx.createGain();
-    const drive = ctx.createGain();
-    const node = new AudioWorkletNode(ctx, 'nam-lstm');
-    const norm = ctx.createGain();
-    const master = ctx.createGain(); master.gain.value = 0.55;
-    const output = ctx.createGain();
-    const an = ctx.createAnalyser(); an.fftSize = 2048;
-    const mute = ctx.createGain(); mute.gain.value = 0;
-    const osc = ctx.createOscillator(); osc.frequency.value = 440;
-    const og = ctx.createGain(); og.gain.value = 0.5;
-    if (!upstreamLast) { osc.connect(og); og.connect(input); }
-    input.connect(drive);
-    drive.connect(node);
-    node.connect(norm);
-    norm.connect(master);
-    master.connect(output);
-    output.connect(an);
-    an.connect(mute);
-    mute.connect(ctx.destination);
-    if (upstreamLast) { osc.connect(og); og.connect(input); } // 引擎顺序:prev 最后接
-    node.port.postMessage({ ...modelMsg, weights: new Float32Array(model.weights) });
-    osc.start();
-    await new Promise(r => setTimeout(r, 800));
-    const rms = rmsOf(an);
-    osc.stop(); [osc, og, input, drive, node, norm, master, output, an, mute].forEach(n => n.disconnect());
-    return rms;
-  };
-
   const ng = await mk('noise-gate', false);
-  const namNoModel = await mk('nam-lstm', false);
-  const nam = await mk('nam-lstm', true);
-  const exactFirst = await exact(false);
-  const exactLast = await exact(true);
-  return JSON.stringify({ noiseGateRmsDb: ng, namPassthroughRmsDb: namNoModel, namModelRmsDb: nam,
-    exactTopoUpstreamFirstRmsDb: exactFirst, exactTopoUpstreamLastRmsDb: exactLast });
+  const namNoModel = await mk('nam-wasm', false);
+  const nam = await mk('nam-wasm', true);
+  return JSON.stringify({ noiseGateRmsDb: ng, namPassthroughRmsDb: namNoModel, namModelRmsDb: nam });
 })()`;
 console.log(await evaluate(minimalRepro, true));
-
-console.log('\n== 步骤 5: 切回 NAM 并切换内置模型(Boss LSTM 1×16)==');
-console.log(await evaluate(clickButton('NAM Capture')));
-await sleep(1500);
-const switchModel = `(() => {
-  const sel = document.querySelector('.nam-model-select');
-  if (!sel) return '模型下拉框不存在';
-  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
-  setter.call(sel, 'boss-1x16');
-  sel.dispatchEvent(new Event('change', { bubbles: true }));
-  return 'switched';
-})()`;
-console.log(await evaluate(switchModel));
-await sleep(2000);
-console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
-
-console.log('\n== 步骤 6: NAM WaveNet(WASM)箱头 ==');
-console.log(await evaluate(clickButton('NAM WaveNet')));
-await sleep(5000); // wasm 初始化 + 模型加载
-console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
-
-console.log('\n== 步骤 7: 重建风暴(12 轮 NAM WaveNet ↔ Crunch)+ Chrome CPU 采样 ==');
-// 基线:风暴前采一次
-const { execSync } = await import('node:child_process');
-const chromeCpu = () => {
-  try {
-    const out = execSync(`ps -A -o %cpu,command | grep '${profile}' | grep -v grep`, { encoding: 'utf8' });
-    return out.trim().split('\n').reduce((s, l) => s + parseFloat(l.trim().split(/\s+/)[0] || 0), 0).toFixed(1);
-  } catch { return 'n/a'; }
-};
-console.log('风暴前 Chrome 总 CPU%:', chromeCpu());
-for (let i = 0; i < 12; i++) {
-  await evaluate(clickButton('British Crunch'));
-  await sleep(200);
-  await evaluate(clickButton('NAM WaveNet'));
-  await sleep(200);
-}
-await sleep(2000);
-console.log('风暴后(12 轮重建)Chrome 总 CPU%:', chromeCpu());
-console.log('风暴后电平(验证仍在正常工作):');
-console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
 
 console.log('\n== 步骤 8: NAM 单块(NAMKnobs TS808)——添加 + 旋钮条件化 ==');
 const addNamTs = `(() => {
@@ -303,8 +238,8 @@ await sleep(800);
 console.log(await sampleModuleAvg('drive=0.5(复归)'));
 console.log('链条输出:', JSON.stringify((await evaluate(sampleLevels)).output));
 
-console.log('\n== 步骤 9: NAM WaveNet 切换到 5150 模型 ==');
-console.log(await evaluate(clickButton('NAM WaveNet')));
+console.log('\n== 步骤 9: 切换内置模型(High Gain → 5150)==');
+console.log(await evaluate(clickButton('High Gain')));
 await sleep(1500);
 const switchJcm = `(() => {
   const sel = document.querySelector('.nam-model-select');
@@ -320,7 +255,7 @@ console.log(JSON.stringify((await evaluate(sampleLevels)).amp));
 
 console.log('\n== 步骤 10: 双模型隔离(NAM TS 单块 + NAM 箱头各自加载各自模型)==');
 // 箱头选 jcm2000-clean,测单块与箱头电平;再切 jcm900-g12,箱头变、单块应不变
-console.log(await evaluate(clickButton('NAM WaveNet')));
+console.log(await evaluate(clickButton('Marshall Crunch')));
 await sleep(1500);
 console.log(await evaluate(`(() => {
   const sel = document.querySelector('.nam-model-select');

@@ -8,7 +8,6 @@ import { loadKlonWdf } from './wdf/klonWorklet';
 import { loadDs1Wdf } from './wdf/ds1Worklet';
 import { loadFuzzFaceWdf } from './wdf/fuzzfaceWorklet';
 import { loadBigMuffWdf } from './wdf/bigmuffWorklet';
-import { loadNamWorklet } from './namWorklet';
 import { loadNamWasmWorklet } from './namWasmWorklet';
 
 /** 引擎重建链条所需的快照 */
@@ -145,11 +144,6 @@ class AudioEngine {
       await loadBigMuffWdf(ctx);
     } catch (e) {
       console.warn('Big Muff WDF worklet 加载失败,该单块将不可用:', e);
-    }
-    try {
-      await loadNamWorklet(ctx);
-    } catch (e) {
-      console.warn('NAM worklet 加载失败,NAM 箱头将回退为直通:', e);
     }
     try {
       await loadNamWasmWorklet(ctx);

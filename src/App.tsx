@@ -4,7 +4,6 @@ import type { InputSourceType } from './audio/AudioEngine';
 import { getEffectDef } from './audio/effects';
 import { getAmpDef } from './audio/amps';
 import { getCabDef } from './audio/cabs';
-import { BUNDLED_NAM_MODELS, loadNamModelFromFile, setNamModelSource } from './audio/nam';
 import {
   BUNDLED_WAVENET_MODELS,
   NAM_SWEEP_PACKS,
@@ -299,13 +298,7 @@ export default function App() {
       setAmpValues(defaultAmpValues(ref));
       return;
     }
-    if (kind === 'nam-lstm') {
-      const m = BUNDLED_NAM_MODELS.find((x) => x.id === ref);
-      if (m) setNamModelSource(m.url);
-      setAmpId('nam');
-      setAmpValues(defaultAmpValues('nam'));
-      setNamVersion((v) => v + 1);
-    } else if (kind === 'nam-wasm-pack') {
+    if (kind === 'nam-wasm-pack') {
       const pack = NAM_SWEEP_PACKS[ref];
       if (pack) setNamWasmPack(pack);
       setAmpId('nam-wasm');
@@ -347,22 +340,19 @@ export default function App() {
     audioEngine.updateAmpParam(key, value);
   }, []);
 
-  // NAM:加载本地 .nam 模型(JS 实现仅 LSTM,WASM 实现支持全架构),成功后置为当前类的型号
+  // NAM:加载本地 .nam 模型(WASM Core 支持全架构),成功后置为当前类的型号
   const handleNamModelFile = useCallback(
     async (file: File) => {
       try {
-        const isWasm = ampId === 'nam-wasm';
-        const loader = isWasm ? loadNamWasmModelFromFile : loadNamModelFromFile;
-        const model = await loader(file);
+        const model = await loadNamWasmModelFromFile(file);
         setNamCustomName(model.displayName);
-        const kind = isWasm ? 'nam-wasm' : 'nam-lstm';
-        setAmpModelKeys((cur) => ({ ...cur, [ampCategoryId]: `${kind}:custom` }));
+        setAmpModelKeys((cur) => ({ ...cur, [ampCategoryId]: `nam-wasm:custom` }));
         setNamVersion((v) => v + 1);
       } catch (e) {
         alert(`加载 .nam 模型失败: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
-    [ampId, ampCategoryId],
+    [ampCategoryId],
   );
 
   // ---------- 箱体 ----------

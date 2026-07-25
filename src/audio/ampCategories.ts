@@ -1,16 +1,15 @@
-import { BUNDLED_NAM_MODELS } from './nam';
 import { BUNDLED_WAVENET_MODELS, NAM_SWEEP_PACKS } from './namWasm';
 
 /**
  * 箱头分类(4 类,对应 4 个箱头皮肤 amp-clean/chime/crunch/recto):
- * 每类一个 tab,类内可再选具体型号(内置手工建模 / NAM LSTM / NAM WaveNet / 增益扫档包)。
+ * 每类一个 tab,类内可再选具体型号(内置手工建模 / NAM WASM / 增益扫档包)。
  *
  * 型号寻址:`${kind}:${ref}`,kind ∈ builtin(AMP_REGISTRY 的手工箱头 id)/
- * nam-lstm(BUNDLED_NAM_MODELS id)/ nam-wasm(BUNDLED_WAVENET_MODELS id)/
+ * nam-wasm(BUNDLED_WAVENET_MODELS id)/
  * nam-wasm-pack(NAM_SWEEP_PACKS id);
  * 自定义文件加载用 `${kind}:custom`(源已由 loadNam*FromFile 设置)。
  */
-export type AmpModelKind = 'builtin' | 'nam-lstm' | 'nam-wasm' | 'nam-wasm-pack';
+export type AmpModelKind = 'builtin' | 'nam-wasm' | 'nam-wasm-pack';
 
 export interface AmpModelEntry {
   key: string;
@@ -28,7 +27,6 @@ export interface AmpCategory {
 }
 
 const builtin = (ref: string, name: string): AmpModelEntry => ({ key: `builtin:${ref}`, name, kind: 'builtin', ref });
-const lstm = (ref: string, name: string): AmpModelEntry => ({ key: `nam-lstm:${ref}`, name, kind: 'nam-lstm', ref });
 const wasm = (ref: string, name: string): AmpModelEntry => ({ key: `nam-wasm:${ref}`, name, kind: 'nam-wasm', ref });
 const wasmPack = (ref: string): AmpModelEntry => ({
   key: `nam-wasm-pack:${ref}`,
@@ -40,7 +38,6 @@ const wasmPack = (ref: string): AmpModelEntry => ({
 /** 扫档包条目(已获授权,随 git 发布) */
 const sweepEntry = (ref: string): AmpModelEntry[] => [wasmPack(ref)];
 
-const LSTM_NAME = new Map(BUNDLED_NAM_MODELS.map((m) => [m.id, m.name]));
 const WASM_NAME = new Map(BUNDLED_WAVENET_MODELS.map((m) => [m.id, m.name]));
 
 export const AMP_CATEGORIES: AmpCategory[] = [
@@ -54,9 +51,9 @@ export const AMP_CATEGORIES: AmpCategory[] = [
       wasm('fender-twinverb', WASM_NAME.get('fender-twinverb')!),
       wasm('wavenet-deluxe', WASM_NAME.get('wavenet-deluxe')!),
       wasm('peavey-5152-clean', WASM_NAME.get('peavey-5152-clean')!),
-      lstm('deluxe-3x24', LSTM_NAME.get('deluxe-3x24')!),
-      lstm('lstm-demo', LSTM_NAME.get('lstm-demo')!),
-      lstm('ref-2x16', LSTM_NAME.get('ref-2x16')!),
+      wasm('deluxe-3x24', WASM_NAME.get('deluxe-3x24')!),
+      wasm('lstm-demo', WASM_NAME.get('lstm-demo')!),
+      wasm('ref-2x16', WASM_NAME.get('ref-2x16')!),
     ],
   },
   {
@@ -82,8 +79,8 @@ export const AMP_CATEGORIES: AmpCategory[] = [
       wasm('orange-rockerverb', WASM_NAME.get('orange-rockerverb')!),
       wasm('laney-gh100s', WASM_NAME.get('laney-gh100s')!),
       wasm('friedman-shirley-clean', WASM_NAME.get('friedman-shirley-clean')!),
-      lstm('boss-1x16', LSTM_NAME.get('boss-1x16')!),
-      lstm('boss-2x16', LSTM_NAME.get('boss-2x16')!),
+      wasm('boss-1x16', WASM_NAME.get('boss-1x16')!),
+      wasm('boss-2x16', WASM_NAME.get('boss-2x16')!),
     ],
   },
   {
