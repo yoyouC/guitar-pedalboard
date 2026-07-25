@@ -192,7 +192,7 @@ input → 高通(preHpHz,切低频保持紧实)
 - **僵尸节点防护**:worklet 断开连接后 Chrome 仍可能继续调用其 `process()`,因此三个 worklet(nam/nam-wasm/noiseGate)都支持 `suspend` 消息——宿主实例 `dispose()` 时通知处理器返回 `false`,让节点立即停止渲染,防止空转音频线程(对 ~19% 单核的 WaveNet 实例尤其重要)。
 - **验证**:`node scripts/verify-nam-wasm.cjs` —— ① lstm-demo 经 WASM 与经纯 JS 参考实现对拍,误差 ~2e-7(两条路线互相印证);② WaveNet 标准模型推理 100s 音频耗时 19s(约单核 19%),静音与大声输入耗时接近(无 denormal 悬崖),实时余量充足。
 - **voice 实例隔离(关键约束)**:wasm 模块/模型/I/O 缓冲必须挂在处理器实例上(`this.module` 等),绝不能用脚本级全局变量——同一 worklet 全局作用域里多个 'nam-wasm' 节点(单块+箱头)共享全局状态时会互相覆盖模型,链条退化为"同一模型串联两次"(曾导致 NAM 单块接 NAM 箱头声音异常的根因;CDP 步骤 10 双模型隔离用例防回归)。
-- **已知限制**:采样率不匹配仅告警;conditioned 模型的条件输入未接(NAM Core 支持,但 UI 未暴露);无 DC blocker(官方模块有,本项目输出侧已有箱体高通与限幅器)。
+- **已知限制**:采样率不匹配仅告警;conditioned 模型的条件输入未接(NAM Core 支持,但 UI 未暴露);无 DC blocker(官方模块有,本项目输出侧已有箱体高通与限幅器);扫档包与 NAMKnobs 等"许可未标明"内容仅本地评估(`models-local/`,DEV 门控,不发布),发布与模型资产管理见 `docs/deployment.md`。
 
 ### 4.6 箱头分类(`src/audio/ampCategories.ts`)
 

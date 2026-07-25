@@ -25,3 +25,7 @@ dist-ssr
 .vercel
 NAM箱头模型合集*.zip
 Marshell_nams/
+
+# 本地评估模型(许可不允许公开分发,见 models-local/README.md)
+models-local/*
+!models-local/README.md

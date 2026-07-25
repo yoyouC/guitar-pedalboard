@@ -21,7 +21,9 @@
     "wdf:fuzzface-eval": "node scripts/wdf-fuzzface-eval.ts",
     "wdf:fuzzface-spice": "node scripts/wdf-fuzzface-spice-compare.ts",
     "wdf:bigmuff-eval": "node scripts/wdf-bigmuff-eval.ts",
-    "wdf:bigmuff-spice": "node scripts/wdf-bigmuff-spice-compare.ts"
+    "wdf:bigmuff-spice": "node scripts/wdf-bigmuff-spice-compare.ts",
+    "calibrate": "node scripts/calibrate-levels.mjs",
+    "check:publish": "node scripts/check-publish-models.mjs"
   },
   "dependencies": {
     "react": "^19.2.7",

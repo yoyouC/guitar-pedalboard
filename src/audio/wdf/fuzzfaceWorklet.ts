@@ -137,6 +137,13 @@ class FuzzFaceStage {
     const f = Math.min(1, Math.max(0, fuzz));
     this.Rtop = (1 - f) * 1000;
     this.Rbot = f * 1000;
+    // 顶端 30% 行程联动电源亏电(dying-battery 质感)
+    const starve = Math.max(0, (f - 0.7) / 0.3);
+    const newVcc = 9 - starve * 4.5;
+    if (newVcc !== this.Vcc) {
+      this.Vcc = newVcc;
+      this.solveDC();
+    }
   }
 
   expArg(v) {

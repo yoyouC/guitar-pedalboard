@@ -68,7 +68,7 @@ interface SolveOut {
 
 export class FuzzFaceStage {
   private readonly T: number;
-  private readonly Vcc: number;
+  private Vcc: number;
   private readonly Rs: number;
   private readonly Is: number;
   private readonly BF: number;
@@ -127,11 +127,18 @@ export class FuzzFaceStage {
     this.solveDC();
   }
 
-  /** fuzz 0~1:1 = 最大增益(动片到顶,发射极 AC 接地) */
+  /** fuzz 0~1:0.7 以下正常增益;>0.7 进入"亏电"区,Vcc 9→4.5V 产生 splatty 颗粒感 */
   setFuzz(fuzz: number): void {
     const f = Math.min(1, Math.max(0, fuzz));
     this.Rtop = (1 - f) * 1000;
     this.Rbot = f * 1000;
+    // 顶端 30% 行程联动电源亏电(dying-battery 质感)
+    const starve = Math.max(0, (f - 0.7) / 0.3);
+    const newVcc = 9 - starve * 4.5;
+    if (newVcc !== this.Vcc) {
+      this.Vcc = newVcc;
+      this.solveDC(); // 电源变化 → 重新求偏置
+    }
   }
 
   private expArg(v: number): number {
