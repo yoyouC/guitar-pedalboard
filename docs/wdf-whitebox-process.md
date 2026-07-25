@@ -70,6 +70,9 @@ npm run wdf:test          # 三极管级 / Champ / Bogner 链稳定性 + 混叠�
 npm run wdf:ts-eval       # TS808 L0~L3
 npm run wdf:ts-spice      # TS808 L4(vs ngspice,RMSE 0.8%)
 node scripts/wdf-bogner-spice-compare.ts  # Bogner L4 多档
+node scripts/wdf-ac30-eval.ts             # AC30 L0~L3(清音余量/边缘压缩量化)
+node scripts/wdf-ac30-spice-compare.ts    # AC30 L4 多档(RMSE 1~4%)
+node scripts/wdf-ac30-worklet-parity.ts   # AC30 worklet 内联一致性抽检
 ```
 
 SPICE 参考网表在 `scripts/spice/`(Koren B-source 子电路 + 理想运放/缓冲)。
@@ -80,6 +83,7 @@ SPICE 参考网表在 `scripts/spice/`(Koren B-source 子电路 + 理想运放/�
 |---|---|---|
 | **WDF Champ** | 5F1 风格:2×12AX7 + 6V6 单端 + 变压器 | — |
 | **WDF Bogner** | Ecstasy 高增益:3×12AX7 级联(含冷偏置级)+ EL34 | RMS 差 1.7~2.3dB,低增益 THD 精确一致(0.6%/0.6%) |
+| **WDF AC30 ⚗** | Top Boost:2×12AX7(暖/冷偏置)+ 阴极跟随器(+60V 栅偏)+ 音色栈入 worklet(后级前)+ EL84 A 类 + 变压器(75Hz/5.5kHz/2.5kHz 临场峰) | RMSE 1.1~4.2%,RMS 差 0.0dB,THD 趋势一致(0.5~2.6% 同档同量级) |
 | **TS808 WDF ⚗** | 运放+二极管对 WDF + 音色级 | **RMSE 0.8%**(峰值差 1mV) |
 | **RAT WDF ⚗** | LM308 运放+1N914 对地硬削波+反向 Filter | RMSE 9.5%,RMS 差 0.4dB,THD 31.3/31.8% |
 | **Klon WDF ⚗** | 锗管对地削波+GAIN 联动干湿混合 | RMSE 4.2%,RMS 差 0.0dB,THD 18.4/18.4% |
@@ -125,11 +129,34 @@ spice 参考电路同样出现,治理用经典疗法:耦合电容 22nF→4.7nF
 环内必须有一阶 HP(~30Hz)阻断 DC 累积。静音→静音依然成立:0 是不稳定但精确的不动点,
 浮点零输入永远产生零输出(评测自激需用激励脉冲点燃)。
 
+### 4.7 深激励下的求解器翻车与板极交流负载(AC30 踩坑记)
+- **阻尼定点 solveGrid 有翻车阈值**:vgSrc−vk > ~0.83V 时指数栅流被 cap 到 ~0.5A,
+  Rs·ig 达数万 V,一步把 vg 踹到 −16kV → Koren 板流归零 → 深激励下与耦合电容
+  充放电形成 period-2 极限环(1kHz 输入输出变 2kHz 主导,f1 塌陷,实测 THD 5920%)。
+  根治:单调方程 g(vg)=vg−vgSrc+Rs·ig(vg−vk)=0 用**二分法**(g(vk)≤0≤g(vgSrc) 必有根,
+  全局收敛不 overshoot)。Rk 很大(如 CF 100k)时外层 Newton 也会在"导通/截止"两盆间
+  振荡锁死,外层同样上二分(单调 F),末尾 Newton 抛光消除量化格跳变(否则 vk ±0.03V
+  跳变成静音本底/混叠底噪,混叠从 −158dB 劣化到 −47dB)。
+- **板极必须计及耦合网络的交流负载**:TriodeStage 的 vp=B+−ip·Rp 是理想驱动,
+  spice 参考里板极被 Co 后的分压/栅漏网络加载(100k∥1M,每级 −9% 增益),
+  L4 实测 WDF 系统性偏热 +12%≈1.0dB。在 vp 方程里补 KCL
+  (vp=(B+−ip·Rp+(Rp/Rload)·vc)/(1+Rp/Rload),DC 点不变)后 RMSE 12%→1~4%、RMS 差归零。
+- **阴极跟随器负向余量**:栅漏接地的 CF 静态 vk 仅几 V,负向 2V 即 cutoff 变硬削波机;
+  栅漏改接 +60V 偏置(类板极直耦)后 vk≈62V,负向余量几十 V,CF 回归透明缓冲,
+  破音主角才能让给后级(否则全是 CF 的奇次硬削)。
+- **LC 临场峰支路的振铃建立期**:2.5kHz 串联 RLC(Q=1)振铃 τ=2L/R≈127ms,
+  spice 侧 250ms 建立仍有 ~13% 残余,逐周期抖动污染 THD/RMSE 测量;建立期按
+  max(5τ_耦合, 3.5τ_LC) 取(本例 450ms)。
+
 ## 5. 目录结构
 
 ```
 src/audio/wdf/
 ├── triode.ts          # 共阴极三极管级(TS 参考实现,Node 可测)
+├── ac30Core.ts        # AC30 核心:EL84 参数 + 稳健三极管级(二分栅流钳位+板极负载)
+│                      #   + 阴极跟随器(栅漏偏置)+ top-boost 音色 + 变压器/临场峰
+├── ac30Worklet.ts     # WDF AC30 处理器(IIFE 内联,音色栈在 worklet 内)
+├── ac30AmpDef.ts      # wdfAc30Def():箱头定义(id 'wdfac30',注册由主代理收口)
 ├── diodeClipper.ts    # TS808 运放+二极管对 WDF 级
 ├── ratDistortion.ts   # RAT 失真核心(增益级+摆率 LP+二极管硬削波/FILTER 联立 Newton)
 ├── tapeDelay.ts       # 磁带延迟核心(EP-3 风格:调制延迟线+环内损耗/软削波,Node 可测)
@@ -145,9 +172,12 @@ scripts/
 ├── wdf-ts-spice-compare.ts      # TS808 L4
 ├── wdf-rat-eval.ts    # RAT L0~L3
 ├── wdf-tapedelay-eval.ts # 磁带延迟 L0~L3(时间精度/饱和 THD/wow 解调/高频衰减/自激有界)
+├── wdf-ac30-eval.ts   # AC30 L0~L3(含清音余量/边缘压缩两区间量化)
+├── wdf-ac30-worklet-parity.ts   # AC30 worklet 内联 vs 核心链样本级一致性
+├── wdf-ac30-spice-compare.ts    # AC30 L4
 ├── wdf-rat-spice-compare.ts     # RAT L4
 ├── wdf-bogner-spice-compare.ts  # Bogner L4 多档
-└── spice/             # ngspice 参考网表
+└── spice/             # ngspice 参考网表(含 ac30.cir:CF 偏置 + 串联 RLC 临场峰)
 ```
 
 worklet 内联 JS 与 `triode.ts`/`resample.ts` 的 TS 参考实现保持逻辑一致——

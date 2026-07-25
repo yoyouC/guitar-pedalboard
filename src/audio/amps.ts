@@ -1,6 +1,9 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
 import { createNamWasmAmp, NAM_AMP_DEFAULTS } from './namWasm';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from './level';
+import { wdfTwinDef } from './wdf/twinAmpDef';
+import { wdfAc30Def } from './wdf/ac30AmpDef';
+import { wdfJc120Def } from './wdf/jc120AmpDef';
 
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
@@ -358,6 +361,9 @@ export const AMP_REGISTRY: EffectDefinition[] = [
   makeAmpDef('chime', 'AC Chime', '#2e8b57'),
   wdfChampDef(),
   wdfBognerDef(),
+  wdfTwinDef(),
+  wdfAc30Def(),
+  wdfJc120Def(),
   // NAM 箱头(见 namWasm.ts):NAM Core WASM 全架构(WaveNet/LSTM/…)
   {
     id: 'nam-wasm',

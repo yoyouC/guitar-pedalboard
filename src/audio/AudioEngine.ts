@@ -4,6 +4,9 @@ import { loadChampWdf } from './wdf/champWorklet';
 import { loadBognerWdf } from './wdf/bognerWorklet';
 import { loadTs808Wdf } from './wdf/ts808Worklet';
 import { loadRatWdf } from './wdf/ratWorklet';
+import { loadTwinWdf } from './wdf/twinWorklet';
+import { loadAc30Wdf } from './wdf/ac30Worklet';
+import { loadJc120Wdf } from './wdf/jc120Worklet';
 import { loadKlonWdf } from './wdf/klonWorklet';
 import { loadDs1Wdf } from './wdf/ds1Worklet';
 import { loadFuzzFaceWdf } from './wdf/fuzzfaceWorklet';
@@ -166,6 +169,21 @@ class AudioEngine {
       await loadBigMuffWdf(ctx);
     } catch (e) {
       console.warn('Big Muff WDF worklet 加载失败,该单块将不可用:', e);
+    }
+    try {
+      await loadTwinWdf(ctx);
+    } catch (e) {
+      console.warn('WDF Twin worklet 加载失败,该箱头将不可用:', e);
+    }
+    try {
+      await loadAc30Wdf(ctx);
+    } catch (e) {
+      console.warn('WDF AC30 worklet 加载失败,该箱头将不可用:', e);
+    }
+    try {
+      await loadJc120Wdf(ctx);
+    } catch (e) {
+      console.warn('WDF JC-120 worklet 加载失败,该箱头将不可用:', e);
     }
     try {
       await loadSpringReverbWdf(ctx);

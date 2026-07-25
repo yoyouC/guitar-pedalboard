@@ -47,6 +47,8 @@ export const AMP_CATEGORIES: AmpCategory[] = [
     models: [
       builtin('clean', 'Clean Twin(内置建模)'),
       builtin('wdfchamp', 'WDF Champ ⚗(WDF 电路建模)'),
+      builtin('wdftwin', 'WDF Twin ⚗(WDF 电路建模)'),
+      builtin('wdfjc120', 'WDF JC-120 ⚗(WDF 电路建模)'),
       ...sweepEntry('bassman-sweep'),
       wasm('fender-twinverb', WASM_NAME.get('fender-twinverb')!),
       wasm('wavenet-deluxe', WASM_NAME.get('wavenet-deluxe')!),
@@ -61,6 +63,7 @@ export const AMP_CATEGORIES: AmpCategory[] = [
     name: 'Vox',
     models: [
       builtin('chime', 'AC Chime(内置建模)'),
+      builtin('wdfac30', 'WDF AC30 ⚗(WDF 电路建模)'),
       wasm('wavenet-ac10', WASM_NAME.get('wavenet-ac10')!),
       wasm('vox-ac15', WASM_NAME.get('vox-ac15')!),
     ],
