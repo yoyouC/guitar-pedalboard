@@ -157,6 +157,12 @@ export function TopBar(props: TopBarProps) {
           >
             {props.globalBypass ? '已 Bypass' : 'Bypass'}
           </button>
+          <span
+            className="gain-hint"
+            title="数字键 1~9:按板上顺序开关对应单块;空格:全局 Bypass(输入框聚焦时不生效)"
+          >
+            ⌨ 1~9 单块 · 空格 Bypass
+          </span>
         </div>
       </div>
     </div>

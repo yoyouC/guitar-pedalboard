@@ -67,6 +67,7 @@ export function ChainView({
         def={getEffectDef(item.effectId)}
         analyser={audioEngine.getModuleAnalyser(item.uid)}
         showMeters={showMeters}
+        shortcutKey={idx < 9 ? String(idx + 1) : null}
         onToggle={onToggle}
         onRemove={onRemove}
         onParam={onParam}

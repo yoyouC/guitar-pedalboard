@@ -311,6 +311,37 @@ export default function App() {
     audioEngine.updateParam(uid, key, value);
   }, []);
 
+  // ---------- 快捷键 ----------
+
+  // 数字键 1~9:按板上显示顺序(前置区 → FX Loop 区,即平铺数组顺序)切换单块开关;空格:全局 Bypass
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      // 输入控件聚焦时不触发
+      const el = e.target as HTMLElement | null;
+      if (
+        el &&
+        (el.tagName === 'INPUT' ||
+          el.tagName === 'TEXTAREA' ||
+          el.tagName === 'SELECT' ||
+          el.isContentEditable)
+      )
+        return;
+      if (e.code === 'Space') {
+        e.preventDefault(); // 阻止页面滚动与焦点按钮的空格激活
+        setGlobalBypass((b) => !b);
+        return;
+      }
+      const n = Number(e.key);
+      if (Number.isInteger(n) && n >= 1 && n <= 9) {
+        const item = chain[n - 1];
+        if (item) handleToggle(item.uid);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [chain, handleToggle]);
+
   // ---------- 箱头 ----------
 
   // 应用一个箱头型号(key = `${kind}:${ref}`,见 ampCategories.ts;ref 为 'custom' 时源已由文件加载设置)
