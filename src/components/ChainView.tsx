@@ -13,9 +13,10 @@ interface ChainViewProps {
   onRemove: (uid: string) => void;
   onParam: (uid: string, key: string, value: number) => void;
   onAdd: (effectId: string) => void;
+  onToggleSlot: (uid: string) => void;
 }
 
-/** 横向 pedalboard:按信号流向排列单块,支持 HTML5 拖拽排序 */
+/** 横向 pedalboard:前置(箱头前)与 FX Loop(箱头后、箱体前)分区,拖拽排序/跨区 */
 export function ChainView({
   items,
   showMeters,
@@ -24,52 +25,90 @@ export function ChainView({
   onRemove,
   onParam,
   onAdd,
+  onToggleSlot,
 }: ChainViewProps) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+  const [overDivider, setOverDivider] = useState(false);
+
+  const preItems = items.filter((i) => !i.post);
+  const postItems = items.filter((i) => i.post);
+
+  const renderSlot = (item: ChainItem, idx: number, isLast: boolean) => (
+    <div
+      key={item.uid}
+      className={`pedal-slot ${overIndex === idx && dragIndex !== idx ? 'drag-over' : ''} ${
+        dragIndex === idx ? 'dragging' : ''
+      }`}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        setDragIndex(idx);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setOverIndex(idx);
+      }}
+      onDragLeave={() => setOverIndex((cur) => (cur === idx ? null : cur))}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (dragIndex !== null && dragIndex !== idx) onReorder(dragIndex, idx);
+        setDragIndex(null);
+        setOverIndex(null);
+      }}
+      onDragEnd={() => {
+        setDragIndex(null);
+        setOverIndex(null);
+      }}
+    >
+      <PedalCard
+        item={item}
+        def={getEffectDef(item.effectId)}
+        analyser={audioEngine.getModuleAnalyser(item.uid)}
+        showMeters={showMeters}
+        onToggle={onToggle}
+        onRemove={onRemove}
+        onParam={onParam}
+        onToggleSlot={onToggleSlot}
+      />
+      {!isLast && <div className="patch-cable" />}
+    </div>
+  );
 
   return (
     <div className="chain-view">
-      {items.map((item, idx) => (
-        <div
-          key={item.uid}
-          className={`pedal-slot ${overIndex === idx && dragIndex !== idx ? 'drag-over' : ''} ${
-            dragIndex === idx ? 'dragging' : ''
-          }`}
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = 'move';
-            setDragIndex(idx);
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            setOverIndex(idx);
-          }}
-          onDragLeave={() => setOverIndex((cur) => (cur === idx ? null : cur))}
-          onDrop={(e) => {
-            e.preventDefault();
-            if (dragIndex !== null && dragIndex !== idx) onReorder(dragIndex, idx);
-            setDragIndex(null);
-            setOverIndex(null);
-          }}
-          onDragEnd={() => {
-            setDragIndex(null);
-            setOverIndex(null);
-          }}
-        >
-          <PedalCard
-            item={item}
-            def={getEffectDef(item.effectId)}
-            analyser={audioEngine.getModuleAnalyser(item.uid)}
-            showMeters={showMeters}
-            onToggle={onToggle}
-            onRemove={onRemove}
-            onParam={onParam}
-          />
-          {idx < items.length - 1 && <div className="patch-cable" />}
-        </div>
-      ))}
+      {preItems.map((item) => renderSlot(item, items.indexOf(item), false))}
+
+      <div
+        className={`fxloop-divider ${overDivider ? 'drag-over' : ''}`}
+        title="FX Loop:箱头之后、箱体之前(拖到此处移入)"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          setOverDivider(true);
+        }}
+        onDragLeave={() => setOverDivider(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (dragIndex !== null) {
+            const item = items[dragIndex];
+            if (!item.post) onToggleSlot(item.uid);
+          }
+          setDragIndex(null);
+          setOverIndex(null);
+          setOverDivider(false);
+        }}
+      >
+        <span className="fxloop-label">
+          箱头
+          <br />↓
+          <br />
+          FX LOOP
+        </span>
+      </div>
+
+      {postItems.map((item) => renderSlot(item, items.indexOf(item), false))}
       <AddEffectMenu onAdd={onAdd} />
     </div>
   );

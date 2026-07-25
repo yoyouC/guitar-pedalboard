@@ -11,10 +11,11 @@ interface PedalCardProps {
   onToggle: (uid: string) => void;
   onRemove: (uid: string) => void;
   onParam: (uid: string, key: string, value: number) => void;
+  onToggleSlot: (uid: string) => void;
 }
 
 /** 拟物单块效果器:金属外壳 + 旋钮 + 脚踏开关 */
-export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove, onParam }: PedalCardProps) {
+export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot }: PedalCardProps) {
   return (
     <div
       className={`pedal skin-${def.id} ${item.enabled ? 'pedal-on' : 'pedal-off'}`}
@@ -25,6 +26,13 @@ export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove,
       <span className="screw screw-bl" />
       <span className="screw screw-br" />
 
+      <button
+        className="pedal-slot-toggle"
+        title={item.post ? '移到箱头前(前置)' : '移到箱头后(FX Loop)'}
+        onClick={() => onToggleSlot(item.uid)}
+      >
+        ⇄
+      </button>
       <button
         className="pedal-remove"
         title="移除"

@@ -32,7 +32,7 @@ import { FluidBackground } from './components/FluidBackground';
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
 function defaultChain(): ChainItem[] {
-  return ['noiseGate', 'overdrive', 'delay', 'reverb', 'volume'].map((id) =>
+  return ['noiseGate', 'overdrive', 'volume', 'delay', 'reverb'].map((id) =>
     createChainItem(getEffectDef(id)),
   );
 }
@@ -111,10 +111,10 @@ export default function App() {
 
   // ---------- 链条 → 音频图同步 ----------
 
-  // 仅在结构(增删/排序/开关/bypass/换箱头箱体)变化时重建音频图;参数连续调整走 updateParam
+  // 仅在结构(增删/排序/开关/bypass/换箱头箱体/前后置)变化时重建音频图;参数连续调整走 updateParam
   const structureKey = useMemo(
     () =>
-      chain.map((i) => `${i.uid}:${i.effectId}:${i.enabled}`).join('|') +
+      chain.map((i) => `${i.uid}:${i.effectId}:${i.enabled}:${i.post}`).join('|') +
       `|bypass:${globalBypass}|amp:${ampId}:${ampEnabled}|cab:${cabId}:${cabEnabled}|namv:${namVersion}`,
     [chain, globalBypass, ampId, ampEnabled, cabId, cabEnabled, namVersion],
   );
@@ -127,6 +127,7 @@ export default function App() {
         def: getEffectDef(item.effectId),
         enabled: item.enabled,
         values: item.values,
+        post: item.post,
       })),
     );
     audioEngine.setAmp({
@@ -255,7 +256,15 @@ export default function App() {
   // ---------- 链条操作 ----------
 
   const handleAdd = useCallback((effectId: string) => {
-    setChain((cur) => [...cur, createChainItem(getEffectDef(effectId))]);
+    setChain((cur) => {
+      const item = createChainItem(getEffectDef(effectId));
+      // 保持平铺数组前置在前、后置在后:前置类插入分区边界,后置类追加到尾
+      if (item.post) return [...cur, item];
+      const boundary = cur.findIndex((i) => i.post);
+      const next = [...cur];
+      next.splice(boundary < 0 ? next.length : boundary, 0, item);
+      return next;
+    });
   }, []);
 
   const handleRemove = useCallback((uid: string) => {
@@ -272,7 +281,23 @@ export default function App() {
     setChain((cur) => {
       const next = [...cur];
       const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
+      // 跨区拖动(目标位置属于另一分区)→ 同时翻转 post 归属
+      const target = next[to] ?? next[to - 1];
+      const moved2 = target && target.post !== moved.post ? { ...moved, post: target.post } : moved;
+      next.splice(to, 0, moved2);
+      return next;
+    });
+  }, []);
+
+  /** 翻转前置/后置(FX Loop),并把该项移到目标分区末尾(保持平铺数组前置在前、后置在后) */
+  const handleToggleSlot = useCallback((uid: string) => {
+    setChain((cur) => {
+      const idx = cur.findIndex((i) => i.uid === uid);
+      if (idx < 0) return cur;
+      const item = { ...cur[idx], post: !cur[idx].post };
+      const next = cur.filter((i) => i.uid !== uid);
+      const boundary = next.findIndex((i) => i.post);
+      next.splice(boundary < 0 ? next.length : boundary, 0, item);
       return next;
     });
   }, []);
@@ -458,6 +483,7 @@ export default function App() {
           onRemove={handleRemove}
           onParam={handleParam}
           onAdd={handleAdd}
+          onToggleSlot={handleToggleSlot}
         />
       </main>
 
@@ -493,9 +519,17 @@ export default function App() {
       />
 
       <footer className="app-footer">
-        信号流向:输入 → {chain.map((i) => getEffectDef(i.effectId).name).join(' → ')}
+        信号流向:输入 → {chain
+          .filter((i) => !i.post)
+          .map((i) => getEffectDef(i.effectId).name)
+          .join(' → ')}
         {ampEnabled &&
           ` → ${getAmpModelEntry(ampModelKeys[ampCategoryId])?.name ?? getAmpDef(ampId).name}`}
+        {chain.filter((i) => i.post).length > 0 &&
+          ` → [FX Loop] ${chain
+            .filter((i) => i.post)
+            .map((i) => getEffectDef(i.effectId).name)
+            .join(' → ')}`}
         {cabEnabled && ` → ${getCabDef(cabId).name}`} → 输出
         {globalBypass && '(全局 Bypass 中)'}
         {!inputType && <span className="hint"> — 请在上方选择一个输入源开始</span>}

@@ -7,7 +7,21 @@ export interface ChainItem {
   effectId: string;
   enabled: boolean;
   values: Record<string, number>;
+  /** false = 箱头之前(前置);true = 箱头之后、箱体之前(FX Loop) */
+  post: boolean;
 }
+
+/** 默认进 FX Loop 的效果器类型(延迟/混响类惯例) */
+const FX_LOOP_EFFECTS = new Set([
+  'delay',
+  'reverb',
+  'springreverb',
+  'plate',
+  'shimmer',
+  'analogdelay',
+  'tapedelay',
+  'pingpong',
+]);
 
 export function createChainItem(def: EffectDefinition): ChainItem {
   const values: Record<string, number> = {};
@@ -17,13 +31,14 @@ export function createChainItem(def: EffectDefinition): ChainItem {
     effectId: def.id,
     enabled: true,
     values,
+    post: FX_LOOP_EFFECTS.has(def.id),
   };
 }
 
 /** 预设:不含 uid,加载时重新生成 */
 export interface Preset {
   name: string;
-  items: { effectId: string; enabled: boolean; values: Record<string, number> }[];
+  items: { effectId: string; enabled: boolean; values: Record<string, number>; post?: boolean }[];
 }
 
 const STORAGE_KEY = 'guitar-pedalboard-presets';
@@ -46,10 +61,11 @@ export function savePresets(presets: Preset[]): void {
 export function chainToPreset(name: string, chain: ChainItem[]): Preset {
   return {
     name,
-    items: chain.map(({ effectId, enabled, values }) => ({
+    items: chain.map(({ effectId, enabled, values, post }) => ({
       effectId,
       enabled,
       values: { ...values },
+      post,
     })),
   };
 }
@@ -71,6 +87,8 @@ export function presetToChain(preset: Preset): ChainItem[] {
       ...base,
       enabled: item.enabled,
       values,
+      // 旧预设无 post 字段时用类型默认(兼容)
+      post: item.post ?? base.post,
     };
   });
 }

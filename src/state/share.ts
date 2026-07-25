@@ -3,6 +3,7 @@ import { getCabDef } from '../audio/cabs';
 import { getAmpDef } from '../audio/amps';
 import { getAmpModelEntry, getAmpModelCategory } from '../audio/ampCategories';
 import type { ChainItem } from './store';
+import { createChainItem } from './store';
 
 /**
  * 效果链/箱头/箱体配置的 URL 分享编码。
@@ -23,7 +24,7 @@ export interface ShareState {
 
 interface SharePayload {
   v: 1;
-  c: { id: string; e: 0 | 1; v: Record<string, number> }[];
+  c: { id: string; e: 0 | 1; v: Record<string, number>; p?: 0 | 1 }[];
   a?: { cat: string; key: string; on: 0 | 1; v: Record<string, number> };
   b?: { id: string; on: 0 | 1; v: Record<string, number> };
 }
@@ -57,7 +58,7 @@ function clampValues(defParams: { key: string; min: number; max: number; default
 export function encodeShareState(state: ShareState): string {
   const payload: SharePayload = {
     v: 1,
-    c: state.chain.map((i) => ({ id: i.effectId, e: i.enabled ? 1 : 0, v: i.values })),
+    c: state.chain.map((i) => ({ id: i.effectId, e: i.enabled ? 1 : 0, v: i.values, p: i.post ? 1 : 0 })),
     a: {
       cat: state.ampCategoryId,
       key: state.ampModelKey,
@@ -83,11 +84,13 @@ export function decodeShareState(encoded: string): ShareState | null {
     for (const item of payload.c) {
       try {
         const def = getEffectDef(item.id);
+        const base = createChainItem(def);
         chain.push({
           uid: crypto.randomUUID(),
           effectId: def.id,
           enabled: item.e !== 0,
           values: clampValues(def.params, item.v),
+          post: typeof item.p === 'number' ? item.p === 1 : base.post,
         });
       } catch {
         console.warn(`[share] 跳过未知效果器: ${item.id}`);

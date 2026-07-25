@@ -25,6 +25,8 @@ export interface ChainSpec {
   def: EffectDefinition;
   enabled: boolean;
   values: Record<string, number>;
+  /** false = 箱头之前(前置);true = 箱头之后、箱体之前(FX Loop) */
+  post: boolean;
 }
 
 /** 箱头快照(null 表示不启用箱头) */
@@ -435,8 +437,8 @@ class AudioEngine {
 
     let prev: AudioNode = this.inputGain;
     if (!this.globalBypass) {
-      for (const spec of this.chain) {
-        if (!spec.enabled) continue;
+      const connectSpec = (spec: ChainSpec) => {
+        if (!spec.enabled) return;
         let inst = kept.get(spec.uid)?.inst;
         if (!inst) {
           inst = spec.def.create(ctx);
@@ -451,8 +453,12 @@ class AudioEngine {
         inst.output.connect(tap);
         this.moduleAnalysers.set(spec.uid, tap);
         nextInstances.push({ uid: spec.uid, def: spec.def, inst });
+      };
+      // 前置段(post=false):踏板 → 箱头
+      for (const spec of this.chain) {
+        if (!spec.post) connectSpec(spec);
       }
-      // 箱头位于效果链之后(踏板 → 箱头的真实路由)
+      // 箱头位于前置效果链之后(踏板 → 箱头的真实路由)
       if (this.ampSpec && this.ampSpec.enabled) {
         let amp = this.ampInstance;
         if (!amp) {
@@ -467,6 +473,10 @@ class AudioEngine {
         this.ampAnalyser = ctx.createAnalyser();
         this.ampAnalyser.fftSize = 1024;
         amp.output.connect(this.ampAnalyser);
+      }
+      // 后置段(post=true):FX Loop,箱头之后、箱体之前
+      for (const spec of this.chain) {
+        if (spec.post) connectSpec(spec);
       }
       // 箱体位于箱头之后、输出之前(关闭即 DI 直通)
       if (this.cabSpec && this.cabSpec.enabled) {
