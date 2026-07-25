@@ -139,7 +139,7 @@ class FuzzFaceStage {
     this.Rbot = f * 1000;
     // 顶端 30% 行程联动电源亏电(dying-battery 质感)
     const starve = Math.max(0, (f - 0.7) / 0.3);
-    const newVcc = 9 - starve * 4.5;
+    const newVcc = 9 - starve * 5.0;
     if (newVcc !== this.Vcc) {
       this.Vcc = newVcc;
       this.solveDC();
@@ -280,7 +280,7 @@ class FuzzFaceStage {
     let s = null;
     let totalIters = 0;
     let vinUsed = vin;
-    const ladder = [[1, 0], [2, 0], [4, 0], [8, 0], [8, 0.5]];
+    const ladder = [[1, 0], [2, 0], [4, 0], [8, 0], [16, 0], [16, 1.0], [16, 0.5]];
     for (let li = 0; li < ladder.length; li++) {
       const kMax = ladder[li][0], slew = ladder[li][1];
       vinUsed = slew > 0

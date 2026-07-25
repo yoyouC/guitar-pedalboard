@@ -134,11 +134,10 @@ export class FuzzFaceStage {
     this.Rbot = f * 1000;
     // 顶端 30% 行程联动电源亏电(dying-battery 质感)
     const starve = Math.max(0, (f - 0.7) / 0.3);
-    const newVcc = 9 - starve * 4.5;
-    if (newVcc !== this.Vcc) {
-      this.Vcc = newVcc;
-      this.solveDC(); // 电源变化 → 重新求偏置
-    }
+    const newVcc = 9 - starve * 5.0;
+    // 不重新解 DC:Vcc 直接参与瞬态 Newton,状态会像真实电源跌落一样
+    // 在数毫秒内自然迁移到新偏置点(逐样本重解 DC 反而打乱电容状态)
+    this.Vcc = newVcc;
   }
 
   private expArg(v: number): number {
@@ -349,7 +348,7 @@ export class FuzzFaceStage {
     let s: SolveOut | null = null;
     let totalIters = 0;
     let vinUsed = vin;
-    const ladder: [number, number][] = [[1, 0], [2, 0], [4, 0], [8, 0], [8, 0.5]];
+    const ladder: [number, number][] = [[1, 0], [2, 0], [4, 0], [8, 0], [16, 0], [16, 1.0], [16, 0.5]];
     for (const [kMax, slew] of ladder) {
       vinUsed =
         slew > 0
