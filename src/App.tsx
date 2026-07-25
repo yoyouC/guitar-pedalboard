@@ -462,7 +462,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <FluidBackground analyser={engineReady ? audioEngine.outputAnalyser : null} />
+      <FluidBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
 
       <header className="app-header">
         <h1>🎸 Guitar Pedalboard</h1>

@@ -65,6 +65,8 @@ class AudioEngine {
   /** 箱头/箱体输出侧的电平表抽头(随图谱重建更新) */
   ampAnalyser: AnalyserNode | null = null;
   cabAnalyser: AnalyserNode | null = null;
+  /** 箱头之前的抽头(前置效果链末端,削波检测用) */
+  preAmpAnalyser: AnalyserNode | null = null;
 
   private inputGain: GainNode | null = null;
   private masterGain: GainNode | null = null;
@@ -502,6 +504,7 @@ class AudioEngine {
     }
     this.ampAnalyser = null;
     this.cabAnalyser = null;
+    this.preAmpAnalyser = null;
 
     // 断开 inputGain 全部下游(含 analyser 与旧链),再按新链重连
     this.inputGain.disconnect();
@@ -530,6 +533,10 @@ class AudioEngine {
       for (const spec of this.chain) {
         if (!spec.post) connectSpec(spec);
       }
+      // 箱头前抽头:前置链末端(削波检测/背景变色用)
+      this.preAmpAnalyser = ctx.createAnalyser();
+      this.preAmpAnalyser.fftSize = 1024;
+      prev.connect(this.preAmpAnalyser);
       // 箱头位于前置效果链之后(踏板 → 箱头的真实路由)
       if (this.ampSpec && this.ampSpec.enabled) {
         let amp = this.ampInstance;
