@@ -8,7 +8,6 @@ interface PedalCardProps {
   def: EffectDefinition;
   analyser: AnalyserNode | null;
   showMeters: boolean;
-  shortcutKey: string | null;
   onToggle: (uid: string) => void;
   onRemove: (uid: string) => void;
   onParam: (uid: string, key: string, value: number) => void;
@@ -16,7 +15,7 @@ interface PedalCardProps {
 }
 
 /** 拟物单块效果器:金属外壳 + 旋钮 + 脚踏开关 */
-export function PedalCard({ item, def, analyser, showMeters, shortcutKey, onToggle, onRemove, onParam, onToggleSlot }: PedalCardProps) {
+export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot }: PedalCardProps) {
   return (
     <div
       className={`pedal skin-${def.id} ${item.enabled ? 'pedal-on' : 'pedal-off'}`}
@@ -26,12 +25,6 @@ export function PedalCard({ item, def, analyser, showMeters, shortcutKey, onTogg
       <span className="screw screw-tr" />
       <span className="screw screw-bl" />
       <span className="screw screw-br" />
-
-      {shortcutKey && (
-        <span className="pedal-keycap" title={`快捷键 ${shortcutKey}:踩下/抬起此单块`}>
-          {shortcutKey}
-        </span>
-      )}
 
       <button
         className="pedal-slot-toggle"
