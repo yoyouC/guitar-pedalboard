@@ -234,7 +234,8 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
   const stageLoudness: (number | null)[] = stages.map(() => null);
   const slotReady = new Set<number>();
   let activeIdx = -1;
-  const initialIdx = pack
+  // 目标档位:参数回放(GAIN)在槽位就绪前到达时记录于此,就绪即激活
+  let desiredIdx = pack
     ? Math.min(stages.length - 1, Math.floor((NAM_AMP_DEFAULTS.gain / 100) * stages.length))
     : -1;
   const applyStageLevel = (idx: number) => {
@@ -257,12 +258,14 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
           if (disposed) return;
           stageLoudness[i] = parseMetadata(json).loudness;
           const waiter = voice.stageReady(i);
-          voice.stageLoad(i, json, i === initialIdx);
+          voice.stageLoad(i, json, false);
           await waiter;
           slotReady.add(i);
-          if (i === initialIdx) {
+          if (i === desiredIdx) {
             activeIdx = i;
+            voice.stageActive(i);
             applyStageLevel(i);
+            console.info(`[nam-wasm] 激活档位 g${stages[i].gain}`);
           }
           reportAmpLoad({ phase: 'loading', done: i + 1, total: stages.length, label: `预载 g${stages[i].gain}` });
           console.info(`[nam-wasm] 扫档预载 ${i + 1}/${stages.length} (g${stages[i].gain})`);
@@ -311,8 +314,9 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
       switch (key) {
         case 'gain':
           if (pack) {
-            // 扫档包:GAIN = 档位选择(预载槽位瞬时切换,无加载延迟)
+            // 扫档包:GAIN = 档位选择;槽位未就绪时记入 desiredIdx,预载到位即激活
             const idx = Math.min(stages.length - 1, Math.floor((value / 100) * stages.length));
+            desiredIdx = idx;
             if (idx !== activeIdx && slotReady.has(idx)) {
               activeIdx = idx;
               voice?.stageActive(idx);
