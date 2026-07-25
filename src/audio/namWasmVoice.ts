@@ -98,7 +98,10 @@ export function createNamWasmVoice(ctx: AudioContext): NamWasmVoice | null {
       });
     },
     sendModel(json) {
-      node.port.postMessage({ type: 'stage-load', idx: 0, json, activate: true });
+      // 与 stageLoad 一致:必须先等 prepare 发出(否则竞态报"未 prepare",该槽位不装载)
+      preparePosted.then(() => {
+        if (!disposed) node.port.postMessage({ type: 'stage-load', idx: 0, json, activate: true });
+      });
     },
     stageActive(idx) {
       node.port.postMessage({ type: 'stage-active', idx });
