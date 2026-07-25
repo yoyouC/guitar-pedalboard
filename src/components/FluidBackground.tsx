@@ -185,7 +185,8 @@ export function FluidBackground({ analyser, debug }: FluidBackgroundProps) {
           scratch.sort((a, b) => b - a);
           const p99 = scratch[Math.floor(data.length * 0.01)] || peak;
           ratio = rms / p99;
-          targetClip = Math.min(1, Math.max(0, (ratio - 0.55) / 0.15));
+          // 灵敏档:0.47 触发,0.68 全红(原 0.55~0.70,轻度过载推不动)
+          targetClip = Math.min(1, Math.max(0, (ratio - 0.47) / 0.21));
 
           // 调试用辅助指标
           const thresh = peak * 0.85;
@@ -210,10 +211,11 @@ export function FluidBackground({ analyser, debug }: FluidBackgroundProps) {
 
         // 快攻慢释
         amp += (targetAmp - amp) * (targetAmp > amp ? 0.25 : 0.04);
-        clip += (targetClip - clip) * 0.12;
+        // 削波响应加快(攻 0.25 / 释 0.06,原统一 0.12)
+        clip += (targetClip - clip) * (targetClip > clip ? 0.25 : 0.06);
       } else {
         amp += (0 - amp) * 0.04;
-        clip += (0 - clip) * 0.12;
+        clip += (0 - clip) * 0.06;
       }
 
       gl.uniform2f(uRes, canvas.width, canvas.height);
