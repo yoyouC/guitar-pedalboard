@@ -555,6 +555,7 @@ export default function App() {
       <Oscilloscope
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
+        showMeters={showMeters}
       />
 
       <footer className="app-footer">
