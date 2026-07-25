@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "calibrate": "node scripts/calibrate-levels.mjs"
+    "calibrate": "node scripts/calibrate-levels.mjs",
+    "check:publish": "node scripts/check-publish-models.mjs"
   },
   "dependencies": {
     "react": "^19.2.7",

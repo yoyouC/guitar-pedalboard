@@ -96,7 +96,7 @@ function createNamPedal(ctx: AudioContext, cfg: NamPedalConfig): EffectInstance 
   };
 }
 
-const NAMKNOBS = `${import.meta.env.BASE_URL}models/namknobs`;
+const NAMKNOBS = `${import.meta.env.BASE_URL}models-local/namknobs`;
 
 function makeNamPedalDef(id: string, name: string, color: string, cfg: NamPedalConfig): EffectDefinition {
   return {
@@ -118,50 +118,57 @@ function makeNamPedalDef(id: string, name: string, color: string, cfg: NamPedalC
   };
 }
 
-/** NAMKnobs upstream_v2 条件化单块(本地评估用) */
+/** NAMKnobs upstream_v2 条件化单块(models-local/,许可未标明,仅本地评估;生产构建不含) */
+const NAMKNOBS_PEDAL_EFFECTS: EffectDefinition[] = import.meta.env.DEV
+  ? [
+      makeNamPedalDef('namComp', 'NAM Comp', '#2e8b57', {
+        modelUrl: `${NAMKNOBS}/comp.nam`,
+        controls: ['threshold', 'ratio', 'attack', 'release'],
+        labels: { threshold: 'THRESH', ratio: 'RATIO', attack: 'ATTACK', release: 'RELEASE' },
+        defaults: { threshold: 0.5, ratio: 0.5, attack: 0.5, release: 0.5 },
+      }),
+      makeNamPedalDef('namTs', 'NAM TS', '#3f7a3f', {
+        modelUrl: `${NAMKNOBS}/ts_full.nam`,
+        controls: ['drive', 'tone'],
+        labels: { drive: 'DRIVE', tone: 'TONE' },
+        defaults: { drive: 0.5, tone: 0.5 },
+      }),
+      makeNamPedalDef('namRat', 'NAM RAT', '#5a5a5a', {
+        modelUrl: `${NAMKNOBS}/rat.nam`,
+        controls: ['distortion', 'filter'],
+        labels: { distortion: 'DIST', filter: 'FILTER' },
+        defaults: { distortion: 0.5, filter: 0.5 },
+      }),
+      makeNamPedalDef('namDs1', 'NAM DS-1', '#c8842a', {
+        modelUrl: `${NAMKNOBS}/ds1.nam`,
+        controls: ['dist', 'tone'],
+        labels: { dist: 'DIST', tone: 'TONE' },
+        defaults: { dist: 0.5, tone: 0.5 },
+      }),
+      makeNamPedalDef('namFf', 'NAM FuzzFace', '#8a4a8a', {
+        modelUrl: `${NAMKNOBS}/ff.nam`,
+        controls: ['fuzz'],
+        labels: { fuzz: 'FUZZ' },
+        defaults: { fuzz: 0.5 },
+      }),
+      makeNamPedalDef('namGr', 'NAM GreenMuff', '#4a6b3a', {
+        modelUrl: `${NAMKNOBS}/gr.nam`,
+        controls: ['sustain', 'tone'],
+        labels: { sustain: 'SUSTAIN', tone: 'TONE' },
+        defaults: { sustain: 0.5, tone: 0.5 },
+      }),
+      makeNamPedalDef('namMxr', 'NAM Dist+', '#b03a2e', {
+        modelUrl: `${NAMKNOBS}/mxr.nam`,
+        controls: ['distortion'],
+        labels: { distortion: 'DIST' },
+        defaults: { distortion: 0.5 },
+      }),
+    ]
+  : [];
+
+/** NAM 单块(条件化 + 快照;快照随 git 发布,条件化仅本地) */
 export const NAM_PEDAL_EFFECTS: EffectDefinition[] = [
-  makeNamPedalDef('namComp', 'NAM Comp', '#2e8b57', {
-    modelUrl: `${NAMKNOBS}/comp.nam`,
-    controls: ['threshold', 'ratio', 'attack', 'release'],
-    labels: { threshold: 'THRESH', ratio: 'RATIO', attack: 'ATTACK', release: 'RELEASE' },
-    defaults: { threshold: 0.5, ratio: 0.5, attack: 0.5, release: 0.5 },
-  }),
-  makeNamPedalDef('namTs', 'NAM TS', '#3f7a3f', {
-    modelUrl: `${NAMKNOBS}/ts_full.nam`,
-    controls: ['drive', 'tone'],
-    labels: { drive: 'DRIVE', tone: 'TONE' },
-    defaults: { drive: 0.5, tone: 0.5 },
-  }),
-  makeNamPedalDef('namRat', 'NAM RAT', '#5a5a5a', {
-    modelUrl: `${NAMKNOBS}/rat.nam`,
-    controls: ['distortion', 'filter'],
-    labels: { distortion: 'DIST', filter: 'FILTER' },
-    defaults: { distortion: 0.5, filter: 0.5 },
-  }),
-  makeNamPedalDef('namDs1', 'NAM DS-1', '#c8842a', {
-    modelUrl: `${NAMKNOBS}/ds1.nam`,
-    controls: ['dist', 'tone'],
-    labels: { dist: 'DIST', tone: 'TONE' },
-    defaults: { dist: 0.5, tone: 0.5 },
-  }),
-  makeNamPedalDef('namFf', 'NAM FuzzFace', '#8a4a8a', {
-    modelUrl: `${NAMKNOBS}/ff.nam`,
-    controls: ['fuzz'],
-    labels: { fuzz: 'FUZZ' },
-    defaults: { fuzz: 0.5 },
-  }),
-  makeNamPedalDef('namGr', 'NAM GreenMuff', '#4a6b3a', {
-    modelUrl: `${NAMKNOBS}/gr.nam`,
-    controls: ['sustain', 'tone'],
-    labels: { sustain: 'SUSTAIN', tone: 'TONE' },
-    defaults: { sustain: 0.5, tone: 0.5 },
-  }),
-  makeNamPedalDef('namMxr', 'NAM Dist+', '#b03a2e', {
-    modelUrl: `${NAMKNOBS}/mxr.nam`,
-    controls: ['distortion'],
-    labels: { distortion: 'DIST' },
-    defaults: { distortion: 0.5 },
-  }),
+  ...NAMKNOBS_PEDAL_EFFECTS,
   // 快照单块(pelennor2170/NAM_models,GPL-3.0;固定旋钮位的 capture,仅 LEVEL)
   makeNamPedalDef('namSd1', 'NAM SD-1', '#c8a24a', {
     modelUrl: `${import.meta.env.BASE_URL}models/snapshot-pedals/boss-sd1.nam`,

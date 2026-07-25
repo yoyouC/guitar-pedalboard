@@ -11,17 +11,15 @@ import { reportAmpLoad, resetAmpLoad } from './loadProgress';
  * worklet 生命周期由 namWasmVoice.ts 统一管理(与 NAM 单块共用)。
  */
 
-/** 内置 WaveNet 模型清单(来源与许可见 public/models/ATTRIBUTION.md) */
+/** 内置 WaveNet 模型清单(来源与许可见 public/models/ATTRIBUTION.md;这些文件随 git 跟踪并随部署发布) */
 export interface BundledNamWasmModel {
   id: string;
   name: string;
   url: string;
 }
 
-export const BUNDLED_WAVENET_MODELS: BundledNamWasmModel[] = [
+const TRACKED_WAVENET_MODELS: BundledNamWasmModel[] = [
   // 清音
-  { id: 'wavenet-ac10', name: 'Vox AC10 (WaveNet)', url: `${import.meta.env.BASE_URL}models/ac10-wavenet.nam` },
-  { id: 'wavenet-deluxe', name: 'Deluxe Reverb (WaveNet)', url: `${import.meta.env.BASE_URL}models/deluxe-wavenet.nam` },
   { id: 'fender-twinverb', name: 'Fender TwinVerb', url: `${import.meta.env.BASE_URL}models/fender-twinverb.nam` },
   { id: 'peavey-5152-clean', name: '5152 Clean', url: `${import.meta.env.BASE_URL}models/peavey-5152-clean.nam` },
   { id: 'vox-ac15', name: 'Vox AC15', url: `${import.meta.env.BASE_URL}models/vox-ac15.nam` },
@@ -38,6 +36,19 @@ export const BUNDLED_WAVENET_MODELS: BundledNamWasmModel[] = [
   { id: 'bug1990-lead', name: 'Bug1990 Lead (JCM800系)', url: `${import.meta.env.BASE_URL}models/bug1990-lead.nam` },
   { id: '5150-blockletter', name: '5150 Block Letter', url: `${import.meta.env.BASE_URL}models/helga-5150-blockletter.nam` },
   { id: '6505-red', name: '6505+ Red Ch', url: `${import.meta.env.BASE_URL}models/helga-6505-red.nam` },
+];
+
+/** 仅本地评估的模型(models-local/,git-ignored,许可不允许公开分发;生产构建不含) */
+const LOCAL_WAVENET_MODELS: BundledNamWasmModel[] = import.meta.env.DEV
+  ? [
+      { id: 'wavenet-ac10', name: 'Vox AC10 (本地评估)', url: `${import.meta.env.BASE_URL}models-local/ac10-wavenet.nam` },
+      { id: 'wavenet-deluxe', name: 'Deluxe Reverb (本地评估)', url: `${import.meta.env.BASE_URL}models-local/deluxe-wavenet.nam` },
+    ]
+  : [];
+
+export const BUNDLED_WAVENET_MODELS: BundledNamWasmModel[] = [
+  ...TRACKED_WAVENET_MODELS,
+  ...LOCAL_WAVENET_MODELS,
 ];
 
 /** .nam 文件的元数据(响度归一化与显示用,架构无关) */
@@ -72,51 +83,53 @@ export interface NamSweepPack {
   stages: NamSweepStage[];
 }
 
-const SWEEP_BASE = `${import.meta.env.BASE_URL}models/marshall-sweep`;
-const SWEEPS_BASE = `${import.meta.env.BASE_URL}models`;
+const SWEEPS_BASE = `${import.meta.env.BASE_URL}models-local`;
 
-export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
-  'jcm800-sweep': {
-    id: 'jcm800-sweep',
-    name: 'JCM800 2203(增益扫档)',
-    stages: ['g1.0', 'g2.5', 'g4.0', 'g5.5', 'g7.0', 'g8.0', 'g9.0', 'ga10'].map((g) => ({
-      gain: g === 'ga10' ? '10' : g.slice(1),
-      url: `${SWEEP_BASE}/jcm800-high-${g}-11.4dBu.nam`,
-    })),
-  },
-  'bassman-sweep': {
-    id: 'bassman-sweep',
-    name: 'Fender Bassman 50(增益扫档)',
-    stages: ['1', '2', '3', '4', '5', '6', '7', '9'].map((g) => ({
-      gain: g,
-      url: `${SWEEPS_BASE}/bassman-sweep/g${g}.nam`,
-    })),
-  },
-  'dualterror-sweep': {
-    id: 'dualterror-sweep',
-    name: 'Orange Dual Terror(增益扫档)',
-    stages: ['1', '2', '3', '4', '5', '6', '7', '9'].map((g) => ({
-      gain: g,
-      url: `${SWEEPS_BASE}/dualterror-sweep/g${g}.nam`,
-    })),
-  },
-  'evh-green-sweep': {
-    id: 'evh-green-sweep',
-    name: 'EVH 5150 6L6 Green(增益扫档)',
-    stages: ['1', '2', '3', '4', '5', '6', '8', '10'].map((g) => ({
-      gain: g,
-      url: `${SWEEPS_BASE}/evh-green-sweep/g${g}.nam`,
-    })),
-  },
-  'recto-red-sweep': {
-    id: 'recto-red-sweep',
-    name: 'Mesa Dual Recto Red(增益扫档)',
-    stages: ['2', '2.5', '4', '5', '6', '7', '8', '10'].map((g) => ({
-      gain: g,
-      url: `${SWEEPS_BASE}/recto-red-sweep/g${g}.nam`,
-    })),
-  },
-};
+/** 增益扫档包(models-local/,许可未标明,仅本地评估;生产构建为空对象) */
+export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = import.meta.env.DEV
+  ? {
+      'jcm800-sweep': {
+        id: 'jcm800-sweep',
+        name: 'JCM800 2203(增益扫档)',
+        stages: ['g1.0', 'g2.5', 'g4.0', 'g5.5', 'g7.0', 'g8.0', 'g9.0', 'ga10'].map((g) => ({
+          gain: g === 'ga10' ? '10' : g.slice(1),
+          url: `${SWEEPS_BASE}/marshall-sweep/jcm800-high-${g}-11.4dBu.nam`,
+        })),
+      },
+      'bassman-sweep': {
+        id: 'bassman-sweep',
+        name: 'Fender Bassman 50(增益扫档)',
+        stages: ['1', '2', '3', '4', '5', '6', '7', '9'].map((g) => ({
+          gain: g,
+          url: `${SWEEPS_BASE}/bassman-sweep/g${g}.nam`,
+        })),
+      },
+      'dualterror-sweep': {
+        id: 'dualterror-sweep',
+        name: 'Orange Dual Terror(增益扫档)',
+        stages: ['1', '2', '3', '4', '5', '6', '7', '9'].map((g) => ({
+          gain: g,
+          url: `${SWEEPS_BASE}/dualterror-sweep/g${g}.nam`,
+        })),
+      },
+      'evh-green-sweep': {
+        id: 'evh-green-sweep',
+        name: 'EVH 5150 6L6 Green(增益扫档)',
+        stages: ['1', '2', '3', '4', '5', '6', '8', '10'].map((g) => ({
+          gain: g,
+          url: `${SWEEPS_BASE}/evh-green-sweep/g${g}.nam`,
+        })),
+      },
+      'recto-red-sweep': {
+        id: 'recto-red-sweep',
+        name: 'Mesa Dual Recto Red(增益扫档)',
+        stages: ['2', '2.5', '4', '5', '6', '7', '8', '10'].map((g) => ({
+          gain: g,
+          url: `${SWEEPS_BASE}/recto-red-sweep/g${g}.nam`,
+        })),
+      },
+    }
+  : {};
 
 let currentPack: NamSweepPack | null = null;
 

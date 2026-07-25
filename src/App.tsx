@@ -458,6 +458,10 @@ export default function App() {
         {cabEnabled && ` → ${getCabDef(cabId).name}`} → 输出
         {globalBypass && '(全局 Bypass 中)'}
         {!inputType && <span className="hint"> — 请在上方选择一个输入源开始</span>}
+        {' · '}
+        <a href="models/ATTRIBUTION.md" target="_blank" rel="noreferrer">
+          模型许可
+        </a>
       </footer>
     </div>
   );
