@@ -81,6 +81,9 @@ export default function App() {
 
   const [inputType, setInputType] = useState<InputSourceType | null>(null);
   const [engineReady, setEngineReady] = useState(false);
+  /** 音频图重建后 bump 一次,让 render 时读取引擎侧节点引用
+   *  (preAmpAnalyser / ampAnalyser / moduleAnalysers)的组件拿到新实例 */
+  const [, setGraphVersion] = useState(0);
   const [inputGain, setInputGain] = useState(1);
   const [masterVolume, setMasterVolume] = useState(0.5);
   const [globalBypass, setGlobalBypass] = useState(false);
@@ -144,6 +147,8 @@ export default function App() {
       enabled: cabEnabled,
       values: cabValues,
     });
+    // 引擎已重建,刷新依赖引擎侧节点引用的组件(背景/电平表)
+    setGraphVersion((v) => v + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey]);
 
