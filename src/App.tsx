@@ -464,6 +464,7 @@ export default function App() {
         onToggleMeters={() => setShowMeters((m) => !m)}
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
+        engineReady={engineReady}
       />
 
       <PresetBar

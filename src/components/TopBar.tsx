@@ -1,5 +1,6 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { InputSourceType } from '../audio/AudioEngine';
+import { audioEngine } from '../audio/AudioEngine';
 import { INPUT_TARGET_DB } from '../audio/level';
 import { LevelMeter } from './LevelMeter';
 
@@ -26,11 +27,48 @@ interface TopBarProps {
   onToggleMeters: () => void;
   inputAnalyser: AnalyserNode | null;
   outputAnalyser: AnalyserNode | null;
+  /** 引擎已初始化(用户手势后),录音按钮才可用 */
+  engineReady: boolean;
 }
 
-/** 顶部控制台:输入源 / 输入电平 / 输出 三组,分组标签 + 竖分隔 */
+/** 录音时长 mm:ss */
+function formatRecordTime(seconds: number): string {
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const ss = String(seconds % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
+/** 顶部控制台:输入源 / 输入电平 / 输出 / 录音 四组,分组标签 + 竖分隔 */
 export function TopBar(props: TopBarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // 录音状态在 React 侧管理;引擎只提供流(start/stopRecording)
+  const [recording, setRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const recordTimerRef = useRef<number | null>(null);
+
+  const stopRecordTimer = () => {
+    if (recordTimerRef.current !== null) {
+      window.clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+  };
+
+  // 卸载时停表(引擎录音随停止按钮或页面关闭结束)
+  useEffect(() => stopRecordTimer, []);
+
+  const handleRecordToggle = () => {
+    if (recording) {
+      audioEngine.stopRecording(); // 停止后引擎自动触发下载
+      setRecording(false);
+      stopRecordTimer();
+      return;
+    }
+    if (!audioEngine.startRecording()) return; // 引擎未就绪
+    setRecordSeconds(0);
+    setRecording(true);
+    recordTimerRef.current = window.setInterval(() => setRecordSeconds((s) => s + 1), 1000);
+  };
 
   return (
     <div className="top-bar">
@@ -157,6 +195,27 @@ export function TopBar(props: TopBarProps) {
           >
             {props.globalBypass ? '已 Bypass' : 'Bypass'}
           </button>
+        </div>
+      </div>
+
+      <div className="console-divider" />
+
+      <div className="console-group">
+        <span className="group-label">录音</span>
+        <div className="group-body">
+          <button
+            className={`record-btn ${recording ? 'recording' : ''}`}
+            disabled={!props.engineReady && !recording}
+            title={
+              props.engineReady
+                ? '录制输出(webm/opus),停止后自动下载'
+                : '请先选择一个输入源'
+            }
+            onClick={handleRecordToggle}
+          >
+            {recording ? '■ 停止' : '● 录音'}
+          </button>
+          {recording && <span className="record-time">{formatRecordTime(recordSeconds)}</span>}
         </div>
       </div>
     </div>

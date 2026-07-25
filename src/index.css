@@ -234,6 +234,35 @@ input[type='text'] {
   box-shadow: 0 0 10px rgba(255, 60, 50, 0.4);
 }
 
+.record-btn {
+  border-color: #7a3535;
+  color: #e08080;
+}
+
+.record-btn.recording {
+  background: #7a3535;
+  border-color: #a05050;
+  color: #fff;
+  animation: record-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes record-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 6px rgba(255, 60, 50, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(255, 60, 50, 0.7);
+  }
+}
+
+.record-time {
+  font-family: monospace;
+  font-size: 12px;
+  color: #e08080;
+  min-width: 42px;
+}
+
 /* ---------- 预设栏 ---------- */
 
 .preset-bar {
