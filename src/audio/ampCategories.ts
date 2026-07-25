@@ -37,8 +37,8 @@ const wasmPack = (ref: string): AmpModelEntry => ({
   ref,
 });
 
-/** 扫档包条目(仅本地评估,生产构建不含) */
-const sweepEntry = (ref: string): AmpModelEntry[] => (import.meta.env.DEV ? [wasmPack(ref)] : []);
+/** 扫档包条目(已获授权,随 git 发布) */
+const sweepEntry = (ref: string): AmpModelEntry[] => [wasmPack(ref)];
 
 const LSTM_NAME = new Map(BUNDLED_NAM_MODELS.map((m) => [m.id, m.name]));
 const WASM_NAME = new Map(BUNDLED_WAVENET_MODELS.map((m) => [m.id, m.name]));
