@@ -86,6 +86,7 @@ SPICE 参考网表在 `scripts/spice/`(Koren B-source 子电路 + 理想运放/�
 | **DS-1 WDF ⚗** | BJT 前级+运放+1N4148 对地削波+LP/HP 交叉 TONE | RMSE 5.1%,RMS 差 0.02dB,THD 19.1/18.8% |
 | **Fuzz Face WDF ⚗** | 双锗管共射+Ebers-Moll 3 变量 Newton | RMSE 4.1%,RMS 差 0.03dB,THD 20.9/21.1% |
 | **Big Muff WDF ⚗** | 双级 1N4148 对地削波+LP/HP 交叉 TONE | RMSE 8.6%,RMS 差 0.07dB,THD 52.2/51.9% |
+| **磁带延迟 ⚗** | EP-3 风格:录制软削波 + wow/flutter 调制读出头 + 环内磁头损耗 LP/HP 与循环软削波(fb>1 有界自激) | —(行为级 L0~L3,`node scripts/wdf-tapedelay-eval.ts`) |
 | **RAT WDF ⚗** | 可变增益运放(1.5kHz HP + 5.3kHz 摆率 LP)+ 1N914 对地硬削波 + 反向 FILTER | RMSE 9.5%,RMS 差 0.4dB,THD 31.3%/31.8%(硬削波沿时序差主导 RMSE) |
 
 ## 4. 已踩过的坑(经验教训)
@@ -117,6 +118,13 @@ spice 参考电路同样出现,治理用经典疗法:耦合电容 22nF→4.7nF
   级间需要单位增益缓冲;
 - 栅流用 `max()` 硬折线会让求解器爆炸,必须换平滑二极管。
 
+### 4.6 反馈环内的非线性(时序类效果)
+延迟/混响的反馈环里放削波时,环内软削波的**小信号增益必须精确为 1**
+(如 p=4 代数软削 `x/(1+(x/L)^4)^(1/4)`,而非 tanh(dx)/tanh(d) 的小信号增益 d/tanh(d)>1),
+否则 FEEDBACK 的自激阈值随饱和旋钮漂移。fb>1 自激的稳态电平由环内削波膝点决定;
+环内必须有一阶 HP(~30Hz)阻断 DC 累积。静音→静音依然成立:0 是不稳定但精确的不动点,
+浮点零输入永远产生零输出(评测自激需用激励脉冲点燃)。
+
 ## 5. 目录结构
 
 ```
@@ -124,16 +132,19 @@ src/audio/wdf/
 ├── triode.ts          # 共阴极三极管级(TS 参考实现,Node 可测)
 ├── diodeClipper.ts    # TS808 运放+二极管对 WDF 级
 ├── ratDistortion.ts   # RAT 失真核心(增益级+摆率 LP+二极管硬削波/FILTER 联立 Newton)
+├── tapeDelay.ts       # 磁带延迟核心(EP-3 风格:调制延迟线+环内损耗/软削波,Node 可测)
 ├── resample.ts        # 4x 多相升采样 + 48 阶 FIR 降采样
 ├── champWorklet.ts    # WDF Champ 处理器(IIFE 内联)
 ├── bognerWorklet.ts   # WDF Bogner 处理器
 ├── ratWorklet.ts      # RAT WDF 处理器
+├── tapedelayWorklet.ts # 磁带延迟处理器
 └── ts808Worklet.ts    # TS808 WDF 处理器
 scripts/
 ├── wdf-test.ts        # 链稳定性 + 混叠对比
 ├── wdf-ts-eval.ts     # TS808 L0~L3
 ├── wdf-ts-spice-compare.ts      # TS808 L4
 ├── wdf-rat-eval.ts    # RAT L0~L3
+├── wdf-tapedelay-eval.ts # 磁带延迟 L0~L3(时间精度/饱和 THD/wow 解调/高频衰减/自激有界)
 ├── wdf-rat-spice-compare.ts     # RAT L4
 ├── wdf-bogner-spice-compare.ts  # Bogner L4 多档
 └── spice/             # ngspice 参考网表
