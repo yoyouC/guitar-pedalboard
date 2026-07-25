@@ -24,6 +24,8 @@ interface TopBarProps {
   onToggleBypass: () => void;
   showMeters: boolean;
   onToggleMeters: () => void;
+  showTuner: boolean;
+  onToggleTuner: () => void;
   inputAnalyser: AnalyserNode | null;
   outputAnalyser: AnalyserNode | null;
 }
@@ -150,6 +152,13 @@ export function TopBar(props: TopBarProps) {
             onClick={props.onToggleMeters}
           >
             电平表
+          </button>
+          <button
+            className={props.showTuner ? 'active' : ''}
+            title="显示/隐藏调音表"
+            onClick={props.onToggleTuner}
+          >
+            调音表
           </button>
           <button
             className={`bypass-btn ${props.globalBypass ? 'bypassed' : ''}`}

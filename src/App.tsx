@@ -22,6 +22,7 @@ import {
   savePresets,
 } from './state/store';
 import { TopBar } from './components/TopBar';
+import { Tuner } from './components/Tuner';
 import { ChainView } from './components/ChainView';
 import { PresetBar } from './components/PresetBar';
 import { AmpPanel } from './components/AmpPanel';
@@ -84,6 +85,7 @@ export default function App() {
   const [masterVolume, setMasterVolume] = useState(0.5);
   const [globalBypass, setGlobalBypass] = useState(false);
   const [showMeters, setShowMeters] = useState(true);
+  const [showTuner, setShowTuner] = useState(false);
 
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -462,9 +464,14 @@ export default function App() {
         onToggleBypass={() => setGlobalBypass((b) => !b)}
         showMeters={showMeters}
         onToggleMeters={() => setShowMeters((m) => !m)}
+        showTuner={showTuner}
+        onToggleTuner={() => setShowTuner((t) => !t)}
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
       />
+
+      {/* 调音表:下拉面板,不占效果链位置 */}
+      {showTuner && <Tuner analyser={engineReady ? audioEngine.inputAnalyser : null} />}
 
       <PresetBar
         presets={presets}
