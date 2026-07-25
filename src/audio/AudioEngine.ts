@@ -47,8 +47,10 @@ export type InputSourceType = 'mic' | 'file' | 'test';
  * 音频引擎单例:
  *   输入源 → inputGain → inputAnalyser(仅测量) → [效果链] → outputAnalyser
  *   → limiter(-1dBFS 安全网) → masterGain → destination
+ *                          ↘ recorderDest(录音抽头)
  * 限幅器只拦截临近削波的峰值,常态不压缩节目动态;
  * 主音量位于限幅器之后(≤1),监听音量与压缩量解耦,destination 不会过载。
+ * 录音抽头与 masterGain 并列(限幅器之后),录音电平不受监听音量影响。
  */
 class AudioEngine {
   private static _instance = new AudioEngine();
@@ -67,6 +69,10 @@ class AudioEngine {
   private inputGain: GainNode | null = null;
   private masterGain: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
+  /** 录音抽头:限幅器之后的 MediaStreamDestination(与监听音量解耦) */
+  private recorderDest: MediaStreamAudioDestinationNode | null = null;
+  private mediaRecorder: MediaRecorder | null = null;
+  private recordChunks: Blob[] = [];
 
   private sourceNode: AudioNode | null = null;
   private mediaStream: MediaStream | null = null;
@@ -110,6 +116,9 @@ class AudioEngine {
     this.outputAnalyser.connect(this.limiter);
     this.limiter.connect(this.masterGain);
     this.masterGain.connect(ctx.destination);
+    // 录音抽头:与 masterGain 并列,录的是限幅后的节目电平(不受监听音量影响)
+    this.recorderDest = ctx.createMediaStreamDestination();
+    this.limiter.connect(this.recorderDest);
 
     try {
       await loadNoiseGate(ctx);
@@ -339,6 +348,69 @@ class AudioEngine {
     if (typeof ctx.setSinkId !== 'function') return false;
     await ctx.setSinkId(deviceId);
     return true;
+  }
+
+  // ---------- 输出录音 ----------
+
+  /** 是否正在录音 */
+  get recording(): boolean {
+    return this.mediaRecorder !== null;
+  }
+
+  /**
+   * 开始录音(webm/opus),返回是否成功启动。
+   * 引擎未初始化(尚无用户手势触发的 init)或已在录制时返回 false。
+   */
+  startRecording(): boolean {
+    if (!this.ctx || !this.recorderDest || this.mediaRecorder) return false;
+    // 优先 webm/opus;均不支持则用浏览器默认容器
+    let mimeType = '';
+    for (const t of ['audio/webm;codecs=opus', 'audio/webm']) {
+      if (MediaRecorder.isTypeSupported(t)) {
+        mimeType = t;
+        break;
+      }
+    }
+    const rec = new MediaRecorder(
+      this.recorderDest.stream,
+      mimeType ? { mimeType } : undefined,
+    );
+    this.recordChunks = [];
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) this.recordChunks.push(e.data);
+    };
+    rec.onstop = () => {
+      const blob = new Blob(this.recordChunks, { type: rec.mimeType || 'audio/webm' });
+      this.recordChunks = [];
+      this.mediaRecorder = null;
+      this.downloadRecording(blob);
+    };
+    rec.start(1000); // 每秒一个分片,长录音不必等停止才聚合数据
+    this.mediaRecorder = rec;
+    return true;
+  }
+
+  /** 停止录音;停止后自动触发 .webm 文件下载 */
+  stopRecording(): void {
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+    }
+  }
+
+  /** 生成时间戳文件名并触发浏览器下载 */
+  private downloadRecording(blob: Blob): void {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const stamp =
+      `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+      `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `guitar-pedalboard-${stamp}.webm`;
+    a.click();
+    // 延迟回收,确保下载已开始
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   // ---------- 效果链 ----------

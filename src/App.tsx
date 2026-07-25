@@ -499,6 +499,7 @@ export default function App() {
         onToggleTuner={() => setShowTuner((t) => !t)}
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
+        engineReady={engineReady}
       />
 
       {/* 调音表:下拉面板,不占效果链位置 */}
