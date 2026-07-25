@@ -8,6 +8,15 @@ import { loadKlonWdf } from './wdf/klonWorklet';
 import { loadDs1Wdf } from './wdf/ds1Worklet';
 import { loadFuzzFaceWdf } from './wdf/fuzzfaceWorklet';
 import { loadBigMuffWdf } from './wdf/bigmuffWorklet';
+import { loadSpringReverbWdf } from './wdf/springreverbWorklet';
+import { loadPlateReverb } from './wdf/plateWorklet';
+import { loadShimmerWdf } from './wdf/shimmerWorklet';
+import { loadAnalogDelayWdf } from './wdf/analogdelayWorklet';
+import { loadTapeDelayWdf } from './wdf/tapedelayWorklet';
+import { loadPingPongDelay } from './wdf/pingpongWorklet';
+import { loadLa2aOpto } from './wdf/la2aWorklet';
+import { loadFet1176 } from './wdf/fet1176Worklet';
+import { loadDynaCompWdf } from './wdf/dynacompWorklet';
 import { loadNamWasmWorklet } from './namWasmWorklet';
 
 /** 引擎重建链条所需的快照 */
@@ -144,6 +153,51 @@ class AudioEngine {
       await loadBigMuffWdf(ctx);
     } catch (e) {
       console.warn('Big Muff WDF worklet 加载失败,该单块将不可用:', e);
+    }
+    try {
+      await loadSpringReverbWdf(ctx);
+    } catch (e) {
+      console.warn('弹簧混响 worklet 加载失败:', e);
+    }
+    try {
+      await loadPlateReverb(ctx);
+    } catch (e) {
+      console.warn('板式混响 worklet 加载失败:', e);
+    }
+    try {
+      await loadShimmerWdf(ctx);
+    } catch (e) {
+      console.warn('微光混响 worklet 加载失败:', e);
+    }
+    try {
+      await loadAnalogDelayWdf(ctx);
+    } catch (e) {
+      console.warn('模拟延迟 worklet 加载失败:', e);
+    }
+    try {
+      await loadTapeDelayWdf(ctx);
+    } catch (e) {
+      console.warn('磁带延迟 worklet 加载失败:', e);
+    }
+    try {
+      await loadPingPongDelay(ctx);
+    } catch (e) {
+      console.warn('乒乓延迟 worklet 加载失败:', e);
+    }
+    try {
+      await loadLa2aOpto(ctx);
+    } catch (e) {
+      console.warn('LA-2A worklet 加载失败:', e);
+    }
+    try {
+      await loadFet1176(ctx);
+    } catch (e) {
+      console.warn('FET1176 worklet 加载失败:', e);
+    }
+    try {
+      await loadDynaCompWdf(ctx);
+    } catch (e) {
+      console.warn('DynaComp worklet 加载失败:', e);
     }
     try {
       await loadNamWasmWorklet(ctx);

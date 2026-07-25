@@ -21,6 +21,15 @@ import { phaserEffect } from './phaser';
 import { tremoloEffect } from './tremolo';
 import { delayEffect } from './delay';
 import { reverbEffect } from './reverb';
+import { springReverbEffect } from './springreverb';
+import { plateEffect } from './plate';
+import { shimmerEffect } from './shimmer';
+import { analogDelayEffect } from './analogdelay';
+import { tapeDelayEffect } from './tapedelay';
+import { pingpongEffect } from './pingpong';
+import { la2aEffect } from './la2a';
+import { fet1176Effect } from './fet1176';
+import { dynaCompEffect } from './dynacomp';
 import { volumeEffect } from './volume';
 import { NAM_PEDAL_EFFECTS } from './namPedal';
 
@@ -28,6 +37,9 @@ import { NAM_PEDAL_EFFECTS } from './namPedal';
 export const EFFECT_REGISTRY: EffectDefinition[] = [
   noiseGateEffect,
   compressorEffect,
+  la2aEffect,
+  fet1176Effect,
+  dynaCompEffect,
   klonEffect,
   overdriveEffect,
   ts808Effect,
@@ -47,7 +59,13 @@ export const EFFECT_REGISTRY: EffectDefinition[] = [
   phaserEffect,
   tremoloEffect,
   delayEffect,
+  analogDelayEffect,
+  tapeDelayEffect,
+  pingpongEffect,
   reverbEffect,
+  springReverbEffect,
+  plateEffect,
+  shimmerEffect,
   volumeEffect,
   // NAMKnobs 条件化单块(见 namPedal.ts)
   ...NAM_PEDAL_EFFECTS,
