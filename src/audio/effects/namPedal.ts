@@ -92,7 +92,7 @@ function createNamPedal(ctx: AudioContext, cfg: NamPedalConfig): EffectInstance 
   };
 }
 
-const NAMKNOBS = `${import.meta.env.BASE_URL}models-local/namknobs`;
+const NAMKNOBS = `${import.meta.env.BASE_URL}models/namknobs`;
 
 function makeNamPedalDef(id: string, name: string, color: string, cfg: NamPedalConfig): EffectDefinition {
   return {
@@ -114,9 +114,8 @@ function makeNamPedalDef(id: string, name: string, color: string, cfg: NamPedalC
   };
 }
 
-/** NAMKnobs upstream_v2 条件化单块(models-local/,许可未标明,仅本地评估;生产构建不含) */
-const NAMKNOBS_PEDAL_EFFECTS: EffectDefinition[] = import.meta.env.DEV
-  ? [
+/** NAMKnobs upstream_v2 条件化单块(已获作者邮件授权,见 ATTRIBUTION) */
+const NAMKNOBS_PEDAL_EFFECTS: EffectDefinition[] = [
       makeNamPedalDef('namComp', 'NAM Comp', '#2e8b57', {
         modelUrl: `${NAMKNOBS}/comp.nam`,
         controls: ['threshold', 'ratio', 'attack', 'release'],
@@ -159,10 +158,9 @@ const NAMKNOBS_PEDAL_EFFECTS: EffectDefinition[] = import.meta.env.DEV
         labels: { distortion: 'DIST' },
         defaults: { distortion: 0.5 },
       }),
-    ]
-  : [];
+    ];
 
-/** NAM 单块(条件化 + 快照;快照随 git 发布,条件化仅本地) */
+/** NAM 单块(条件化 + 快照,均已获授权随 git 发布) */
 export const NAM_PEDAL_EFFECTS: EffectDefinition[] = [
   ...NAMKNOBS_PEDAL_EFFECTS,
   // 快照单块(pelennor2170/NAM_models,GPL-3.0;固定旋钮位的 capture,仅 LEVEL)

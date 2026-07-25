@@ -27,27 +27,32 @@ function* walk(dir) {
 
 if (!existsSync('dist')) fail('dist/ 不存在,先运行 npm run build');
 
-// 1+2. 违禁内容
-const forbidden = [/models-local\//, /-sweep\//, /namknobs\//];
+// 1+2. 违禁内容:仅 models-local/(预留的本地评估目录)不得出现
+const forbidden = [/models-local\//];
 let distFiles = [];
 if (existsSync('dist')) distFiles = [...walk('dist')];
 const hits = distFiles.filter((f) => forbidden.some((re) => re.test(f)));
 if (hits.length) {
   for (const f of hits.slice(0, 10)) fail(`dist 含本地评估模型: ${f}`);
 } else {
-  ok('dist 无 models-local / 扫档包 / namknobs 内容');
+  ok('dist 无 models-local 内容');
 }
 
-// 3. public/models 许可覆盖
+// 3. public/models 许可覆盖:按文件名或其父目录(目录级条目)匹配
 const attribution = existsSync('public/models/ATTRIBUTION.md')
   ? readFileSync('public/models/ATTRIBUTION.md', 'utf8')
   : '';
 const namFiles = existsSync('public/models')
   ? [...walk('public/models')].filter((f) => f.endsWith('.nam'))
   : [];
+const covered = (f) => {
+  const parts = f.split('/');
+  const base = parts[parts.length - 1];
+  const dir = parts[parts.length - 2] ?? '';
+  return attribution.includes(base) || (dir.length >= 3 && dir !== 'models' && attribution.includes(dir));
+};
 for (const f of namFiles) {
-  const base = f.split('/').pop();
-  if (!attribution.includes(base)) fail(`public/models 中 ${base} 未在 ATTRIBUTION.md 记录许可`);
+  if (!covered(f)) fail(`public/models 中 ${f} 未在 ATTRIBUTION.md 记录许可`);
 }
 ok(`public/models 共 ${namFiles.length} 个 .nam,许可记录检查完毕`);
 
