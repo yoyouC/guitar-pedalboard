@@ -13,6 +13,7 @@ import {
   setNamWasmPack,
 } from './audio/namWasm';
 import { AMP_CATEGORIES, getAmpModelEntry } from './audio/ampCategories';
+import { readShareFromLocation, writeShareToLocation } from './state/share';
 import type { ChainItem, Preset } from './state/store';
 import {
   createChainItem,
@@ -143,6 +144,55 @@ export default function App() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structureKey]);
+
+  // ---------- URL 分享(读 hash 还原 + 变更时同步) ----------
+
+  // 启动时:若 URL 带 #p= 分享参数,还原配置(仅一次)
+  const [initialShare] = useState(() => readShareFromLocation());
+  useEffect(() => {
+    if (!initialShare) return;
+    setChain(initialShare.chain);
+    setAmpCategoryId(initialShare.ampCategoryId);
+    setAmpModelKeys((cur) => ({ ...cur, [initialShare.ampCategoryId]: initialShare.ampModelKey }));
+    applyAmpModel(initialShare.ampModelKey);
+    setAmpValues(initialShare.ampValues);
+    setAmpEnabled(initialShare.ampEnabled);
+    setCabId(initialShare.cabId);
+    setCabValues(initialShare.cabValues);
+    setCabEnabled(initialShare.cabEnabled);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 配置变化 → 防抖同步到 URL hash(replaceState,不产生历史记录)
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      writeShareToLocation({
+        chain,
+        ampCategoryId,
+        ampModelKey: ampModelKeys[ampCategoryId],
+        ampEnabled,
+        ampValues,
+        cabId,
+        cabEnabled,
+        cabValues,
+      });
+    }, 400);
+    return () => window.clearTimeout(t);
+  }, [chain, ampCategoryId, ampModelKeys, ampEnabled, ampValues, cabId, cabEnabled, cabValues]);
+
+  /** 生成当前配置的分享 URL(同步 hash 并返回) */
+  const handleShare = useCallback((): string => {
+    return writeShareToLocation({
+      chain,
+      ampCategoryId,
+      ampModelKey: ampModelKeys[ampCategoryId],
+      ampEnabled,
+      ampValues,
+      cabId,
+      cabEnabled,
+      cabValues,
+    });
+  }, [chain, ampCategoryId, ampModelKeys, ampEnabled, ampValues, cabId, cabEnabled, cabValues]);
 
   // ---------- 输入源 ----------
 
@@ -406,6 +456,7 @@ export default function App() {
         onSave={handleSavePreset}
         onLoad={handleLoadPreset}
         onDelete={handleDeletePreset}
+        onShare={handleShare}
       />
 
       <main className="board">

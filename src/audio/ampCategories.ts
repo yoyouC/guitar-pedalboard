@@ -109,3 +109,11 @@ export function getAmpModelEntry(key: string): AmpModelEntry | null {
   }
   return null;
 }
+
+/** 型号所属分类(如 builtin:crunch → crunch 分类) */
+export function getAmpModelCategory(key: string): AmpCategory | null {
+  for (const c of AMP_CATEGORIES) {
+    if (c.models.some((m) => m.key === key)) return c;
+  }
+  return null;
+}
