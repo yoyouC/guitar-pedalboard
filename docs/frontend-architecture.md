@@ -17,6 +17,8 @@
 
 `state/store.ts` 是纯函数模块(不进 React):`createChainItem(def)` 按 `ParamDef.defaultValue` 生成新单块;预设序列化/反序列化(`chainToPreset` / `presetToChain`,**不存 uid**,加载时重新生成,缺失参数回落默认值以兼容旧预设)。
 
+`state/share.ts` 是 URL 分享编解码(`#p=` + base64url JSON,v1 短字段):覆盖**链条 + 箱头分类/型号/参数 + 箱体**(`ShareState`);解码容错——未知 effectId/型号/箱体跳过并告警,参数一律按 ParamDef 范围钳制。`App` 启动时 `readShareFromLocation` 还原一次;配置变化 400ms 防抖 `writeShareToLocation`(replaceState,不刷历史);PresetBar 的"分享"按钮调同一函数取 URL 复制(clipboard 失败时退化为 prompt)。
+
 ## 2. 核心机制:UI ↔ 引擎的双通道同步
 
 这是前端最重要的一段逻辑(`App.tsx` 顶部),务必理解后再改:
