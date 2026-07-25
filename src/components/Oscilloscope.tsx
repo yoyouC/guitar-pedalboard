@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
+import { SpectrumView } from './SpectrumView';
 
 interface OscilloscopeProps {
   inputAnalyser: AnalyserNode | null;
   outputAnalyser: AnalyserNode | null;
+  showMeters: boolean;
 }
 
 const IN_COLOR = '#4a90d9';
@@ -55,7 +57,7 @@ function drawGrid(g2d: CanvasRenderingContext2D, x0: number, w: number) {
 }
 
 /** 输入/输出对半分区的双踪示波器(示意性质,非精确测量) */
-export function Oscilloscope({ inputAnalyser, outputAnalyser }: OscilloscopeProps) {
+export function Oscilloscope({ inputAnalyser, outputAnalyser, showMeters }: OscilloscopeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -110,6 +112,10 @@ export function Oscilloscope({ inputAnalyser, outputAnalyser }: OscilloscopeProp
         </span>
       </div>
       <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} />
+      {/* 频谱视图与电平表开关联动显隐(同面板,示波器下方) */}
+      {showMeters && (
+        <SpectrumView inputAnalyser={inputAnalyser} outputAnalyser={outputAnalyser} />
+      )}
     </div>
   );
 }
