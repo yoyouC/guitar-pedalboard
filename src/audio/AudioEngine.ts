@@ -74,6 +74,8 @@ class AudioEngine {
   private inputGain: GainNode | null = null;
   private masterGain: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
+  /** 节拍器总线(挂到限幅前) */
+  metronomeBus: GainNode | null = null;
   /** 录音抽头:限幅器之后的 MediaStreamDestination(与监听音量解耦) */
   private recorderDest: MediaStreamAudioDestinationNode | null = null;
   private mediaRecorder: MediaRecorder | null = null;
@@ -121,6 +123,9 @@ class AudioEngine {
     this.outputAnalyser.connect(this.limiter);
     this.limiter.connect(this.masterGain);
     this.masterGain.connect(ctx.destination);
+    // 节拍器总线:挂到限幅前,与节目信号同受主音量/限幅控制(也会进录音,符合练琴场景)
+    this.metronomeBus = ctx.createGain();
+    this.metronomeBus.connect(this.limiter);
     // 录音抽头:与 masterGain 并列,录的是限幅后的节目电平(不受监听音量影响)
     this.recorderDest = ctx.createMediaStreamDestination();
     this.limiter.connect(this.recorderDest);

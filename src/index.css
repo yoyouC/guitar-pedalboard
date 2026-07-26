@@ -1056,6 +1056,77 @@ input[type='text'] {
   color: #fff;
 }
 
+/* ---------- 节拍器 ---------- */
+
+.metronome-body {
+  gap: 8px;
+}
+
+.metro-play {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 13px;
+  border-radius: 50%;
+}
+
+.metro-play.playing {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(224, 112, 32, 0.5);
+}
+
+.metro-beats {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.metro-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #3a3f46;
+  transition: background 0.05s;
+}
+
+.metro-dot.dot-on {
+  background: #2ecc71;
+  box-shadow: 0 0 6px rgba(46, 204, 113, 0.8);
+}
+
+.metro-dot.dot-accent {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(224, 112, 32, 0.9);
+}
+
+.metro-bpm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.metro-bpm button {
+  padding: 2px 8px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.metro-bpm-value {
+  min-width: 34px;
+  text-align: center;
+  font-family: monospace;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.metro-tap {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
 /* ---------- 示波器 ---------- */
 
 .oscilloscope {
