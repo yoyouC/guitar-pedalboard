@@ -9,13 +9,13 @@
 | 状态 | 类型 | 说明 |
 |---|---|---|
 | `chain` | `ChainItem[]` | 效果链,元素:`{ uid, effectId, enabled, values }`(`src/state/store.ts`)。`uid` 用 `crypto.randomUUID()` 生成,是 React key 与引擎寻址的双重身份 |
-| `presets` | `Preset[]` | 链条预设,镜像 localStorage(`guitar-pedalboard-presets`) |
+| `presets` | `Preset[]` | 完整 Rig 预设,镜像 localStorage(`guitar-pedalboard-presets`) |
 | `ampId/ampEnabled/ampValues` | — | 箱头选择与参数(默认 `crunch` 开) |
 | `cabId/cabEnabled/cabValues` | — | 箱体选择与参数(默认 `gb4x12` 开) |
 | `inputType, engineReady, inputGain, masterVolume, globalBypass` | — | 输入源(`'mic'/'file'/'test'/null`)、引擎就绪标志、电平、全局 bypass |
 | `micDevices/outputDevices/micId/outputId` | — | 设备枚举(`enumerateDevices` + `devicechange` 监听) |
 
-`state/store.ts` 是纯函数模块(不进 React):`createChainItem(def)` 按 `ParamDef.defaultValue` 生成新单块;预设序列化/反序列化(`chainToPreset` / `presetToChain`,**不存 uid**,加载时重新生成,缺失参数回落默认值以兼容旧预设)。
+`state/store.ts` 负责链条实例与浏览器持久化;`state/presetCodec.ts` 是不依赖 DOM/Web Audio 的纯编解码模块。v2 预设覆盖效果链、箱头、箱体、输入增益、主音量与全局 Bypass,**不存 uid**、加载时重新生成;参数统一按当前目录钳制,并自动把旧版 chain-only 数据迁移到安全的完整 Rig 默认值。PresetBar 还支持版本化 JSON 批量导入导出。
 
 `state/share.ts` 是 URL 分享编解码(`#p=` + base64url JSON,v1 短字段):覆盖**链条 + 箱头分类/型号/参数 + 箱体**(`ShareState`);解码容错——未知 effectId/型号/箱体跳过并告警,参数一律按 ParamDef 范围钳制。`App` 启动时 `readShareFromLocation` 还原一次;配置变化 400ms 防抖 `writeShareToLocation`(replaceState,不刷历史);PresetBar 的"分享"按钮调同一函数取 URL 复制(clipboard 失败时退化为 prompt)。
 
@@ -53,7 +53,7 @@ useEffect(() => {
 | 组件 | 职责 | 关键点 |
 |---|---|---|
 | `TopBar` | 输入源切换、输入设备/输出设备选择、GAIN/MASTER 滑杆、IN/OUT 电平表、全局 Bypass | 三组 `console-group`;输出设备选择由 `'setSinkId' in AudioContext.prototype` 特性检测 |
-| `PresetBar` | 预设保存/加载/删除 | 纯受控,逻辑全在 App |
+| `PresetBar` | 完整 Rig 预设保存/加载/删除、JSON 导入导出、URL 分享 | 纯受控,逻辑全在 App |
 | `ChainView` | 横向 pedalboard,**HTML5 拖拽排序** | 本地 `dragIndex/overIndex` 两个 state 管理拖拽态,`onDrop` 回调 `onReorder(from, to)`;单块间渲染 `patch-cable` 视觉连接线 |
 | `PedalCard` | 单个拟物单块:外壳/螺丝/铭牌/LED/脚踏开关/旋钮排 + 迷你电平表 | 旋钮由 `def.params` **自动渲染**;CSS 类 `skin-${def.id}` + CSS 变量 `--pedal-color`;内嵌 `MiniMeter`(canvas,RMS×1.8,绿→橙→红),仅 enabled 时显示 |
 | `Knob` | 拟物旋转旋钮 | 垂直拖动(150px 走满量程)、滚轮微调(Shift ×10)、双击回默认、方向键;`role="slider"` + ARIA;`-135°~135°` 指针 + 11 刻度点 |
@@ -107,7 +107,7 @@ useEffect(() => {
   │ 单块/箱头/箱体结构 ──► App setState ──► structureKey 变 ──► effect ──► 引擎 rebuildGraph
   │ 旋钮连续参数 ────────► App setState + audioEngine.updateParam(并行,不经 effect)
   │ 输入源/电平/设备 ────► App 事件处理 ──► audioEngine.useMic/useFile/... + setState
-  │ 预设 ──────────────► store.ts 纯函数 ──► localStorage;加载时 setChain(触发通道 A)
+  │ 预设 ──────────────► presetCodec/store ─► localStorage;加载时恢复整套 Rig
   ▼
 渲染:App props 下发 ──► 受控组件;AnalyserNode ──► 可视化组件 rAF 读取
 ```
@@ -121,5 +121,4 @@ useEffect(() => {
 ## 7. 常见改动指引
 
 - **加一个 UI 面板**:新建受控组件,在 App 加状态 + 事件处理 + 渲染;若影响音频拓扑,把相关字段纳入 `structureKey`。
-- **让预设包含箱头/箱体**:扩展 `Preset`(`store.ts`)并处理旧数据兼容(`presetToChain` 的默认值合并模式可参照);保存/加载逻辑在 `App` 的 `handleSavePreset/handleLoadPreset`。
 - **接 MIDI/键盘控制**:在事件源回调里直接调 `handleParam` 等价物(setState + `updateParam`),无需碰引擎。

@@ -1,5 +1,18 @@
 import type { EffectDefinition } from '../audio/effects/types';
-import { getEffectDef } from '../audio/effects';
+import { EFFECT_REGISTRY } from '../audio/effects';
+import { AMP_REGISTRY } from '../audio/amps';
+import { CAB_REGISTRY } from '../audio/cabs';
+import { AMP_CATEGORIES } from '../audio/ampCategories';
+import {
+  createRigPreset,
+  exportRigPresetsJson,
+  importRigPresetsJson,
+  restoreRigPreset,
+  type RigPreset,
+  type RigPresetCatalog,
+  type RigPresetState,
+  type RestoredRigPresetState,
+} from './presetCodec';
 
 /** 链条中的一个效果器实例(React 状态侧) */
 export interface ChainItem {
@@ -23,6 +36,36 @@ const FX_LOOP_EFFECTS = new Set([
   'pingpong',
 ]);
 
+const RIG_PRESET_CATALOG: RigPresetCatalog = {
+  effects: EFFECT_REGISTRY.map((definition) => ({
+    id: definition.id,
+    params: definition.params,
+    defaultPost: FX_LOOP_EFFECTS.has(definition.id),
+  })),
+  amps: AMP_REGISTRY.map((definition) => ({
+    id: definition.id,
+    params: definition.params,
+  })),
+  cabs: CAB_REGISTRY.map((definition) => ({
+    id: definition.id,
+    params: definition.params,
+  })),
+  ampModels: AMP_CATEGORIES.flatMap((category) =>
+    category.models.map((model) => ({
+      key: model.key,
+      categoryId: category.id,
+      ampId: model.kind === 'builtin' ? model.ref : 'nam-wasm',
+    })),
+  ),
+  ampCategoryIds: AMP_CATEGORIES.map((category) => category.id),
+  defaults: {
+    ampModelKey: 'builtin:crunch',
+    cabId: 'gb4x12',
+    inputGain: 1,
+    masterVolume: 0.5,
+  },
+};
+
 export function createChainItem(def: EffectDefinition): ChainItem {
   const values: Record<string, number> = {};
   for (const p of def.params) values[p.key] = p.defaultValue;
@@ -35,11 +78,9 @@ export function createChainItem(def: EffectDefinition): ChainItem {
   };
 }
 
-/** 预设:不含 uid,加载时重新生成 */
-export interface Preset {
-  name: string;
-  items: { effectId: string; enabled: boolean; values: Record<string, number>; post?: boolean }[];
-}
+export type Preset = RigPreset;
+export type FullRigState = RigPresetState;
+export type RestoredFullRigState = RestoredRigPresetState;
 
 const STORAGE_KEY = 'guitar-pedalboard-presets';
 
@@ -47,8 +88,11 @@ export function loadPresets(): Preset[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as Preset[]) : [];
+    const presets = importRigPresetsJson(raw, RIG_PRESET_CATALOG);
+    // 首次读取旧版 chain-only 数据时立即写回 v2，后续不必重复迁移。
+    const migrated = JSON.stringify(presets);
+    if (raw !== migrated) localStorage.setItem(STORAGE_KEY, migrated);
+    return presets;
   } catch {
     return [];
   }
@@ -58,37 +102,18 @@ export function savePresets(presets: Preset[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
 }
 
-export function chainToPreset(name: string, chain: ChainItem[]): Preset {
-  return {
-    name,
-    items: chain.map(({ effectId, enabled, values, post }) => ({
-      effectId,
-      enabled,
-      values: { ...values },
-      post,
-    })),
-  };
+export function currentRigToPreset(name: string, rig: FullRigState): Preset {
+  return createRigPreset(name, rig, RIG_PRESET_CATALOG);
 }
 
-export function presetToChain(preset: Preset): ChainItem[] {
-  return preset.items.map((item) => {
-    const def = getEffectDef(item.effectId);
-    const base = createChainItem(def);
-    // 合并保存值,缺失键回落到默认(兼容旧预设);
-    // 并钳制到当前参数范围:旧预设的值域可能已变更(如 Level 曾为 0~100),
-    // 越界值会映射成危险增益
-    const values = { ...base.values, ...item.values };
-    for (const p of def.params) {
-      if (p.key in values) {
-        values[p.key] = Math.min(p.max, Math.max(p.min, values[p.key]));
-      }
-    }
-    return {
-      ...base,
-      enabled: item.enabled,
-      values,
-      // 旧预设无 post 字段时用类型默认(兼容)
-      post: item.post ?? base.post,
-    };
-  });
+export function presetToRig(preset: Preset): RestoredFullRigState {
+  return restoreRigPreset(preset, RIG_PRESET_CATALOG);
+}
+
+export function exportPresetsJson(presets: Preset[]): string {
+  return exportRigPresetsJson(presets);
+}
+
+export function importPresetsJson(text: string): Preset[] {
+  return importRigPresetsJson(text, RIG_PRESET_CATALOG);
 }

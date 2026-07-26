@@ -16,8 +16,10 @@ import { readShareFromLocation, writeShareToLocation } from './state/share';
 import type { ChainItem, Preset } from './state/store';
 import {
   createChainItem,
-  chainToPreset,
-  presetToChain,
+  currentRigToPreset,
+  presetToRig,
+  exportPresetsJson,
+  importPresetsJson,
   loadPresets,
   savePresets,
 } from './state/store';
@@ -439,21 +441,91 @@ export default function App() {
   const handleSavePreset = useCallback(
     (name: string) => {
       setPresets((cur) => {
-        const next = [...cur.filter((p) => p.name !== name), chainToPreset(name, chain)];
+        const preset = currentRigToPreset(name, {
+          chain,
+          amp: {
+            categoryId: ampCategoryId,
+            modelKey: ampModelKeys[ampCategoryId],
+            enabled: ampEnabled,
+            values: ampValues,
+            customName: ampModelKeys[ampCategoryId] === 'nam-wasm:custom'
+              ? namCustomName
+              : null,
+          },
+          cab: {
+            id: cabId,
+            enabled: cabEnabled,
+            values: cabValues,
+          },
+          globals: {
+            inputGain,
+            masterVolume,
+            bypass: globalBypass,
+          },
+        });
+        const next = [...cur.filter((p) => p.name !== name), preset];
         savePresets(next);
         return next;
       });
     },
-    [chain],
+    [
+      chain,
+      ampCategoryId,
+      ampModelKeys,
+      ampEnabled,
+      ampValues,
+      namCustomName,
+      cabId,
+      cabEnabled,
+      cabValues,
+      inputGain,
+      masterVolume,
+      globalBypass,
+    ],
   );
 
-  const handleLoadPreset = useCallback((name: string) => {
-    setPresets((cur) => {
-      const preset = cur.find((p) => p.name === name);
-      if (preset) setChain(presetToChain(preset));
-      return cur;
-    });
-  }, []);
+  const handleLoadPreset = useCallback(
+    (name: string) => {
+      const preset = presets.find((candidate) => candidate.name === name);
+      if (!preset) return;
+      const rig = presetToRig(preset);
+      if (
+        rig.amp.modelKey === 'nam-wasm:custom' &&
+        (!rig.amp.customName || rig.amp.customName !== namCustomName)
+      ) {
+        alert(
+          `预设需要自定义 NAM 模型“${rig.amp.customName ?? '未知模型'}”。` +
+          '请先在箱头区域重新载入对应的 .nam 文件。',
+        );
+        return;
+      }
+
+      setChain(rig.chain);
+      setAmpCategoryId(rig.amp.categoryId);
+      setAmpModelKeys((cur) => ({
+        ...cur,
+        [rig.amp.categoryId]: rig.amp.modelKey,
+      }));
+      applyAmpModel(rig.amp.modelKey);
+      setAmpValues(rig.amp.values);
+      setAmpEnabled(rig.amp.enabled);
+      setCabId(rig.cab.id);
+      setCabValues(rig.cab.values);
+      setCabEnabled(rig.cab.enabled);
+      setInputGain(rig.globals.inputGain);
+      setMasterVolume(rig.globals.masterVolume);
+      setGlobalBypass(rig.globals.bypass);
+      for (const [key, value] of Object.entries(rig.amp.values)) {
+        audioEngine.updateAmpParam(key, value);
+      }
+      for (const [key, value] of Object.entries(rig.cab.values)) {
+        audioEngine.updateCabParam(key, value);
+      }
+      audioEngine.setInputGain(rig.globals.inputGain);
+      audioEngine.setMasterVolume(rig.globals.masterVolume);
+    },
+    [presets, namCustomName, applyAmpModel],
+  );
 
   const handleDeletePreset = useCallback((name: string) => {
     setPresets((cur) => {
@@ -462,6 +534,24 @@ export default function App() {
       return next;
     });
   }, []);
+
+  const handleImportPresets = useCallback((text: string): number => {
+    const imported = importPresetsJson(text);
+    setPresets((current) => {
+      // 同名项以导入文件为准，其余本地预设保留。
+      const merged = new Map(current.map((preset) => [preset.name, preset]));
+      for (const preset of imported) merged.set(preset.name, preset);
+      const next = [...merged.values()];
+      savePresets(next);
+      return next;
+    });
+    return imported.length;
+  }, []);
+
+  const handleExportPresets = useCallback(
+    () => exportPresetsJson(presets),
+    [presets],
+  );
 
   // ---------- 渲染 ----------
 
@@ -515,6 +605,8 @@ export default function App() {
         onSave={handleSavePreset}
         onLoad={handleLoadPreset}
         onDelete={handleDeletePreset}
+        onImport={handleImportPresets}
+        onExport={handleExportPresets}
         onShare={handleShare}
       />
 

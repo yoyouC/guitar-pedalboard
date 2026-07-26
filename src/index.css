@@ -285,6 +285,16 @@ input[type='text'] {
   margin: 0 4px;
 }
 
+.preset-status {
+  max-width: 260px;
+  color: #76c893;
+  font-size: 11px;
+}
+
+.preset-status.error {
+  color: #e08080;
+}
+
 /* ---------- 效果器板(Pedaltrain 金属格栅) ---------- */
 
 .board {
