@@ -117,3 +117,32 @@ export function exportPresetsJson(presets: Preset[]): string {
 export function importPresetsJson(text: string): Preset[] {
   return importRigPresetsJson(text, RIG_PRESET_CATALOG);
 }
+
+/** 快照:当前完整状态的轻量快照(A/B 快速对比用) */
+export interface Snapshot {
+  chain: { effectId: string; enabled: boolean; values: Record<string, number>; post: boolean }[];
+  ampId: string;
+  ampEnabled: boolean;
+  ampValues: Record<string, number>;
+  cabId: string;
+  cabEnabled: boolean;
+  cabValues: Record<string, number>;
+}
+
+const SNAPSHOT_KEY = 'guitar-pedalboard-snapshots';
+export const SNAPSHOT_COUNT = 4;
+
+export function loadSnapshots(): (Snapshot | null)[] {
+  try {
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return Array(SNAPSHOT_COUNT).fill(null);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : Array(SNAPSHOT_COUNT).fill(null);
+  } catch {
+    return Array(SNAPSHOT_COUNT).fill(null);
+  }
+}
+
+export function saveSnapshots(snapshots: (Snapshot | null)[]): void {
+  localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshots));
+}
