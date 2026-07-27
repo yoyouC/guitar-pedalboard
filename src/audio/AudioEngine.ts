@@ -21,6 +21,13 @@ import { loadLa2aOpto } from './wdf/la2aWorklet';
 import { loadFet1176 } from './wdf/fet1176Worklet';
 import { loadDynaCompWdf } from './wdf/dynacompWorklet';
 import { loadNamWasmWorklet } from './namWasmWorklet';
+import { loadLooperWorklet } from './looperWorklet';
+import {
+  INITIAL_LOOPER_STATUS,
+  canRunLooperCommand,
+  type LooperCommand,
+  type LooperStatus,
+} from './looperState';
 
 /** 引擎重建链条所需的快照 */
 export interface ChainSpec {
@@ -48,7 +55,7 @@ export type InputSourceType = 'mic' | 'file' | 'test';
 
 /**
  * 音频引擎单例:
- *   输入源 → inputGain → inputAnalyser(仅测量) → [效果链] → outputAnalyser
+ *   输入源 → inputGain → inputAnalyser(仅测量) → [效果链] → looper → outputAnalyser
  *   → limiter(-1dBFS 安全网) → masterGain → destination
  *                          ↘ recorderDest(录音抽头)
  * 限幅器只拦截临近削波的峰值,常态不压缩节目动态;
@@ -80,6 +87,10 @@ class AudioEngine {
   private recorderDest: MediaStreamAudioDestinationNode | null = null;
   private mediaRecorder: MediaRecorder | null = null;
   private recordChunks: Blob[] = [];
+  /** 完整 Rig 之后、输出表之前的无缝单轨 Looper。 */
+  private looperNode: AudioWorkletNode | null = null;
+  private looperStatus: LooperStatus = { ...INITIAL_LOOPER_STATUS };
+  private looperListeners = new Set<(status: LooperStatus) => void>();
 
   private sourceNode: AudioNode | null = null;
   private mediaStream: MediaStream | null = null;
@@ -239,6 +250,27 @@ class AudioEngine {
       await loadNamWasmWorklet(ctx);
     } catch (e) {
       console.warn('NAM WASM worklet 加载失败,NAM WaveNet 箱头将回退为直通:', e);
+    }
+    try {
+      await loadLooperWorklet(ctx);
+      this.looperNode = new AudioWorkletNode(ctx, 'single-track-looper', {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [2],
+        channelCount: 2,
+        channelCountMode: 'explicit',
+      });
+      this.looperNode.connect(this.outputAnalyser);
+      this.looperStatus = {
+        ...INITIAL_LOOPER_STATUS,
+        available: true,
+      };
+      this.looperNode.port.onmessage = (event: MessageEvent<unknown>) => {
+        this.handleLooperMessage(event.data);
+      };
+      this.emitLooperStatus();
+    } catch (e) {
+      console.warn('Looper worklet 加载失败,循环功能将不可用:', e);
     }
     this.rebuildGraph();
   }
@@ -438,6 +470,95 @@ class AudioEngine {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  // ---------- Looper ----------
+
+  get currentLooperStatus(): LooperStatus {
+    return { ...this.looperStatus };
+  }
+
+  subscribeLooper(listener: (status: LooperStatus) => void): () => void {
+    this.looperListeners.add(listener);
+    listener(this.currentLooperStatus);
+    return () => this.looperListeners.delete(listener);
+  }
+
+  private emitLooperStatus(): void {
+    const snapshot = this.currentLooperStatus;
+    for (const listener of this.looperListeners) listener(snapshot);
+  }
+
+  private handleLooperMessage(data: unknown): void {
+    if (!data || typeof data !== 'object') return;
+    const message = data as Record<string, unknown>;
+    if (message.type !== 'looper-status') return;
+    const phase = message.phase;
+    if (
+      phase !== 'empty' &&
+      phase !== 'recording' &&
+      phase !== 'playing' &&
+      phase !== 'overdubbing' &&
+      phase !== 'stopped'
+    ) return;
+    const sampleRate = this.ctx?.sampleRate ?? 48000;
+    const lengthSamples =
+      typeof message.lengthSamples === 'number' ? message.lengthSamples : 0;
+    const positionSamples =
+      typeof message.positionSamples === 'number' ? message.positionSamples : 0;
+    this.looperStatus = {
+      available: true,
+      phase,
+      lengthSeconds: Math.max(0, lengthSamples / sampleRate),
+      positionSeconds: Math.max(0, positionSamples / sampleRate),
+      canUndo: message.canUndo === true,
+      message: typeof message.message === 'string' ? message.message : null,
+    };
+    this.emitLooperStatus();
+  }
+
+  private sendLooperCommand(command: LooperCommand): boolean {
+    if (!this.looperNode || !canRunLooperCommand(this.looperStatus, command)) {
+      return false;
+    }
+    this.looperNode.port.postMessage({ type: command });
+    return true;
+  }
+
+  startLoopRecording(): boolean {
+    return this.sendLooperCommand('record');
+  }
+
+  finishLoopRecording(): boolean {
+    return this.sendLooperCommand('finish-record');
+  }
+
+  startLoopOverdub(): boolean {
+    return this.sendLooperCommand('overdub');
+  }
+
+  finishLoopOverdub(): boolean {
+    return this.sendLooperCommand('finish-overdub');
+  }
+
+  toggleLoopPlayback(): boolean {
+    return this.sendLooperCommand('toggle-play');
+  }
+
+  undoLoopOverdub(): boolean {
+    return this.sendLooperCommand('undo');
+  }
+
+  clearLoop(): boolean {
+    return this.sendLooperCommand('clear');
+  }
+
+  setLoopLevel(value: number): void {
+    if (!this.looperNode) return;
+    this.looperNode.port.postMessage({
+      type: 'set-level',
+      value: Math.max(0, Math.min(1.5, value)),
+    });
+  }
+
   // ---------- 效果链 ----------
 
   setGlobalBypass(bypass: boolean): void {
@@ -598,7 +719,8 @@ class AudioEngine {
     } else {
       this.instances = nextInstances;
     }
-    prev.connect(this.outputAnalyser);
+    // Looper 是固定输出级的一部分，不随效果链重建；若加载失败则安全直通。
+    prev.connect(this.looperNode ?? this.outputAnalyser);
   }
 }
 

@@ -31,6 +31,7 @@ Clean Twin / British Crunch / Modern Recto / AC Chime,位于效果链之后,含�
 
 - 三种输入源互斥切换:**麦克风/线路**(可选设备、关闭回声消除)、**音频文件**(循环播放)、**内置测试音源**(合成 riff,免接琴试听)
 - 输入增益、主音量、限幅保护、全局 Bypass;支持选择输出设备(`setSinkId`,浏览器支持时)
+- 无缝单轨 Looper:录制完整 Rig 音色、循环播放、叠录、撤销最后一次叠录、暂停与循环音量控制
 - IN/OUT 双路电平表
 
 ### 可视化
@@ -66,6 +67,7 @@ npx vercel --prod   # 已链接 Vercel 项目,直接发布
 src/
 ├── audio/
 │   ├── AudioEngine.ts      # 音频引擎:输入源/效果链/箱头/输出路由
+│   ├── looperWorklet.ts    # PCM 无缝循环、叠录与撤销
 │   ├── amps.ts             # 4 款箱头模型
 │   ├── noiseGateWorklet.ts # 噪声门 AudioWorklet(Blob 内联)
 │   ├── impulseResponse.ts  # 程序生成混响 IR

@@ -4,6 +4,7 @@ import { audioEngine } from '../audio/AudioEngine';
 import { INPUT_TARGET_DB } from '../audio/level';
 import { LevelMeter } from './LevelMeter';
 import { MetronomePanel } from './MetronomePanel';
+import { LooperPanel } from './LooperPanel';
 
 interface TopBarProps {
   inputType: InputSourceType | null;
@@ -234,6 +235,10 @@ export function TopBar(props: TopBarProps) {
           {recording && <span className="record-time">{formatRecordTime(recordSeconds)}</span>}
         </div>
       </div>
+
+      <div className="console-divider" />
+
+      <LooperPanel engineReady={props.engineReady} hasInput={props.inputType !== null} />
 
       <div className="console-divider" />
 
