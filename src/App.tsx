@@ -13,7 +13,7 @@ import {
 } from './audio/namWasm';
 import { AMP_CATEGORIES, getAmpModelEntry } from './audio/ampCategories';
 import { readShareFromLocation, writeShareToLocation } from './state/share';
-import type { ChainItem, Preset } from './state/store';
+import type { ChainItem, Preset, Snapshot } from './state/store';
 import {
   createChainItem,
   currentRigToPreset,
@@ -22,11 +22,14 @@ import {
   importPresetsJson,
   loadPresets,
   savePresets,
+  loadSnapshots,
+  saveSnapshots,
 } from './state/store';
 import { TopBar } from './components/TopBar';
 import { Tuner } from './components/Tuner';
 import { ChainView } from './components/ChainView';
 import { PresetBar } from './components/PresetBar';
+import { SnapshotBar } from './components/SnapshotBar';
 import { AmpPanel } from './components/AmpPanel';
 import { CabPanel } from './components/CabPanel';
 import { Oscilloscope } from './components/Oscilloscope';
@@ -55,6 +58,10 @@ function defaultCabValues(cabId: string): Record<string, number> {
 export default function App() {
   const [chain, setChain] = useState<ChainItem[]>(defaultChain);
   const [presets, setPresets] = useState<Preset[]>(loadPresets);
+
+  // 快照(A/B/C/D 四槽,localStorage 持久化;activeSlot=-1 表示无激活槽)
+  const [snapshots, setSnapshots] = useState<(Snapshot | null)[]>(loadSnapshots);
+  const [activeSlot, setActiveSlot] = useState(-1);
 
   const [ampId, setAmpId] = useState('crunch');
   const [ampEnabled, setAmpEnabled] = useState(true);
@@ -322,6 +329,72 @@ export default function App() {
 
   // ---------- 快捷键 ----------
 
+  /** 当前整机状态 → 快照对象 */
+  const captureSnapshot = useCallback((): Snapshot => ({
+    chain: chain.map(({ effectId, enabled, values, post }) => ({
+      effectId,
+      enabled,
+      values: { ...values },
+      post,
+    })),
+    ampId,
+    ampEnabled,
+    ampValues: { ...ampValues },
+    cabId,
+    cabEnabled,
+    cabValues: { ...cabValues },
+  }), [chain, ampId, ampEnabled, ampValues, cabId, cabEnabled, cabValues]);
+
+  /** 存入指定槽位 */
+  const storeSnapshot = useCallback((slot: number) => {
+    setSnapshots((cur) => {
+      const next = [...cur];
+      next[slot] = captureSnapshot();
+      saveSnapshots(next);
+      return next;
+    });
+    setActiveSlot(slot);
+  }, [captureSnapshot]);
+
+  /** 从槽位恢复 */
+  const recallSnapshot = useCallback((slot: number) => {
+    const snap = snapshots[slot];
+    if (!snap) return;
+    setChain(
+      snap.chain.map((item) => ({
+        uid: crypto.randomUUID(),
+        effectId: item.effectId,
+        enabled: item.enabled,
+        values: { ...item.values },
+        post: item.post,
+      })),
+    );
+    setAmpId(snap.ampId);
+    setAmpEnabled(snap.ampEnabled);
+    setAmpValues({ ...snap.ampValues });
+    setCabId(snap.cabId);
+    setCabEnabled(snap.cabEnabled);
+    setCabValues({ ...snap.cabValues });
+    setActiveSlot(slot);
+  }, [snapshots]);
+
+  /** 清空槽位 */
+  const clearSnapshot = useCallback((slot: number) => {
+    setSnapshots((cur) => {
+      const next = [...cur];
+      next[slot] = null;
+      saveSnapshots(next);
+      return next;
+    });
+    setActiveSlot((cur) => (cur === slot ? -1 : cur));
+  }, []);
+
+  /** 当前状态与激活槽是否一致(不一致显示"已修改"点) */
+  const activeDirty = useMemo(() => {
+    if (activeSlot < 0 || !snapshots[activeSlot]) return false;
+    return JSON.stringify(captureSnapshot()) !== JSON.stringify(snapshots[activeSlot]);
+  }, [activeSlot, snapshots, captureSnapshot]);
+
   // 数字键 1~9:按板上显示顺序(前置区 → FX Loop 区,即平铺数组顺序)切换单块开关;空格:全局 Bypass
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -341,6 +414,13 @@ export default function App() {
         setGlobalBypass((b) => !b);
         return;
       }
+      // Q/W/E/R → 恢复快照 A/B/C/D
+      const slotKeys = ['KeyQ', 'KeyW', 'KeyE', 'KeyR'];
+      const slotIdx = slotKeys.indexOf(e.code);
+      if (slotIdx >= 0) {
+        recallSnapshot(slotIdx);
+        return;
+      }
       const n = Number(e.key);
       if (Number.isInteger(n) && n >= 1 && n <= 9) {
         const item = chain[n - 1];
@@ -349,7 +429,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [chain, handleToggle]);
+  }, [chain, handleToggle, recallSnapshot]);
 
   // ---------- 箱头 ----------
 
@@ -608,6 +688,15 @@ export default function App() {
         onImport={handleImportPresets}
         onExport={handleExportPresets}
         onShare={handleShare}
+      />
+
+      <SnapshotBar
+        snapshots={snapshots}
+        activeSlot={activeSlot}
+        activeDirty={activeDirty}
+        onRecall={recallSnapshot}
+        onStore={storeSnapshot}
+        onClear={clearSnapshot}
       />
 
       <main className="board">
