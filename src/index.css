@@ -1913,75 +1913,8 @@ input[type='text'] {
 .tuner-hint {
   font-size: 12px;
   color: var(--text-dim);
-
-/* ---------- 快照槽位 ---------- */
-
-.snapshot-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(16, 18, 21, 0.78);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 12px;
-  padding: 8px 16px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
-.snapshot-slot {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 44px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-weight: 700;
-}
-
-.snapshot-slot.empty {
-  border-style: dashed;
-  color: var(--text-dim);
-}
-
-.snapshot-slot.filled {
-  background: #2b2f36;
-}
-
-.snapshot-slot.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-  box-shadow: 0 0 10px rgba(224, 112, 32, 0.4);
-}
-
-.snapshot-name {
-  font-size: 13px;
-  letter-spacing: 1px;
-}
-
-.snapshot-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #2ecc71;
-}
-
-.snapshot-slot.active .snapshot-dot {
-  background: #fff;
-}
-
-.snapshot-dirty {
-  font-size: 8px;
-  color: #ffd54d;
-}
-
-.snapshot-hint {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--text-dim);
-  cursor: help;
-}
 /* ---------- 单轨 Looper ---------- */
 
 .looper-group {
@@ -2046,4 +1979,89 @@ input[type='text'] {
 .looper-level input {
   width: 70px;
   accent-color: #53b979;
+}
+/* ---------- 板载快照切换器 ---------- */
+
+.snapshot-rail {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -8px 4px 14px;
+  padding: 8px 16px 10px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2b2e33, #1c1e22 60%, #14161a);
+  border: 1px solid #3a3f46;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.5),
+    0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.snapshot-switches {
+  display: flex;
+  gap: 26px;
+}
+
+.snapshot-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.snapshot-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3a2020;
+  transition: background 0.12s, box-shadow 0.12s;
+}
+
+.snapshot-led.led-filled {
+  background: #2ecc71;
+  box-shadow: 0 0 5px rgba(46, 204, 113, 0.7);
+}
+
+.snapshot-led.led-active {
+  background: #ff3b30;
+  box-shadow: 0 0 6px 2px rgba(255, 59, 48, 0.8);
+}
+
+.snapshot-led.led-dirty {
+  background: #ffd54d;
+  box-shadow: 0 0 6px 2px rgba(255, 213, 77, 0.8);
+  animation: led-blink 1s infinite alternate;
+}
+
+@keyframes led-blink {
+  from { opacity: 1; }
+  to { opacity: 0.45; }
+}
+
+.snapshot-fs {
+  width: 34px;
+  height: 34px;
+}
+
+.snapshot-fs .footswitch-cap {
+  width: 24px;
+  height: 24px;
+}
+
+.snapshot-letter {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: monospace;
+}
+
+.snapshot-plate {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.3);
+  user-select: none;
 }
