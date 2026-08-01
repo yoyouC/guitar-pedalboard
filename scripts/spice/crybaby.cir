@@ -1,0 +1,58 @@
+* Crybaby GCB-95 参考电路(L4 评测用,w=0.5)
+* 三 NPN 硅管(Is=2e-14 BF=250 BR=1):QB 输入缓冲射随(2.2M/1.8M 分压偏置),
+* C1 0.01uF+R1 68k 级间耦合;Q1 增益级(集电极反馈偏置:470k+82k 经电感到基极);
+* 踏板电位器 100k(w=0.5:50k+50k)与 R8 470k 并联分压驱动 Q2 射随;
+* C2 0.01uF 把 Q2 发射极信号注入谐振腔(Miller 可变电容);
+* L1 500mH 串联 60Ω DCR,与 R7 33k 并联定 Q。
+* 输出 = Q1 集电极(真实踏板取自电位器之前),经 100uF 耦合到 100k 负载。
+* 运行: ngspice -b crybaby.cir
+
+* --- 电源与输入(50mV / 1kHz,初相 90°=余弦,与 WDF 评测一致) ---
+Vcc vcc 0 9
+Vin nin 0 SIN(0 0.05 1000 0 0 90)
+Cin nin b0 0.01u
+
+* --- 输入缓冲 QB(射随,集电极直连 Vcc) ---
+Rb0a vcc b0 2.2meg
+Rb0b b0 0 1.8meg
+QB vcc b0 e0 QSIL
+Re0 e0 0 10k
+
+* --- 级间耦合 C1 + R1 ---
+C1 e0 b1x 0.01u
+R1 b1x b1 68k
+
+* --- Q1 增益级(集电极反馈偏置) ---
+Q1 c1 b1 e1 QSIL
+R5 vcc c1 22k
+R4 e1 0 390
+R2 c1 y 470k
+R3 y 0 82k
+C3 y 0 4.7u
+R6 x b1 1.5k
+
+* --- 踏板电位器(w=0.5)+ Q2 射随偏置 ---
+R8 c1 b2 470k
+Rtop c1 b2 50k
+Rbot b2 0 50k
+Q2 vcc b2 e2 QSIL
+R9 e2 0 10k
+
+* --- 谐振腔:C2 反馈 + 500mH 电感(60Ω DCR)∥ 33k ---
+C2 e2 x 0.01u
+L1 x lx 0.5
+Rl1 lx y 60
+R7 x y 33k
+
+* --- 输出耦合 + 负载 ---
+Cout c1 out 100u
+Rl out 0 100k
+
+* 硅 NPN(BC109B/MPSA18 类),与 TS 模型一致
+.model QSIL NPN(IS=2e-14 BF=250 BR=1)
+.options TEMP=28.55
+
+* 瞬态:100ms 建立舍去,记录 8192 点 @ 48kHz(20.8333us)
+.tran 20.8333u 270.7m 100m 20.8333u
+.print tran v(out) v(nin) v(c1) v(b2)
+.end

@@ -2072,20 +2072,25 @@ input[type='text'] {
   user-select: none;
 }
 
-/* --- Wah Pedal:Crybaby 黑底座 + 橡胶摇杆 --- */
-.skin-wahpedal {
+/* --- Wah Pedal:Crybaby 黑底座 + 橡胶摇杆(wahpedal / crybabywdf 共用) --- */
+.skin-wahpedal,
+.skin-crybabywdf {
   background:
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 6px),
     linear-gradient(168deg, #2a2d31, #1a1c20 55%, #0c0d10);
   border-color: #000;
 }
-.skin-wahpedal .pedal-name { color: #e8e8e8; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
-.skin-wahpedal .pedal-name::before { content: '🦶 '; }
-.skin-wahpedal .pedal-nameplate {
+.skin-wahpedal .pedal-name,
+.skin-crybabywdf .pedal-name { color: #e8e8e8; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
+.skin-wahpedal .pedal-name::before,
+.skin-crybabywdf .pedal-name::before { content: '🦶 '; }
+.skin-wahpedal .pedal-nameplate,
+.skin-crybabywdf .pedal-nameplate {
   border-bottom-color: rgba(0, 0, 0, 0.5);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1);
 }
-.skin-wahpedal .pedal-remove { color: rgba(255, 255, 255, 0.55); text-shadow: none; }
+.skin-wahpedal .pedal-remove,
+.skin-crybabywdf .pedal-remove { color: rgba(255, 255, 255, 0.55); text-shadow: none; }
 
 .wah-treadle {
   display: flex;

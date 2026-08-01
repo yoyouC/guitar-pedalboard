@@ -4,6 +4,9 @@ import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 import { WahTreadle } from './WahTreadle';
 
+/** 用摇杆(WahTreadle)代替 position 旋钮的效果器 */
+const TREADLE_EFFECT_IDS = new Set(['wahpedal', 'crybabywdf']);
+
 interface PedalCardProps {
   item: ChainItem;
   def: EffectDefinition;
@@ -55,7 +58,7 @@ export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove,
 
       <div className="pedal-knobs">
         {def.params
-          .filter((p) => !(def.id === 'wahpedal' && p.key === 'position'))
+          .filter((p) => !(TREADLE_EFFECT_IDS.has(def.id) && p.key === 'position'))
           .map((p) => (
             <Knob
               key={p.key}
@@ -72,7 +75,7 @@ export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove,
           ))}
       </div>
 
-      {def.id === 'wahpedal' && (
+      {TREADLE_EFFECT_IDS.has(def.id) && (
         <WahTreadle
           value={item.values['position'] ?? 50}
           disabled={!item.enabled}
