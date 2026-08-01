@@ -70,7 +70,28 @@ MIDI 层只调这些既有派发函数，不碰引擎内部(`docs/frontend-archi
 
 0–127 线性映射到参数范围(`ccToRange`)。核对方式:TopBar MIDI 指示 → 展开监视器,转动对应旋钮看实际 CC 号,不一致改 `src/midi/midiMapping.ts` 顶部常量。
 
-### 3.4 不映射(默认)
+### 3.4 motion_midi(面部表情控制,经 macOS IAC 总线,按输入端口名路由)
+
+motion_midi(浏览器应用,FaceLandmarker 面部表情追踪 → Web MIDI 输出到 IAC 总线)
+默认预设全部在通道 1(见其 `src/mapping/presets.ts`)。踏板板监听 inputs 中名字匹配
+`IAC` 的端口,与 K25 映射完全隔离(CC 号有重叠也不冲突)。
+
+| 控制 | 面部动作 | MIDI(通道 1) | 踏板板动作 |
+|---|---|---|---|
+| 表情踏板 | 张嘴 | CC11,0–127 连续 | 链上第一个 Volume & Pan 的 level(dB 全行程);链上无音量踏板时退化为 Master 输出音量 |
+| 踩钉 1 | 眨眼(hold 150ms) | CC20,Toggle 127/0 | 绝对设置第 1 块单块 enabled |
+| 踩钉 2 | 挑眉 | CC21,Toggle | 绝对设置第 2 块单块 enabled |
+| 踩钉 3 | 快速点头 | CC22,Momentary(127,~120ms 回 0) | 第 3 块单块随脉冲开/关 |
+| 踩钉 4 | 微笑 | CC23,Toggle | 绝对设置第 4 块单块 enabled |
+
+踩钉按**绝对值**设置(enabled = value>0)而非翻转:Toggle 状态由 motion_midi 侧
+维护,两端保持一致,不会因漏消息而错位。
+
+使用条件:motion_midi 页面里输出端口选了 IAC 总线(其结果存其 localStorage);
+macOS「音频 MIDI 设置」里 IAC Driver 已启用。两端各自独立授权 MIDI 访问即可,
+浏览器对 IAC 端口无独占。
+
+### 3.5 不映射(默认)
 
 - 25 个琴键:语义是音符输入，默认不绑定；未来可扩展(如最低八度白键触发快照、哇音踏板表情)
 - Pitch/Mod 触控条:预留给表情类效果(哇音/颤音深度),Phase 2 再议

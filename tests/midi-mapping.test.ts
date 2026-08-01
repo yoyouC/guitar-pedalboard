@@ -5,6 +5,8 @@ import {
   ccToRange,
   KNOB_BANK_A_CC_START,
   MASTER_KNOB_CC,
+  MOTION_EXPRESSION_CC,
+  MOTION_SWITCH_CCS,
   PAD_BANK_A_NOTE_START,
   PAD_BANK_B_NOTE_START,
   TRANSPORT_CC,
@@ -170,4 +172,62 @@ test('K1(与 Mod 条同号)预留,不映射', () => {
     null,
   );
   // K7(CC07)与 MASTER_KNOB_CC 同号:实机核对前 CC07 统一按主音量旋钮处理
+});
+
+// ---------- 映射:motion_midi(IAC 总线,按输入端口名路由) ----------
+
+test('IAC 来源:CC11 表情踏板 → 归一化 0..1', () => {
+  assert.deepEqual(
+    resolveMidiAction(parseMidiMessage([0xb0, MOTION_EXPRESSION_CC, 0])!, 'IAC Driver Bus 1'),
+    { type: 'set-expression', value: 0 },
+  );
+  assert.deepEqual(
+    resolveMidiAction(parseMidiMessage([0xb0, MOTION_EXPRESSION_CC, 127])!, 'IAC Driver Bus 1'),
+    { type: 'set-expression', value: 1 },
+  );
+});
+
+test('IAC 来源:踩钉 1/2/4(Toggle)按值绝对设置单块开关', () => {
+  // CC20/21/23 → 单块 1/2/4;127=开,0=关(状态由 motion_midi 维护)
+  assert.deepEqual(resolveMidiAction(parseMidiMessage([0xb0, 20, 127])!, 'IAC Driver'), {
+    type: 'set-pedal-enabled',
+    index: 0,
+    enabled: true,
+  });
+  assert.deepEqual(resolveMidiAction(parseMidiMessage([0xb0, 20, 0])!, 'IAC Driver'), {
+    type: 'set-pedal-enabled',
+    index: 0,
+    enabled: false,
+  });
+  assert.deepEqual(resolveMidiAction(parseMidiMessage([0xb0, 23, 127])!, 'IAC Driver'), {
+    type: 'set-pedal-enabled',
+    index: 3,
+    enabled: true,
+  });
+});
+
+test('IAC 来源:踩钉 3(Momentary)127 开、回 0 关', () => {
+  assert.deepEqual(resolveMidiAction(parseMidiMessage([0xb0, 22, 127])!, 'IAC Driver'), {
+    type: 'set-pedal-enabled',
+    index: 2,
+    enabled: true,
+  });
+  assert.deepEqual(resolveMidiAction(parseMidiMessage([0xb0, 22, 0])!, 'IAC Driver'), {
+    type: 'set-pedal-enabled',
+    index: 2,
+    enabled: false,
+  });
+});
+
+test('IAC 来源:未映射消息返回 null(踩钉的 note、其他 CC)', () => {
+  assert.equal(resolveMidiAction(parseMidiMessage([0x90, 36, 100])!, 'IAC Driver'), null);
+  assert.equal(resolveMidiAction(parseMidiMessage([0xb0, 30, 127])!, 'IAC Driver'), null);
+});
+
+test('非 IAC 来源:CC11/20-23 不触发 motion 映射(按 K25 映射处理,均未映射)', () => {
+  for (const cc of [MOTION_EXPRESSION_CC, ...MOTION_SWITCH_CCS]) {
+    assert.equal(resolveMidiAction(parseMidiMessage([0xb0, cc, 127])!, 'TempoKEY K25'), null);
+    // 不传来源名(旧调用方式)同样走 K25 映射
+    assert.equal(resolveMidiAction(parseMidiMessage([0xb0, cc, 127])!), null);
+  }
 });

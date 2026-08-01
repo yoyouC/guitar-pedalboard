@@ -44,6 +44,27 @@ export const KNOB_BANK_A_CC_START = 1;
  */
 export const MASTER_KNOB_CC = 7;
 
+// ---------- motion_midi(面部表情 → MIDI,经 macOS IAC 总线输入) ----------
+
+/**
+ * motion_midi 默认预设(通道 1,定义见该项目 src/mapping/presets.ts):
+ * - 表情踏板(张嘴)→ CC11,连续 0..127
+ * - 踩钉 1/2/4(眨眼/挑眉/微笑)→ CC20/21/23,Toggle:交替发 127(开)/0(关)
+ * - 踩钉 3(点头)→ CC22,Momentary:发 127,约 120ms 后自动回 0
+ *
+ * 与 K25 的映射按输入端口名隔离:只有名字匹配 IAC 的输入才走这套映射,
+ * 避免与 K25 的 CC 号(Knob Bank B = CC09..16 等)冲突。
+ */
+
+/** IAC 输入端口名匹配(motion_midi 在 UI 里选择 IAC Driver 总线作为输出) */
+export const MOTION_INPUT_NAME_PATTERN = /iac/i;
+
+/** 表情踏板 CC → 链上第一个 Volume & Pan 单块的 level;链上没有音量踏板时由调用方兜底 */
+export const MOTION_EXPRESSION_CC = 11;
+
+/** 踩钉 1..4 的 CC 号 → 按板上顺序绝对设置第 1..4 块单块的 enabled */
+export const MOTION_SWITCH_CCS = [20, 21, 22, 23] as const;
+
 // ---------- 参数范围(与 UI 滑杆/箱头定义一致) ----------
 
 /** Master Volume 范围,与 TopBar 的 MASTER 滑杆一致 */
@@ -90,7 +111,14 @@ export type MidiAction =
   /** 设置 Master Volume(value 已在 MASTER_VOLUME_RANGE 内) */
   | { type: 'set-master-volume'; value: number }
   /** 设置箱头参数(0..100 或 master dB,均为线性映射后的实际值) */
-  | { type: 'set-amp-param'; key: AmpParamKey; value: number };
+  | { type: 'set-amp-param'; key: AmpParamKey; value: number }
+  /**
+   * 绝对设置效果链第 index 块单块的 enabled(motion_midi 踩钉;
+   * Toggle 状态由发送方维护,这里按值设置而非翻转,保持两端同步)
+   */
+  | { type: 'set-pedal-enabled'; index: number; enabled: boolean }
+  /** 表情踏板位置,归一化 0..1(具体控制目标由调用方决定) */
+  | { type: 'set-expression'; value: number };
 
 /** CC 值 0..127 线性映射到 [min, max] */
 export function ccToRange(ccValue: number, min: number, max: number): number {
@@ -100,12 +128,31 @@ export function ccToRange(ccValue: number, min: number, max: number): number {
 
 /**
  * 把解析后的 MIDI 消息映射成动作;未映射返回 null。
- * 不区分通道(K25 默认通道 1,改通道不影响映射)。
+ * 不区分通道(K25 / motion_midi 默认都是通道 1,改通道不影响映射)。
+ * sourceName 为输入端口名:匹配 IAC 时走 motion_midi 映射(见文件顶部),
+ * 否则走 K25 映射,两套 CC 号互不干扰。
  * Note 只在按下(Note On)时触发,忽略 Note Off,避免一次按键触发两次。
  * Toggle 模式的走带键(Play/Record)每次按下交替发 127/0,都要触发;
  * Momentary 的 Stop 只在按下值(>0)时触发,忽略松开时的 0。
  */
-export function resolveMidiAction(msg: ParsedMidiMessage): MidiAction | null {
+export function resolveMidiAction(
+  msg: ParsedMidiMessage,
+  sourceName?: string | null,
+): MidiAction | null {
+  // motion_midi(IAC 总线):表情踏板 + 4 个踩钉
+  if (sourceName && MOTION_INPUT_NAME_PATTERN.test(sourceName)) {
+    if (msg.type !== 'cc') return null;
+    if (msg.number === MOTION_EXPRESSION_CC) {
+      return { type: 'set-expression', value: Math.max(0, Math.min(127, msg.value)) / 127 };
+    }
+    const switchIndex = MOTION_SWITCH_CCS.indexOf(msg.number as 20 | 21 | 22 | 23);
+    if (switchIndex >= 0) {
+      // Toggle 钉 127=开/0=关;Momentary 钉 127 触发、回 0 复位,统一按绝对值设置
+      return { type: 'set-pedal-enabled', index: switchIndex, enabled: msg.value > 0 };
+    }
+    return null;
+  }
+
   if (msg.type === 'note') {
     if (!msg.on) return null;
     // Pad Bank A → 单块 1..8

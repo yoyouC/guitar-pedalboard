@@ -21,6 +21,10 @@ export interface MidiActions {
   looperClear(): void;
   setMasterVolume(value: number): void;
   setAmpParam(key: AmpParamKey, value: number): void;
+  /** 绝对设置效果链第 index 块单块开关(motion_midi 踩钉) */
+  setPedalEnabled(index: number, enabled: boolean): void;
+  /** 表情踏板位置,归一化 0..1(motion_midi CC11) */
+  setExpression(value: number): void;
 }
 
 /** 最近收到的一条原始消息,供 MidiStatus 调试面板显示 */
@@ -60,12 +64,12 @@ export function useMidi(actions: MidiActions): MidiState {
     // 严格模式下 effect 会挂载→清理→再挂载,用 cancelled 丢弃第一次的异步结果
     let cancelled = false;
 
-    const onMessage = (event: MIDIMessageEvent) => {
+    const onMessage = (event: MIDIMessageEvent, sourceName?: string | null) => {
       if (!event.data) return;
       const parsed = parseMidiMessage(event.data);
       setLastMessage({ hex: formatMidiBytes(event.data), parsed, at: Date.now() });
       if (!parsed) return;
-      const action = resolveMidiAction(parsed);
+      const action = resolveMidiAction(parsed, sourceName);
       if (!action) return;
       const a = actionsRef.current;
       switch (action.type) {
@@ -93,6 +97,12 @@ export function useMidi(actions: MidiActions): MidiState {
         case 'set-amp-param':
           a.setAmpParam(action.key, action.value);
           break;
+        case 'set-pedal-enabled':
+          a.setPedalEnabled(action.index, action.enabled);
+          break;
+        case 'set-expression':
+          a.setExpression(action.value);
+          break;
       }
     };
 
@@ -102,7 +112,8 @@ export function useMidi(actions: MidiActions): MidiState {
       let name: string | null = null;
       for (const input of access.inputs.values()) {
         if (!name) name = input.name ?? null;
-        input.onmidimessage = onMessage;
+        // 闭包带上端口名:IAC 总线的消息走 motion_midi 映射(见 midiMapping)
+        input.onmidimessage = (e) => onMessage(e, input.name);
       }
       setDeviceName(name);
     };
