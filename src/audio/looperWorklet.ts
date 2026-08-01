@@ -7,6 +7,7 @@
 import { MAX_LOOP_SECONDS } from './looperState';
 
 const processorSource = `
+(() => {
 const CHUNK_SIZE = 16384;
 const MAX_LOOP_SECONDS = ${MAX_LOOP_SECONDS};
 
@@ -188,6 +189,7 @@ class SingleTrackLooperProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('single-track-looper', SingleTrackLooperProcessor);
+})();
 `;
 
 const loadedContexts = new WeakSet<AudioContext>();

@@ -1,5 +1,6 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
 import { loadNoiseGate } from './noiseGateWorklet';
+import { loadWahWorklet } from './wahWorklet';
 import { loadChampWdf } from './wdf/champWorklet';
 import { loadBognerWdf } from './wdf/bognerWorklet';
 import { loadTs808Wdf } from './wdf/ts808Worklet';
@@ -10,6 +11,7 @@ import { loadJc120Wdf } from './wdf/jc120Worklet';
 import { loadKlonWdf } from './wdf/klonWorklet';
 import { loadDs1Wdf } from './wdf/ds1Worklet';
 import { loadFuzzFaceWdf } from './wdf/fuzzfaceWorklet';
+import { loadCrybabyWdf } from './wdf/crybabyWorklet';
 import { loadBigMuffWdf } from './wdf/bigmuffWorklet';
 import { loadSpringReverbWdf } from './wdf/springreverbWorklet';
 import { loadPlateReverb } from './wdf/plateWorklet';
@@ -145,6 +147,16 @@ class AudioEngine {
       await loadNoiseGate(ctx);
     } catch (e) {
       console.warn('NoiseGate worklet 加载失败,该效果将不可用:', e);
+    }
+    try {
+      await loadWahWorklet(ctx);
+    } catch (e) {
+      console.warn('Wah worklet 加载失败,该效果将回退为带通:', e);
+    }
+    try {
+      await loadCrybabyWdf(ctx);
+    } catch (e) {
+      console.warn('Crybaby WDF worklet 加载失败,该单块将不可用:', e);
     }
     try {
       await loadChampWdf(ctx);

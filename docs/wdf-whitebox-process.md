@@ -69,6 +69,8 @@
 npm run wdf:test          # 三极管级 / Champ / Bogner 链稳定性 + 混叠对比
 npm run wdf:ts-eval       # TS808 L0~L3
 npm run wdf:ts-spice      # TS808 L4(vs ngspice,RMSE 0.8%)
+npm run wdf:crybaby-eval  # Crybaby GCB-95 L0~L3(峰频轨迹/GEO 偏置/worklet parity)
+npm run wdf:crybaby-spice # Crybaby GCB-95 L4(vs ngspice,RMSE 7.1%)
 node scripts/wdf-bogner-spice-compare.ts  # Bogner L4 多档
 node scripts/wdf-ac30-eval.ts             # AC30 L0~L3(清音余量/边缘压缩量化)
 node scripts/wdf-ac30-spice-compare.ts    # AC30 L4 多档(RMSE 1~4%)
@@ -89,6 +91,7 @@ SPICE 参考网表在 `scripts/spice/`(Koren B-source 子电路 + 理想运放/�
 | **Klon WDF ⚗** | 锗管对地削波+GAIN 联动干湿混合 | RMSE 4.2%,RMS 差 0.0dB,THD 18.4/18.4% |
 | **DS-1 WDF ⚗** | BJT 前级+运放+1N4148 对地削波+LP/HP 交叉 TONE | RMSE 5.1%,RMS 差 0.02dB,THD 19.1/18.8% |
 | **Fuzz Face WDF ⚗** | 双锗管共射+Ebers-Moll 3 变量 Newton | RMSE 4.1%,RMS 差 0.03dB,THD 20.9/21.1% |
+| **Crybaby WDF ⚗** | GCB-95 哇音:3×硅 BJT(缓冲+集电极反馈增益级+射随 Miller 可变电容)+ 500mH 电感伴随模型,9 节点 Newton | RMSE 7.1%,RMS 差 0.51dB;峰频轨迹 450Hz→1.3kHz 与 spice AC 一致 |
 | **Big Muff WDF ⚗** | 双级 1N4148 对地削波+LP/HP 交叉 TONE | RMSE 8.6%,RMS 差 0.07dB,THD 52.2/51.9% |
 | **磁带延迟 ⚗** | EP-3 风格:录制软削波 + wow/flutter 调制读出头 + 环内磁头损耗 LP/HP 与循环软削波(fb>1 有界自激) | —(行为级 L0~L3,`node scripts/wdf-tapedelay-eval.ts`) |
 | **RAT WDF ⚗** | 可变增益运放(1.5kHz HP + 5.3kHz 摆率 LP)+ 1N914 对地硬削波 + 反向 FILTER | RMSE 9.5%,RMS 差 0.4dB,THD 31.3%/31.8%(硬削波沿时序差主导 RMSE) |

@@ -31,7 +31,7 @@ import { TopBar } from './components/TopBar';
 import { Tuner } from './components/Tuner';
 import { ChainView } from './components/ChainView';
 import { PresetBar } from './components/PresetBar';
-import { SnapshotBar } from './components/SnapshotBar';
+import { SnapshotSwitches } from './components/SnapshotSwitches';
 import { AmpPanel } from './components/AmpPanel';
 import { CabPanel } from './components/CabPanel';
 import { Oscilloscope } from './components/Oscilloscope';
@@ -738,16 +738,15 @@ export default function App() {
         onShare={handleShare}
       />
 
-      <SnapshotBar
-        snapshots={snapshots}
-        activeSlot={activeSlot}
-        activeDirty={activeDirty}
-        onRecall={recallSnapshot}
-        onStore={storeSnapshot}
-        onClear={clearSnapshot}
-      />
-
       <main className="board">
+        <SnapshotSwitches
+          snapshots={snapshots}
+          activeSlot={activeSlot}
+          activeDirty={activeDirty}
+          onRecall={recallSnapshot}
+          onStore={storeSnapshot}
+          onClear={clearSnapshot}
+        />
         <ChainView
           items={chain}
           showMeters={showMeters}

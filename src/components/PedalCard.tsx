@@ -2,6 +2,10 @@ import type { ChainItem } from '../state/store';
 import type { EffectDefinition } from '../audio/effects/types';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
+import { WahTreadle } from './WahTreadle';
+
+/** 用摇杆(WahTreadle)代替 position 旋钮的效果器 */
+const TREADLE_EFFECT_IDS = new Set(['wahpedal', 'crybabywdf']);
 
 interface PedalCardProps {
   item: ChainItem;
@@ -53,21 +57,31 @@ export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove,
       </div>
 
       <div className="pedal-knobs">
-        {def.params.map((p) => (
-          <Knob
-            key={p.key}
-            value={item.values[p.key] ?? p.defaultValue}
-            min={p.min}
-            max={p.max}
-            step={p.step}
-            defaultValue={p.defaultValue}
-            label={p.label}
-            unit={p.unit}
-            disabled={!item.enabled}
-            onChange={(v) => onParam(item.uid, p.key, v)}
-          />
-        ))}
+        {def.params
+          .filter((p) => !(TREADLE_EFFECT_IDS.has(def.id) && p.key === 'position'))
+          .map((p) => (
+            <Knob
+              key={p.key}
+              value={item.values[p.key] ?? p.defaultValue}
+              min={p.min}
+              max={p.max}
+              step={p.step}
+              defaultValue={p.defaultValue}
+              label={p.label}
+              unit={p.unit}
+              disabled={!item.enabled}
+              onChange={(v) => onParam(item.uid, p.key, v)}
+            />
+          ))}
       </div>
+
+      {TREADLE_EFFECT_IDS.has(def.id) && (
+        <WahTreadle
+          value={item.values['position'] ?? 50}
+          disabled={!item.enabled}
+          onChange={(v) => onParam(item.uid, 'position', v)}
+        />
+      )}
 
       <button
         className={`footswitch ${item.enabled ? 'fs-on' : ''}`}
