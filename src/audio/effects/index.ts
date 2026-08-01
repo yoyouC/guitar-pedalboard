@@ -14,6 +14,7 @@ import { distortionEffect } from './distortion';
 import { ratEffect } from './rat';
 import { fuzzEffect } from './fuzz';
 import { autowahEffect } from './autowah';
+import { wahpedalEffect } from './wahpedal';
 import { eqEffect } from './eq';
 import { chorusEffect } from './chorus';
 import { flangerEffect } from './flanger';
@@ -53,6 +54,7 @@ export const EFFECT_REGISTRY: EffectDefinition[] = [
   ratEffect,
   fuzzEffect,
   autowahEffect,
+  wahpedalEffect,
   eqEffect,
   chorusEffect,
   flangerEffect,
