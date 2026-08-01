@@ -34,6 +34,7 @@ import { AmpPanel } from './components/AmpPanel';
 import { CabPanel } from './components/CabPanel';
 import { Oscilloscope } from './components/Oscilloscope';
 import { FluidBackground } from './components/FluidBackground';
+import { YouTubeBackground } from './components/YouTubeBackground';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -98,6 +99,7 @@ export default function App() {
   const [globalBypass, setGlobalBypass] = useState(false);
   const [showMeters, setShowMeters] = useState(true);
   const [showTuner, setShowTuner] = useState(false);
+  const [ytBgActive, setYtBgActive] = useState(false);
 
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
@@ -637,7 +639,10 @@ export default function App() {
 
   return (
     <div className="app">
-      <FluidBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
+      {!ytBgActive && (
+        <FluidBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
+      )}
+      <YouTubeBackground onActiveChange={setYtBgActive} />
 
       <header className="app-header">
         <h1>🎸 Guitar Pedalboard</h1>
