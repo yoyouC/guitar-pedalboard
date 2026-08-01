@@ -95,7 +95,7 @@ export function WahTreadle({ value, disabled, onChange }: WahTreadleProps) {
           <div className="wah-badge">WAH</div>
         </div>
       </div>
-      <div className="wah-value">{value}%</div>
+      <div className="wah-value">{Math.round(value)}%</div>
     </div>
   );
 }

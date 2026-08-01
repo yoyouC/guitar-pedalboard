@@ -1975,3 +1975,192 @@ input[type='text'] {
   font-size: 12px;
   color: var(--text-dim);
 }
+
+/* ---------- 板载快照切换器 ---------- */
+
+.snapshot-rail {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -8px 4px 14px;
+  padding: 8px 16px 10px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2b2e33, #1c1e22 60%, #14161a);
+  border: 1px solid #3a3f46;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.5),
+    0 4px 8px rgba(0, 0, 0, 0.4);
+}
+
+.snapshot-switches {
+  display: flex;
+  gap: 26px;
+}
+
+.snapshot-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.snapshot-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3a2020;
+  transition: background 0.12s, box-shadow 0.12s;
+}
+
+.snapshot-led.led-filled {
+  background: #2ecc71;
+  box-shadow: 0 0 5px rgba(46, 204, 113, 0.7);
+}
+
+.snapshot-led.led-active {
+  background: #ff3b30;
+  box-shadow: 0 0 6px 2px rgba(255, 59, 48, 0.8);
+}
+
+.snapshot-led.led-dirty {
+  background: #ffd54d;
+  box-shadow: 0 0 6px 2px rgba(255, 213, 77, 0.8);
+  animation: led-blink 1s infinite alternate;
+}
+
+.snapshot-led.led-holding {
+  background: #ffd54d;
+  box-shadow: 0 0 6px 2px rgba(255, 213, 77, 0.8);
+  animation: led-blink 0.18s infinite alternate;
+}
+
+@keyframes led-blink {
+  from { opacity: 1; }
+  to { opacity: 0.45; }
+}
+
+.snapshot-fs {
+  width: 34px;
+  height: 34px;
+}
+
+.snapshot-fs .footswitch-cap {
+  width: 24px;
+  height: 24px;
+}
+
+.snapshot-letter {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: monospace;
+}
+
+.snapshot-plate {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.3);
+  user-select: none;
+}
+
+/* --- Wah Pedal:Crybaby 黑底座 + 橡胶摇杆(wahpedal / crybabywdf 共用) --- */
+.skin-wahpedal,
+.skin-crybabywdf {
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0 2px, transparent 2px 6px),
+    linear-gradient(168deg, #2a2d31, #1a1c20 55%, #0c0d10);
+  border-color: #000;
+}
+.skin-wahpedal .pedal-name,
+.skin-crybabywdf .pedal-name { color: #e8e8e8; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7); }
+.skin-wahpedal .pedal-name::before,
+.skin-crybabywdf .pedal-name::before { content: '🦶 '; }
+.skin-wahpedal .pedal-nameplate,
+.skin-crybabywdf .pedal-nameplate {
+  border-bottom-color: rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.skin-wahpedal .pedal-remove,
+.skin-crybabywdf .pedal-remove { color: rgba(255, 255, 255, 0.55); text-shadow: none; }
+
+.wah-treadle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.wah-rocker-area {
+  width: 100%;
+  height: 118px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #0a0b0d, #14161a);
+  border: 1px solid #000;
+  box-shadow:
+    inset 0 2px 8px rgba(0, 0, 0, 0.8),
+    0 1px 0 rgba(255, 255, 255, 0.06);
+  perspective: 300px;
+  display: flex;
+  cursor: ns-resize;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.wah-rocker {
+  position: relative;
+  flex: 1;
+  margin: 8px 10px;
+  border-radius: 8px;
+  background:
+    repeating-linear-gradient(180deg, #26282c 0 5px, #101114 5px 9px),
+    linear-gradient(180deg, #2b2d31, #17181b);
+  border: 1px solid rgba(0, 0, 0, 0.8);
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.6),
+    inset 0 1px 1px rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: 50% 100%;
+  transition: transform 0.03s linear;
+}
+
+.wah-grip {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0.09), transparent 40%);
+  pointer-events: none;
+}
+
+.wah-badge {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: #d8d8d8;
+  background: linear-gradient(180deg, #3a3d42, #232528);
+  padding: 2px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  text-shadow: 0 -1px 1px rgba(0, 0, 0, 0.8);
+}
+
+.wah-value {
+  font-size: 10px;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.wah-disabled .wah-rocker-area {
+  opacity: 0.45;
+  cursor: default;
+}
