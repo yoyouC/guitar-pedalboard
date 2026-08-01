@@ -227,6 +227,67 @@ input[type='text'] {
   cursor: help;
 }
 
+/* ---------- MIDI 状态指示 + 调试监视器 ---------- */
+
+.midi-status {
+  position: relative;
+}
+
+.midi-status-btn {
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.midi-status-btn.connected {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px rgba(224, 112, 32, 0.35);
+}
+
+.midi-monitor {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 260px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 11px;
+  color: var(--text);
+}
+
+.midi-monitor-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.midi-monitor-row {
+  margin: 3px 0;
+  white-space: nowrap;
+}
+
+.midi-monitor-row code {
+  font-family: monospace;
+  color: var(--accent);
+}
+
+.midi-monitor-hint {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: normal;
+}
+
 .bypass-btn.bypassed {
   background: #7a3535;
   border-color: #a05050;

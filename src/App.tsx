@@ -25,6 +25,7 @@ import {
   loadSnapshots,
   saveSnapshots,
 } from './state/store';
+import { useMidi } from './midi/useMidi';
 import { TopBar } from './components/TopBar';
 import { Tuner } from './components/Tuner';
 import { ChainView } from './components/ChainView';
@@ -485,6 +486,37 @@ export default function App() {
     audioEngine.updateAmpParam(key, value);
   }, []);
 
+  // ---------- MIDI(Synido TempoKEY K25,映射表见 src/midi/midiMapping.ts) ----------
+
+  // 回调每次渲染都新建,useMidi 内部用 ref 持有最新版本,MIDI 监听只挂一次
+  const midi = useMidi({
+    togglePedal: (index) => {
+      const item = chain[index];
+      if (item) handleToggle(item.uid);
+    },
+    recallSnapshot,
+    toggleBypass: () => setGlobalBypass((b) => !b),
+    looperRecord: () => {
+      // 录音中 → 结束;否则开始(引擎内部还有 canRunLooperCommand 守卫)
+      if (audioEngine.currentLooperStatus.phase === 'recording') {
+        audioEngine.finishLoopRecording();
+      } else {
+        audioEngine.startLoopRecording();
+      }
+    },
+    looperTogglePlay: () => {
+      audioEngine.toggleLoopPlayback();
+    },
+    looperClear: () => {
+      audioEngine.clearLoop();
+    },
+    setMasterVolume: (v) => {
+      setMasterVolume(v);
+      audioEngine.setMasterVolume(v);
+    },
+    setAmpParam: (key, value) => handleAmpParam(key, value),
+  });
+
   // NAM:加载本地 .nam 模型(WASM Core 支持全架构),成功后置为当前类的型号
   const handleNamModelFile = useCallback(
     async (file: File) => {
@@ -672,6 +704,7 @@ export default function App() {
         onToggleMeters={() => setShowMeters((m) => !m)}
         showTuner={showTuner}
         onToggleTuner={() => setShowTuner((t) => !t)}
+        midi={midi}
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
         engineReady={engineReady}

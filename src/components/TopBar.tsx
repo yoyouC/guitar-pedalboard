@@ -5,6 +5,8 @@ import { INPUT_TARGET_DB } from '../audio/level';
 import { LevelMeter } from './LevelMeter';
 import { MetronomePanel } from './MetronomePanel';
 import { LooperPanel } from './LooperPanel';
+import { MidiStatus } from './MidiStatus';
+import type { MidiState } from '../midi/useMidi';
 
 interface TopBarProps {
   inputType: InputSourceType | null;
@@ -29,6 +31,8 @@ interface TopBarProps {
   onToggleMeters: () => void;
   showTuner: boolean;
   onToggleTuner: () => void;
+  /** MIDI 状态(未支持/未连接/已连接 + 调试监视器) */
+  midi: MidiState;
   inputAnalyser: AnalyserNode | null;
   outputAnalyser: AnalyserNode | null;
   /** 引擎已初始化(用户手势后),录音按钮才可用 */
@@ -243,6 +247,18 @@ export function TopBar(props: TopBarProps) {
       <div className="console-divider" />
 
       <MetronomePanel engineReady={props.engineReady} />
+
+      {props.midi.supported && (
+        <>
+          <div className="console-divider" />
+          <div className="console-group">
+            <span className="group-label">MIDI</span>
+            <div className="group-body">
+              <MidiStatus midi={props.midi} />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
