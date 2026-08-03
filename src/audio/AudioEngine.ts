@@ -1,6 +1,7 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
 import { loadNoiseGate } from './noiseGateWorklet';
 import { loadWahWorklet } from './wahWorklet';
+import { loadWhammyWorklet } from './whammyWorklet';
 import { loadChampWdf } from './wdf/champWorklet';
 import { loadBognerWdf } from './wdf/bognerWorklet';
 import { loadTs808Wdf } from './wdf/ts808Worklet';
@@ -152,6 +153,11 @@ class AudioEngine {
       await loadWahWorklet(ctx);
     } catch (e) {
       console.warn('Wah worklet 加载失败,该效果将回退为带通:', e);
+    }
+    try {
+      await loadWhammyWorklet(ctx);
+    } catch (e) {
+      console.warn('Whammy worklet 加载失败,该单块将不可用:', e);
     }
     try {
       await loadCrybabyWdf(ctx);

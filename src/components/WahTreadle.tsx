@@ -5,6 +5,12 @@ interface WahTreadleProps {
   value: number;
   disabled?: boolean;
   onChange: (value: number) => void;
+  /** 摇杆上的铭牌文字,默认 'WAH' */
+  badge?: string;
+  /** 双击复位的值,默认 50(哇音中位);Whammy 用 0(无移调) */
+  resetValue?: number;
+  /** 底部读数文本,默认 '{value}%' */
+  formatValue?: (value: number) => string;
 }
 
 const MIN = 0;
@@ -19,8 +25,8 @@ function clamp(v: number): number {
   return Math.min(MAX, Math.max(MIN, v));
 }
 
-/** 哇音踏板摇杆:垂直拖动模拟脚踩,滚轮微调,双击回中位 */
-export function WahTreadle({ value, disabled, onChange }: WahTreadleProps) {
+/** 摇杆踏板控件:垂直拖动模拟脚踩,滚轮微调,双击复位(哇音/移调踏板共用) */
+export function WahTreadle({ value, disabled, onChange, badge = 'WAH', resetValue = 50, formatValue }: WahTreadleProps) {
   const dragState = useRef<{ startY: number; startValue: number } | null>(null);
 
   const emit = useCallback(
@@ -78,12 +84,12 @@ export function WahTreadle({ value, disabled, onChange }: WahTreadleProps) {
         aria-valuemax={MAX}
         aria-valuenow={value}
         tabIndex={disabled ? -1 : 0}
-        title="拖动模拟踩踏板(向下=踩亮),双击回中位"
+        title="拖动模拟踩踏板,双击复位"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onWheel={onWheel}
-        onDoubleClick={() => !disabled && onChange(50)}
+        onDoubleClick={() => !disabled && onChange(resetValue)}
         onKeyDown={(e) => {
           if (disabled) return;
           if (e.key === 'ArrowUp') emit(value - 2);
@@ -92,10 +98,10 @@ export function WahTreadle({ value, disabled, onChange }: WahTreadleProps) {
       >
         <div className="wah-rocker" style={{ transform: `rotateX(${angle}deg)` }}>
           <div className="wah-grip" />
-          <div className="wah-badge">WAH</div>
+          <div className="wah-badge">{badge}</div>
         </div>
       </div>
-      <div className="wah-value">{Math.round(value)}%</div>
+      <div className="wah-value">{formatValue ? formatValue(value) : `${Math.round(value)}%`}</div>
     </div>
   );
 }

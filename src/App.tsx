@@ -520,12 +520,14 @@ export default function App() {
     setPedalEnabled: (index, enabled) => {
       setChain((cur) => cur.map((item, i) => (i === index ? { ...item, enabled } : item)));
     },
-    // motion_midi 表情踏板:优先控制链上第一个哇音(wahpedal/crybabywdf 的 position);
-    // 没有哇音退到第一个 Volume & Pan 的 level;都没有则退化为 Master 输出
+    // motion_midi 表情踏板:优先控制链上第一个摇杆类踏板(whammy/wahpedal/crybabywdf
+    // 的 position);没有则退到第一个 Volume & Pan 的 level;都没有则退化为 Master 输出
     setExpression: (t) => {
-      const wah = chain.find((item) => item.effectId === 'wahpedal' || item.effectId === 'crybabywdf');
-      if (wah) {
-        handleParam(wah.uid, 'position', t * 100);
+      const treadle = chain.find(
+        (item) => item.effectId === 'whammy' || item.effectId === 'wahpedal' || item.effectId === 'crybabywdf',
+      );
+      if (treadle) {
+        handleParam(treadle.uid, 'position', t * 100);
         return;
       }
       const vol = chain.find((item) => item.effectId === 'volume');
