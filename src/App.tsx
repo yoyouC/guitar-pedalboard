@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { audioEngine } from './audio/AudioEngine';
 import type { InputSourceType } from './audio/AudioEngine';
-import { LEVEL_DB_MAX, VOLUME_DB_MIN } from './audio/level';
 import { getEffectDef } from './audio/effects';
 import { getAmpDef } from './audio/amps';
 import { getCabDef } from './audio/cabs';
@@ -524,24 +523,12 @@ export default function App() {
       setChain((cur) => cur.map((item, i) => (i === index ? { ...item, enabled } : item)));
     },
     // motion_midi 表情踏板:CC11 → 第 1 块、CC12 → 第 2 块摇杆类踏板
-    // (whammy/wahpedal/crybabywdf 的 position)。兜底:踏板 1 无摇杆踏板时 →
-    // 音量踏板 → Master;踏板 2 仅在踏板 1 已占用摇杆踏板时退到音量踏板,否则不动作
+    // (whammy/wahpedal/crybabywdf 的 position)。不做音量/Master 兜底:
+    // 表情踏板静止=0,兜底到音量类参数会把输出拉到最底(嘴闭=静音)
     setExpression: (index, t) => {
       const treadles = chain.filter((item) => EXPRESSION_TREADLE_IDS.has(item.effectId));
       const target = treadles[index];
-      if (target) {
-        handleParam(target.uid, 'position', t * 100);
-        return;
-      }
-      const vol = chain.find((item) => item.effectId === 'volume');
-      if (vol && (index === 0 || treadles.length > 0)) {
-        handleParam(vol.uid, 'level', VOLUME_DB_MIN + t * (LEVEL_DB_MAX - VOLUME_DB_MIN));
-        return;
-      }
-      if (index === 0) {
-        setMasterVolume(t);
-        audioEngine.setMasterVolume(t);
-      }
+      if (target) handleParam(target.uid, 'position', t * 100);
     },
   });
 

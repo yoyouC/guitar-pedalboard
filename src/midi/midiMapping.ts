@@ -61,7 +61,8 @@ export const MOTION_INPUT_NAME_PATTERN = /iac/i;
 
 /**
  * 表情踏板 CC → 链上第 N 块摇杆类踏板(whammy/wahpedal/crybabywdf 的 position)。
- * CC11 = 第 1 块,CC12 = 第 2 块(motion_midi 双踏板);兜底规则见 App 的 setExpression。
+ * CC11 = 第 1 块,CC12 = 第 2 块(motion_midi 双踏板)。
+ * 不做音量/Master 兜底:表情静止=0,兜底到音量类参数会把输出拉到底(静音)。
  */
 export const MOTION_EXPRESSION_CCS = [11, 12] as const;
 
