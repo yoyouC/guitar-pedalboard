@@ -33,11 +33,13 @@ import { la2aEffect } from './la2a';
 import { fet1176Effect } from './fet1176';
 import { dynaCompEffect } from './dynacomp';
 import { volumeEffect } from './volume';
+import { whammyEffect } from './whammy';
 import { NAM_PEDAL_EFFECTS } from './namPedal';
 
 /** 效果器目录,按吉他信号链常见顺序排列 */
 export const EFFECT_REGISTRY: EffectDefinition[] = [
   noiseGateEffect,
+  whammyEffect,
   compressorEffect,
   la2aEffect,
   fet1176Effect,

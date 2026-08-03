@@ -5,7 +5,7 @@ import { MiniMeter } from './MiniMeter';
 import { WahTreadle } from './WahTreadle';
 
 /** 用摇杆(WahTreadle)代替 position 旋钮的效果器 */
-const TREADLE_EFFECT_IDS = new Set(['wahpedal', 'crybabywdf']);
+const TREADLE_EFFECT_IDS = new Set(['wahpedal', 'crybabywdf', 'whammy']);
 
 interface PedalCardProps {
   item: ChainItem;
@@ -77,9 +77,20 @@ export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove,
 
       {TREADLE_EFFECT_IDS.has(def.id) && (
         <WahTreadle
-          value={item.values['position'] ?? 50}
+          value={item.values['position'] ?? def.params.find((p) => p.key === 'position')?.defaultValue ?? 50}
           disabled={!item.enabled}
           onChange={(v) => onParam(item.uid, 'position', v)}
+          badge={def.id === 'whammy' ? 'WHAMMY' : 'WAH'}
+          resetValue={def.id === 'whammy' ? 0 : 50}
+          formatValue={
+            def.id === 'whammy'
+              ? (v) => {
+                  const range = item.values['range'] ?? 2;
+                  const st = ((v / 100) * range).toFixed(1);
+                  return `${v}% · ${Number(st) > 0 ? '+' : ''}${st}st`;
+                }
+              : undefined
+          }
         />
       )}
 
