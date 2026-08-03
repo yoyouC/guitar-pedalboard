@@ -59,8 +59,11 @@ export const MASTER_KNOB_CC = 7;
 /** IAC 输入端口名匹配(motion_midi 在 UI 里选择 IAC Driver 总线作为输出) */
 export const MOTION_INPUT_NAME_PATTERN = /iac/i;
 
-/** 表情踏板 CC → 链上第一个 Volume & Pan 单块的 level;链上没有音量踏板时由调用方兜底 */
-export const MOTION_EXPRESSION_CC = 11;
+/**
+ * 表情踏板 CC → 链上第 N 块摇杆类踏板(whammy/wahpedal/crybabywdf 的 position)。
+ * CC11 = 第 1 块,CC12 = 第 2 块(motion_midi 双踏板);兜底规则见 App 的 setExpression。
+ */
+export const MOTION_EXPRESSION_CCS = [11, 12] as const;
 
 /** 踩钉 1..4 的 CC 号 → 按板上顺序绝对设置第 1..4 块单块的 enabled */
 export const MOTION_SWITCH_CCS = [20, 21, 22, 23] as const;
@@ -117,8 +120,8 @@ export type MidiAction =
    * Toggle 状态由发送方维护,这里按值设置而非翻转,保持两端同步)
    */
   | { type: 'set-pedal-enabled'; index: number; enabled: boolean }
-  /** 表情踏板位置,归一化 0..1(具体控制目标由调用方决定) */
-  | { type: 'set-expression'; value: number };
+  /** 表情踏板位置,归一化 0..1;index 0 = 第 1 块踏板(CC11),1 = 第 2 块(CC12) */
+  | { type: 'set-expression'; index: number; value: number };
 
 /** CC 值 0..127 线性映射到 [min, max] */
 export function ccToRange(ccValue: number, min: number, max: number): number {
@@ -142,8 +145,13 @@ export function resolveMidiAction(
   // motion_midi(IAC 总线):表情踏板 + 4 个踩钉
   if (sourceName && MOTION_INPUT_NAME_PATTERN.test(sourceName)) {
     if (msg.type !== 'cc') return null;
-    if (msg.number === MOTION_EXPRESSION_CC) {
-      return { type: 'set-expression', value: Math.max(0, Math.min(127, msg.value)) / 127 };
+    const exprIndex = MOTION_EXPRESSION_CCS.indexOf(msg.number as 11 | 12);
+    if (exprIndex >= 0) {
+      return {
+        type: 'set-expression',
+        index: exprIndex,
+        value: Math.max(0, Math.min(127, msg.value)) / 127,
+      };
     }
     const switchIndex = MOTION_SWITCH_CCS.indexOf(msg.number as 20 | 21 | 22 | 23);
     if (switchIndex >= 0) {

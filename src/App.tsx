@@ -39,6 +39,9 @@ import { FluidBackground } from './components/FluidBackground';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
+/** 表情踏板可驱动的摇杆类踏板(position 语义统一:0=跟位,100=顶位) */
+const EXPRESSION_TREADLE_IDS = new Set(['whammy', 'wahpedal', 'crybabywdf']);
+
 function defaultChain(): ChainItem[] {
   return ['noiseGate', 'overdrive', 'volume', 'delay', 'reverb'].map((id) =>
     createChainItem(getEffectDef(id)),
@@ -520,20 +523,22 @@ export default function App() {
     setPedalEnabled: (index, enabled) => {
       setChain((cur) => cur.map((item, i) => (i === index ? { ...item, enabled } : item)));
     },
-    // motion_midi 表情踏板:优先控制链上第一个摇杆类踏板(whammy/wahpedal/crybabywdf
-    // 的 position);没有则退到第一个 Volume & Pan 的 level;都没有则退化为 Master 输出
-    setExpression: (t) => {
-      const treadle = chain.find(
-        (item) => item.effectId === 'whammy' || item.effectId === 'wahpedal' || item.effectId === 'crybabywdf',
-      );
-      if (treadle) {
-        handleParam(treadle.uid, 'position', t * 100);
+    // motion_midi 表情踏板:CC11 → 第 1 块、CC12 → 第 2 块摇杆类踏板
+    // (whammy/wahpedal/crybabywdf 的 position)。兜底:踏板 1 无摇杆踏板时 →
+    // 音量踏板 → Master;踏板 2 仅在踏板 1 已占用摇杆踏板时退到音量踏板,否则不动作
+    setExpression: (index, t) => {
+      const treadles = chain.filter((item) => EXPRESSION_TREADLE_IDS.has(item.effectId));
+      const target = treadles[index];
+      if (target) {
+        handleParam(target.uid, 'position', t * 100);
         return;
       }
       const vol = chain.find((item) => item.effectId === 'volume');
-      if (vol) {
+      if (vol && (index === 0 || treadles.length > 0)) {
         handleParam(vol.uid, 'level', VOLUME_DB_MIN + t * (LEVEL_DB_MAX - VOLUME_DB_MIN));
-      } else {
+        return;
+      }
+      if (index === 0) {
         setMasterVolume(t);
         audioEngine.setMasterVolume(t);
       }

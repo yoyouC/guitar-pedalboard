@@ -78,7 +78,8 @@ motion_midi(浏览器应用,FaceLandmarker 面部表情追踪 → Web MIDI 输�
 
 | 控制 | 面部动作 | MIDI(通道 1) | 踏板板动作 |
 |---|---|---|---|
-| 表情踏板 | 张嘴 | CC11,0–127 连续 | 链上第一个摇杆类踏板(Whammy/Wah/Crybaby 的 TREADLE position);无摇杆踏板退到第一个 Volume & Pan 的 level;都没有则退化为 Master 输出音量 |
+| 表情踏板 1 | 张嘴 | CC11,0–127 连续 | 链上第 1 块摇杆类踏板(Whammy/Wah/Crybaby 的 TREADLE position);无摇杆踏板退到 Volume & Pan 的 level;都没有则退化为 Master 输出音量 |
+| 表情踏板 2 | (motion_midi 第二踏板) | CC12,0–127 连续 | 链上第 2 块摇杆类踏板;只有 1 块摇杆踏板时退到 Volume & Pan;再没有则不动作 |
 | 踩钉 1 | 眨眼(hold 150ms) | CC20,Toggle 127/0 | 绝对设置第 1 块单块 enabled |
 | 踩钉 2 | 挑眉 | CC21,Toggle | 绝对设置第 2 块单块 enabled |
 | 踩钉 3 | 快速点头 | CC22,Momentary(127,~120ms 回 0) | 第 3 块单块随脉冲开/关 |

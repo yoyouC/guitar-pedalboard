@@ -23,8 +23,8 @@ export interface MidiActions {
   setAmpParam(key: AmpParamKey, value: number): void;
   /** 绝对设置效果链第 index 块单块开关(motion_midi 踩钉) */
   setPedalEnabled(index: number, enabled: boolean): void;
-  /** 表情踏板位置,归一化 0..1(motion_midi CC11) */
-  setExpression(value: number): void;
+  /** 表情踏板位置,归一化 0..1;index 0 = 第 1 块(CC11),1 = 第 2 块(CC12) */
+  setExpression(index: number, value: number): void;
 }
 
 /** 最近收到的一条原始消息,供 MidiStatus 调试面板显示 */
@@ -101,7 +101,7 @@ export function useMidi(actions: MidiActions): MidiState {
           a.setPedalEnabled(action.index, action.enabled);
           break;
         case 'set-expression':
-          a.setExpression(action.value);
+          a.setExpression(action.index, action.value);
           break;
       }
     };

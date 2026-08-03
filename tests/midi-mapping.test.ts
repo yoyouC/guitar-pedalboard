@@ -5,7 +5,7 @@ import {
   ccToRange,
   KNOB_BANK_A_CC_START,
   MASTER_KNOB_CC,
-  MOTION_EXPRESSION_CC,
+  MOTION_EXPRESSION_CCS,
   MOTION_SWITCH_CCS,
   PAD_BANK_A_NOTE_START,
   PAD_BANK_B_NOTE_START,
@@ -176,14 +176,18 @@ test('K1(与 Mod 条同号)预留,不映射', () => {
 
 // ---------- 映射:motion_midi(IAC 总线,按输入端口名路由) ----------
 
-test('IAC 来源:CC11 表情踏板 → 归一化 0..1', () => {
+test('IAC 来源:CC11/CC12 表情踏板 → 第 1/2 块踏板,归一化 0..1', () => {
   assert.deepEqual(
-    resolveMidiAction(parseMidiMessage([0xb0, MOTION_EXPRESSION_CC, 0])!, 'IAC Driver Bus 1'),
-    { type: 'set-expression', value: 0 },
+    resolveMidiAction(parseMidiMessage([0xb0, MOTION_EXPRESSION_CCS[0], 0])!, 'IAC Driver Bus 1'),
+    { type: 'set-expression', index: 0, value: 0 },
   );
   assert.deepEqual(
-    resolveMidiAction(parseMidiMessage([0xb0, MOTION_EXPRESSION_CC, 127])!, 'IAC Driver Bus 1'),
-    { type: 'set-expression', value: 1 },
+    resolveMidiAction(parseMidiMessage([0xb0, MOTION_EXPRESSION_CCS[0], 127])!, 'IAC Driver Bus 1'),
+    { type: 'set-expression', index: 0, value: 1 },
+  );
+  assert.deepEqual(
+    resolveMidiAction(parseMidiMessage([0xb0, MOTION_EXPRESSION_CCS[1], 127])!, 'IAC Driver Bus 1'),
+    { type: 'set-expression', index: 1, value: 1 },
   );
 });
 
@@ -225,7 +229,7 @@ test('IAC 来源:未映射消息返回 null(踩钉的 note、其他 CC)', () => 
 });
 
 test('非 IAC 来源:CC11/20-23 不触发 motion 映射(按 K25 映射处理,均未映射)', () => {
-  for (const cc of [MOTION_EXPRESSION_CC, ...MOTION_SWITCH_CCS]) {
+  for (const cc of [...MOTION_EXPRESSION_CCS, ...MOTION_SWITCH_CCS]) {
     assert.equal(resolveMidiAction(parseMidiMessage([0xb0, cc, 127])!, 'TempoKEY K25'), null);
     // 不传来源名(旧调用方式)同样走 K25 映射
     assert.equal(resolveMidiAction(parseMidiMessage([0xb0, cc, 127])!), null);
