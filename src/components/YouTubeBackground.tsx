@@ -51,6 +51,8 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
   const [dim, setDim] = useState(0.55);
+  const [rate, setRate] = useState(1);
+  const rateRef = useRef(1); // onReady 闭包拿最新速度
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRef = useRef<any>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -79,6 +81,7 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
           onReady: (e: any) => {
             // 静音后才允许自动播放
             e.target.mute();
+            e.target.setPlaybackRate(rateRef.current);
             e.target.playVideo();
           },
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -99,6 +102,12 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
   useEffect(() => {
     onActiveChange?.(videoId !== null);
   }, [videoId, onActiveChange]);
+
+  // 速度变更应用到播放器(不支持该档的视频会由 YT 自动就近取档)
+  useEffect(() => {
+    rateRef.current = rate;
+    playerRef.current?.setPlaybackRate?.(rate);
+  }, [rate]);
 
   const load = () => {
     const id = parseVideoId(urlInput);
@@ -159,6 +168,20 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
             <button onClick={toggleMute} title={muted ? '取消静音(视频原声)' : '静音'}>
               {muted ? '🔇' : '🔊'}
             </button>
+            <label className="yt-dim">
+              速度
+              <select
+                className="yt-rate"
+                value={rate}
+                onChange={(e) => setRate(Number(e.target.value))}
+              >
+                {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((r) => (
+                  <option key={r} value={r}>
+                    {r}×
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="yt-dim">
               暗化
               <input
