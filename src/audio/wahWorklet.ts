@@ -65,13 +65,22 @@ class CrybabyWahProcessor extends AudioWorkletProcessor {
       const N2 = 2 - 2 * c1; // |(1 - e^{-jθ})|²
       const D2 = (1 + a1 * a1 + a2 * a2) + 2 * a1 * (1 + a2) * c1 + 2 * a2 * c2;
       const peakTarget = Math.pow(10, (14 + 6 * w) / 20);
-      const b0 = peakTarget * Math.sqrt(D2 / N2);
+      // 数值防御:D2 理论非负但抵消严重,负值/NaN 时 b0 取 0(本样本直静音,不污染状态)
+      const b0raw = peakTarget * Math.sqrt(Math.max(0, D2 / N2));
+      const b0 = isFinite(b0raw) ? b0raw : 0;
 
       for (let ch = 0; ch < input.length && ch < 2; ch++) {
         const x = input[ch][i];
-        const y = b0 * x + this.s1[ch];
-        this.s1[ch] = -b0 * x - a1 * y + this.s2[ch];
-        this.s2[ch] = -a2 * y;
+        let y = b0 * x + this.s1[ch];
+        if (!isFinite(y)) {
+          // 状态被 NaN 污染时自恢复:清零滤波状态,本样本输出 0(避免永久死寂)
+          this.s1[ch] = 0;
+          this.s2[ch] = 0;
+          y = 0;
+        } else {
+          this.s1[ch] = -b0 * x - a1 * y + this.s2[ch];
+          this.s2[ch] = -a2 * y;
+        }
         output[ch][i] = y;
       }
     }

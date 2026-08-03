@@ -366,6 +366,13 @@ const processorSource = `(() => {
 	      this.vinPrev += Math.min(0.5, Math.max(-0.5, vin - this.vinPrev));
 	      return this.voutPrev;
 	    }
+	    // 数值防御:解出非有限值时重置到 DC 工作点(理论上不可达;
+	    // 一旦 NaN 进入伴随历史会永久死寂,必须在这里截断)
+	    if (!s.every(Number.isFinite)) {
+	      this.nonConverged++;
+	      this.solveDC();
+	      return 0;
+	    }
 	    this.vinPrev = vinUsed;
 	    this.u = s;
 	    const vB0 = this.u[iB0], vE0 = this.u[iE0], vB1 = this.u[iB1], vC1 = this.u[iC1];
@@ -388,6 +395,11 @@ const processorSource = `(() => {
 	    this.lIhPrev = iL + this.Gl * vL;
 
 	    const y = vC1 - this.blkX + this.blkR * this.blkY;
+	    if (!Number.isFinite(y)) {
+	      // 状态更新溢出(理论上不可达):重置到 DC 工作点,本样本输出 0
+	      this.solveDC();
+	      return 0;
+	    }
 	    this.blkX = vC1;
 	    this.blkY = y;
 
