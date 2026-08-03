@@ -2283,3 +2283,21 @@ input[type='text'] {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 .skin-whammy .pedal-remove { color: rgba(255, 255, 255, 0.6); text-shadow: none; }
+
+/* ---------- 沉浸模式:隐藏 UI 只看背景视频 ---------- */
+
+/* 除视频层(.yt-keep)外的所有 .app 直接子元素渐隐;
+   视频层 z-index -1 在内容之下,不受影响 */
+body.ui-immersive .app > *:not(.yt-keep) {
+  opacity: var(--ui-immersive-opacity, 0.5);
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+body.ui-immersive.ui-peek .app > *:not(.yt-keep) {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.25s ease;
+}
+body.ui-immersive:not(.ui-peek) {
+  cursor: none;
+}

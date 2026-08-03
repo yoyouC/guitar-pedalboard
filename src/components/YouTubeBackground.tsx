@@ -52,6 +52,8 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
   const [muted, setMuted] = useState(true);
   const [dim, setDim] = useState(0.55);
   const [rate, setRate] = useState(1);
+  const [immersive, setImmersive] = useState(false);
+  const [uiOpacity, setUiOpacity] = useState(50); // 沉浸模式下界面可见度 %
   const rateRef = useRef(1); // onReady 闭包拿最新速度
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRef = useRef<any>(null);
@@ -109,6 +111,52 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
     playerRef.current?.setPlaybackRate?.(rate);
   }, [rate]);
 
+  // 视频关闭时退出沉浸模式
+  useEffect(() => {
+    if (!videoId) setImmersive(false);
+  }, [videoId]);
+
+  // 沉浸模式:隐藏全部 UI 只留视频;鼠标/按键唤回 2.5s,闲置再隐;Esc 退出
+  useEffect(() => {
+    if (!immersive) return;
+    const body = document.body;
+    body.classList.add('ui-immersive');
+    let timer = 0;
+    const wake = () => {
+      body.classList.add('ui-peek');
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => body.classList.remove('ui-peek'), 2500);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setImmersive(false);
+        return;
+      }
+      wake();
+    };
+    window.addEventListener('mousemove', wake);
+    window.addEventListener('pointerdown', wake);
+    window.addEventListener('keydown', onKey);
+    wake(); // 进入时先亮一下再渐隐
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('mousemove', wake);
+      window.removeEventListener('pointerdown', wake);
+      window.removeEventListener('keydown', onKey);
+      body.classList.remove('ui-immersive', 'ui-peek');
+    };
+  }, [immersive]);
+
+  // 沉浸透明度写入 CSS 变量(滑条实时生效)
+  useEffect(() => {
+    const body = document.body;
+    if (immersive) {
+      body.style.setProperty('--ui-immersive-opacity', String(uiOpacity / 100));
+    } else {
+      body.style.removeProperty('--ui-immersive-opacity');
+    }
+  }, [immersive, uiOpacity]);
+
   const load = () => {
     const id = parseVideoId(urlInput);
     if (!id) {
@@ -151,7 +199,7 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
   return (
     <>
       {videoId && (
-        <div className="yt-bg">
+        <div className="yt-bg yt-keep">
           <div className="yt-bg-cover">
             <div ref={hostRef} className="yt-bg-host" />
           </div>
@@ -191,6 +239,20 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
                 step={0.05}
                 value={dim}
                 onChange={(e) => setDim(Number(e.target.value))}
+              />
+            </label>
+            <button onClick={() => setImmersive(true)} title="沉浸模式:界面渐隐看视频,移动鼠标唤回,Esc 退出">
+              🎬
+            </button>
+            <label className="yt-dim" title="沉浸模式下界面的可见度">
+              界面
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={uiOpacity}
+                onChange={(e) => setUiOpacity(Number(e.target.value))}
               />
             </label>
             <button onClick={close} title="关闭视频背景">
