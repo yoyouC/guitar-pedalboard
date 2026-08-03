@@ -26,6 +26,7 @@
     "wdf:crybaby-eval": "node scripts/wdf-crybaby-eval.ts",
     "wdf:crybaby-spice": "node scripts/wdf-crybaby-spice-compare.ts",
     "whammy:eval": "node scripts/whammy-eval.ts",
+    "wdf:crybaby-stress": "node scripts/wdf-crybaby-stress.ts",
     "check:publish": "node scripts/check-publish-models.mjs"
   },
   "dependencies": {
