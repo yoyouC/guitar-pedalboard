@@ -159,8 +159,10 @@ export class CrybabyStage {
   private blkX = 0;
   private blkY = 0;
 
-  // Newton 初值沿用上一采样(初始为 DC 工作点,由 solveDC 填入)
-  private u: number[] = [3.1, 2.4, 0.7, 4.5, 0.07, 2.4, 1.8, 0.7, 0.69];
+  /** Newton 初值:固定初始猜测(solveDC 从这里出发, watchdog 复位也用它,保证确定性) */
+  private static readonly INIT_U = [3.1, 2.4, 0.7, 4.5, 0.07, 2.4, 1.8, 0.7, 0.69];
+  /** Newton 初值沿用上一采样(初始为 DC 工作点,由 solveDC 填入) */
+  private u: number[] = [...CrybabyStage.INIT_U];
   private vinPrev = 0;
   private voutPrev = 0;
 
@@ -320,6 +322,15 @@ export class CrybabyStage {
       for (let i = 0; i < N; i++) F[i] = -F[i];
       const dx = solveN(J, F, N);
       if (!dx) break;
+      // 非有限步长(残差含 Inf 时):判失败,交由延拓/冻结处理
+      let dxBad = false;
+      for (let i = 0; i < N; i++) {
+        if (!Number.isFinite(dx[i])) {
+          dxBad = true;
+          break;
+        }
+      }
+      if (dxBad) break;
       // 结电压限步(同 fuzzface:≤STEP_MAX 全 Newton 步,超限阻尼 0.5)
       let full = true;
       for (let i = 0; i < N; i++) if (Math.abs(dx[i]) > STEP_MAX) { full = false; break; }
@@ -328,8 +339,8 @@ export class CrybabyStage {
         let d = dx[i] * damp;
         if (d > STEP_MAX) d = STEP_MAX; else if (d < -STEP_MAX) d = -STEP_MAX;
         u[i] += d;
-        // 物理盒约束 ±12V(耦合电容可把节点拉到电源轨外,留裕量)
-        if (u[i] > 12) u[i] = 12; else if (u[i] < -12) u[i] = -12;
+        // 物理盒约束 ±12V,NaN 安全(NaN 落到下界;耦合电容可把节点拉到电源轨外,留裕量)
+        if (!(u[i] > -12)) u[i] = -12; else if (!(u[i] < 12)) u[i] = 12;
       }
       exps = evalRes();
       rMax = 0;
@@ -343,9 +354,10 @@ export class CrybabyStage {
    * 解出偏置后一致初始化所有储能元件状态,消除零启动充电瞬态。
    */
   private solveDC(): void {
+    // 永远从固定初始猜测出发:watchdog 复位时不受被污染状态影响
     const s = this.newtonSolve(
       { iInConst: 0, gIn: 0, gCpl: 0, iCplH: 0, gC2: 0, iC2h: 0, gC3: 0, iC3h: 0, gL: 1 / this.Rdcr, iLh: 0, maxIter: 200 },
-      this.u,
+      [...CrybabyStage.INIT_U],
     );
     this.u = s.u;
     const vB0 = this.u[iB0], vE0 = this.u[iE0], vB1 = this.u[iB1], vC1 = this.u[iC1];
@@ -373,6 +385,11 @@ export class CrybabyStage {
    * 返回 vC1 经 DC blocker 后的输出电压(V)。
    */
   process(vin: number): number {
+    // 非有限输入(NaN/±Inf,可能来自上游效果器):不触碰任何状态,输出上一采样
+    if (!Number.isFinite(vin)) {
+      this.nonConverged++;
+      return this.voutPrev;
+    }
     // 步骤开始:由上一状态推出各储能元件历史电流
     const ihIn = -this.GcIn * this.vCinPrev - this.iCinPrev;
     const ihCpl = -this.Gc1 * this.vCplPrev - this.iCplPrev;
@@ -415,11 +432,13 @@ export class CrybabyStage {
           u,
         );
         totalIters += r.iters;
-        if (r.rMax >= TOL) {
+        // 严格判据:只有 rMax < TOL 才算收敛(NaN 残差一律判失败,走下一级延拓)
+        if (r.rMax < TOL) {
+          u = r.u;
+        } else {
           failed = true;
           break;
         }
-        u = r.u;
       }
       if (!failed) {
         s = { u, rMax: 0, iters: totalIters };
@@ -466,8 +485,8 @@ export class CrybabyStage {
 
     // 输出:vC1 经一阶 DC blocker(去直流,15Hz 转角不影响 wah 通带)
     const y = vC1 - this.blkX + this.blkR * this.blkY;
+    // 看门狗:输出非有限(理论上到不了这里)则复位到 DC 工作点自愈
     if (!Number.isFinite(y)) {
-      // 状态更新溢出(理论上不可达):重置到 DC 工作点,本样本输出 0
       this.solveDC();
       return 0;
     }

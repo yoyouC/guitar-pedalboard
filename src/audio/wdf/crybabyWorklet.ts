@@ -157,7 +157,8 @@ const processorSource = `(() => {
 	    this.vC3Prev = 0; this.iC3Prev = 0;
 	    this.lIhPrev = 0;
 	    this.blkX = 0; this.blkY = 0;
-	    this.u = [3.1, 2.4, 0.7, 4.5, 0.07, 2.4, 1.8, 0.7, 0.69];
+	    this.INIT_U = [3.1, 2.4, 0.7, 4.5, 0.07, 2.4, 1.8, 0.7, 0.69];
+	    this.u = this.INIT_U.slice();
 	    this.vinPrev = 0;
 	    this.voutPrev = 0;
 	    this.iterTotal = 0; this.iterCount = 0;
@@ -272,6 +273,12 @@ const processorSource = `(() => {
 	      for (let i = 0; i < N; i++) F[i] = -F[i];
 	      const dx = solveN(J, F, N);
 	      if (!dx) break;
+	      // 非有限步长(残差含 Inf 时):判失败,交由延拓/冻结处理
+	      let dxBad = false;
+	      for (let i = 0; i < N; i++) {
+	        if (!Number.isFinite(dx[i])) { dxBad = true; break; }
+	      }
+	      if (dxBad) break;
 	      let full = true;
 	      for (let i = 0; i < N; i++) if (Math.abs(dx[i]) > STEP_MAX) { full = false; break; }
 	      const damp = full ? 1 : 0.5;
@@ -279,7 +286,8 @@ const processorSource = `(() => {
 	        let d = dx[i] * damp;
 	        if (d > STEP_MAX) d = STEP_MAX; else if (d < -STEP_MAX) d = -STEP_MAX;
 	        u[i] += d;
-	        if (u[i] > 12) u[i] = 12; else if (u[i] < -12) u[i] = -12;
+	        // 物理盒约束 ±12V,NaN 安全(NaN 落到下界)
+	        if (!(u[i] > -12)) u[i] = -12; else if (!(u[i] < 12)) u[i] = 12;
 	      }
 	      exps = evalRes();
 	      rMax = 0;
@@ -289,9 +297,10 @@ const processorSource = `(() => {
 	  }
 
 	  solveDC() {
+	    // 永远从固定初始猜测出发:watchdog 复位时不受被污染状态影响
 	    const s = this.newtonSolve(
 	      { iInConst: 0, gIn: 0, gCpl: 0, iCplH: 0, gC2: 0, iC2h: 0, gC3: 0, iC3h: 0, gL: 1 / this.Rdcr, iLh: 0, maxIter: 200 },
-	      this.u,
+	      this.INIT_U.slice(),
 	    );
 	    this.u = s.u;
 	    const vB0 = this.u[iB0], vE0 = this.u[iE0], vB1 = this.u[iB1], vC1 = this.u[iC1];
@@ -312,6 +321,11 @@ const processorSource = `(() => {
 	  }
 
 	  process(vin) {
+	    // 非有限输入(NaN/±Inf,可能来自上游效果器):不触碰任何状态,输出上一采样
+	    if (!Number.isFinite(vin)) {
+	      this.nonConverged++;
+	      return this.voutPrev;
+	    }
 	    const ihIn = -this.GcIn * this.vCinPrev - this.iCinPrev;
 	    const ihCpl = -this.Gc1 * this.vCplPrev - this.iCplPrev;
 	    const ih2 = -this.Gc2 * this.vC2Prev - this.iC2Prev;
@@ -354,8 +368,8 @@ const processorSource = `(() => {
 	          u,
 	        );
 	        totalIters += r.iters;
-	        if (r.rMax >= TOL) { failed = true; break; }
-	        u = r.u;
+	        // 严格判据:只有 rMax < TOL 才算收敛(NaN 残差一律判失败,走下一级延拓)
+	        if (r.rMax < TOL) { u = r.u; } else { failed = true; break; }
 	      }
 	      if (!failed) { s = u; break; }
 	    }
@@ -395,8 +409,8 @@ const processorSource = `(() => {
 	    this.lIhPrev = iL + this.Gl * vL;
 
 	    const y = vC1 - this.blkX + this.blkR * this.blkY;
+	    // 看门狗:输出非有限(理论上到不了这里)则复位到 DC 工作点自愈
 	    if (!Number.isFinite(y)) {
-	      // 状态更新溢出(理论上不可达):重置到 DC 工作点,本样本输出 0
 	      this.solveDC();
 	      return 0;
 	    }
