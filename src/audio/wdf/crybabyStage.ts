@@ -453,6 +453,13 @@ export class CrybabyStage {
       this.vinPrev += Math.min(0.5, Math.max(-0.5, vin - this.vinPrev));
       return this.voutPrev;
     }
+    // 数值防御:解出非有限值时重置到 DC 工作点(理论上不可达;
+    // 一旦 NaN 进入伴随历史会永久死寂,必须在这里截断)
+    if (!s.u.every(Number.isFinite)) {
+      this.nonConverged++;
+      this.solveDC();
+      return 0;
+    }
     this.vinPrev = vinUsed;
     this.u = s.u;
     const vB0 = this.u[iB0], vE0 = this.u[iE0], vB1 = this.u[iB1], vC1 = this.u[iC1];

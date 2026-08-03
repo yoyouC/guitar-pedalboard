@@ -101,7 +101,7 @@ export function WahTreadle({ value, disabled, onChange, badge = 'WAH', resetValu
           <div className="wah-badge">{badge}</div>
         </div>
       </div>
-      <div className="wah-value">{formatValue ? formatValue(value) : `${value}%`}</div>
+      <div className="wah-value">{formatValue ? formatValue(value) : `${Math.round(value)}%`}</div>
     </div>
   );
 }

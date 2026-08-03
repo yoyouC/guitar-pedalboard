@@ -25,6 +25,7 @@ import {
   loadSnapshots,
   saveSnapshots,
 } from './state/store';
+import { useMidi } from './midi/useMidi';
 import { TopBar } from './components/TopBar';
 import { Tuner } from './components/Tuner';
 import { ChainView } from './components/ChainView';
@@ -37,6 +38,9 @@ import { FluidBackground } from './components/FluidBackground';
 import { YouTubeBackground } from './components/YouTubeBackground';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
+
+/** 表情踏板可驱动的摇杆类踏板(position 语义统一:0=跟位,100=顶位) */
+const EXPRESSION_TREADLE_IDS = new Set(['whammy', 'wahpedal', 'crybabywdf']);
 
 function defaultChain(): ChainItem[] {
   return ['noiseGate', 'overdrive', 'volume', 'delay', 'reverb'].map((id) =>
@@ -487,6 +491,49 @@ export default function App() {
     audioEngine.updateAmpParam(key, value);
   }, []);
 
+  // ---------- MIDI(Synido TempoKEY K25,映射表见 src/midi/midiMapping.ts) ----------
+
+  // 回调每次渲染都新建,useMidi 内部用 ref 持有最新版本,MIDI 监听只挂一次
+  const midi = useMidi({
+    togglePedal: (index) => {
+      const item = chain[index];
+      if (item) handleToggle(item.uid);
+    },
+    recallSnapshot,
+    toggleBypass: () => setGlobalBypass((b) => !b),
+    looperRecord: () => {
+      // 录音中 → 结束;否则开始(引擎内部还有 canRunLooperCommand 守卫)
+      if (audioEngine.currentLooperStatus.phase === 'recording') {
+        audioEngine.finishLoopRecording();
+      } else {
+        audioEngine.startLoopRecording();
+      }
+    },
+    looperTogglePlay: () => {
+      audioEngine.toggleLoopPlayback();
+    },
+    looperClear: () => {
+      audioEngine.clearLoop();
+    },
+    setMasterVolume: (v) => {
+      setMasterVolume(v);
+      audioEngine.setMasterVolume(v);
+    },
+    setAmpParam: (key, value) => handleAmpParam(key, value),
+    // motion_midi 踩钉:按板上顺序绝对设置第 N 块单块开关(Toggle 状态在发送方维护)
+    setPedalEnabled: (index, enabled) => {
+      setChain((cur) => cur.map((item, i) => (i === index ? { ...item, enabled } : item)));
+    },
+    // motion_midi 表情踏板:CC11 → 第 1 块、CC12 → 第 2 块摇杆类踏板
+    // (whammy/wahpedal/crybabywdf 的 position)。不做音量/Master 兜底:
+    // 表情踏板静止=0,兜底到音量类参数会把输出拉到最底(嘴闭=静音)
+    setExpression: (index, t) => {
+      const treadles = chain.filter((item) => EXPRESSION_TREADLE_IDS.has(item.effectId));
+      const target = treadles[index];
+      if (target) handleParam(target.uid, 'position', t * 100);
+    },
+  });
+
   // NAM:加载本地 .nam 模型(WASM Core 支持全架构),成功后置为当前类的型号
   const handleNamModelFile = useCallback(
     async (file: File) => {
@@ -677,6 +724,7 @@ export default function App() {
         onToggleMeters={() => setShowMeters((m) => !m)}
         showTuner={showTuner}
         onToggleTuner={() => setShowTuner((t) => !t)}
+        midi={midi}
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
         engineReady={engineReady}
