@@ -3,12 +3,24 @@
  * 显示 未支持 / 未连接 / 已连接(设备名);点击展开最近一条原始 MIDI 消息,
  * 兼任调试监视器——首次接入 K25 时按控件核对实际 Note/CC 编号,
  * 不一致就改 src/midi/midiMapping.ts 顶部的编号常量。
+ * 另含 MIDI Learn 入口与自定义绑定列表(见 src/midi/midiLearn.ts)。
  */
 
 import { useState } from 'react';
 import type { MidiState } from '../midi/useMidi';
+import { bindingLabel, targetLabel, type MidiBinding, type MidiTarget } from '../midi/midiLearn';
 
-export function MidiStatus({ midi }: { midi: MidiState }) {
+export interface MidiLearnProps {
+  learnMode: boolean;
+  armedTarget: MidiTarget | null;
+  bindings: MidiBinding[];
+  onToggleLearn: () => void;
+  onDisarm: () => void;
+  onDeleteBinding: (index: number) => void;
+  onClearBindings: () => void;
+}
+
+export function MidiStatus({ midi, learn }: { midi: MidiState; learn?: MidiLearnProps }) {
   const [open, setOpen] = useState(false);
 
   // 浏览器不支持 Web MIDI(Safari/Firefox):不显示入口,优雅降级
@@ -55,8 +67,59 @@ export function MidiStatus({ midi }: { midi: MidiState }) {
           ) : (
             <div className="midi-monitor-row">尚未收到消息,按一下琴键/垫/旋钮试试</div>
           )}
+
+          {learn && (
+            <div className="midi-learn-block">
+              <div className="midi-learn-row">
+                <button
+                  className={`midi-learn-btn ${learn.learnMode ? 'active' : ''}`}
+                  title="进入后点击界面上的控件,再动一下 MIDI 控制器即完成映射"
+                  onClick={learn.onToggleLearn}
+                >
+                  {learn.learnMode ? '退出 Learn' : 'MIDI Learn'}
+                </button>
+                {learn.learnMode && (
+                  <span className="midi-learn-armed">
+                    {learn.armedTarget ? (
+                      <>
+                        目标:{targetLabel(learn.armedTarget)},动一下控制器…
+                        <button className="midi-learn-cancel" onClick={learn.onDisarm}>
+                          取消
+                        </button>
+                      </>
+                    ) : (
+                      '点击要映射的控件(旋钮/踩钉/摇杆/快照…)'
+                    )}
+                  </span>
+                )}
+              </div>
+              {learn.bindings.length > 0 && (
+                <div className="midi-bindings">
+                  <div className="midi-bindings-title">
+                    自定义绑定({learn.bindings.length})
+                    <button className="midi-learn-cancel" onClick={learn.onClearBindings}>
+                      清空
+                    </button>
+                  </div>
+                  {learn.bindings.map((b, i) => (
+                    <div className="midi-binding-row" key={i}>
+                      <span>{bindingLabel(b)}</span>
+                      <button
+                        className="midi-learn-cancel"
+                        title="删除该绑定"
+                        onClick={() => learn.onDeleteBinding(i)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="midi-monitor-hint">
-            编号与预期不符?改 src/midi/midiMapping.ts 顶部的编号常量
+            默认映射编号不符?改 src/midi/midiMapping.ts 顶部常量;自定义绑定优先于默认映射
           </div>
         </div>
       )}

@@ -10,6 +10,8 @@ const TREADLE_EFFECT_IDS = new Set(['wahpedal', 'crybabywdf', 'whammy']);
 interface PedalCardProps {
   item: ChainItem;
   def: EffectDefinition;
+  /** 链上索引(0 起,MIDI Learn 目标定位用) */
+  index: number;
   analyser: AnalyserNode | null;
   showMeters: boolean;
   onToggle: (uid: string) => void;
@@ -19,7 +21,7 @@ interface PedalCardProps {
 }
 
 /** 拟物单块效果器:金属外壳 + 旋钮 + 脚踏开关 */
-export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot }: PedalCardProps) {
+export function PedalCard({ item, def, index, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot }: PedalCardProps) {
   return (
     <div
       className={`pedal skin-${def.id} ${item.enabled ? 'pedal-on' : 'pedal-off'}`}
@@ -60,43 +62,47 @@ export function PedalCard({ item, def, analyser, showMeters, onToggle, onRemove,
         {def.params
           .filter((p) => !(TREADLE_EFFECT_IDS.has(def.id) && p.key === 'position'))
           .map((p) => (
-            <Knob
-              key={p.key}
-              value={item.values[p.key] ?? p.defaultValue}
-              min={p.min}
-              max={p.max}
-              step={p.step}
-              defaultValue={p.defaultValue}
-              label={p.label}
-              unit={p.unit}
-              disabled={!item.enabled}
-              onChange={(v) => onParam(item.uid, p.key, v)}
-            />
+            <span key={p.key} data-midi-target={`pedal-param:${index}:${p.key}`}>
+              <Knob
+                value={item.values[p.key] ?? p.defaultValue}
+                min={p.min}
+                max={p.max}
+                step={p.step}
+                defaultValue={p.defaultValue}
+                label={p.label}
+                unit={p.unit}
+                disabled={!item.enabled}
+                onChange={(v) => onParam(item.uid, p.key, v)}
+              />
+            </span>
           ))}
       </div>
 
       {TREADLE_EFFECT_IDS.has(def.id) && (
-        <WahTreadle
-          value={item.values['position'] ?? def.params.find((p) => p.key === 'position')?.defaultValue ?? 50}
-          disabled={!item.enabled}
-          onChange={(v) => onParam(item.uid, 'position', v)}
-          badge={def.id === 'whammy' ? 'WHAMMY' : 'WAH'}
-          resetValue={def.id === 'whammy' ? 0 : 50}
-          formatValue={
-            def.id === 'whammy'
-              ? (v) => {
-                  const range = item.values['range'] ?? 2;
-                  const st = ((v / 100) * range).toFixed(1);
-                  return `${v}% · ${Number(st) > 0 ? '+' : ''}${st}st`;
-                }
-              : undefined
-          }
-        />
+        <span data-midi-target={`pedal-treadle:${index}`}>
+          <WahTreadle
+            value={item.values['position'] ?? def.params.find((p) => p.key === 'position')?.defaultValue ?? 50}
+            disabled={!item.enabled}
+            onChange={(v) => onParam(item.uid, 'position', v)}
+            badge={def.id === 'whammy' ? 'WHAMMY' : 'WAH'}
+            resetValue={def.id === 'whammy' ? 0 : 50}
+            formatValue={
+              def.id === 'whammy'
+                ? (v) => {
+                    const range = item.values['range'] ?? 2;
+                    const st = ((v / 100) * range).toFixed(1);
+                    return `${v}% · ${Number(st) > 0 ? '+' : ''}${st}st`;
+                  }
+                : undefined
+            }
+          />
+        </span>
       )}
 
       <button
         className={`footswitch ${item.enabled ? 'fs-on' : ''}`}
         title={item.enabled ? '踩下以关闭' : '踩下以开启'}
+        data-midi-target={`pedal-toggle:${index}`}
         onClick={() => onToggle(item.uid)}
       >
         <span className="footswitch-cap" />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { audioEngine } from './audio/AudioEngine';
 import type { InputSourceType } from './audio/AudioEngine';
 import { getEffectDef } from './audio/effects';
@@ -12,7 +12,7 @@ import {
   setNamWasmPack,
 } from './audio/namWasm';
 import { AMP_CATEGORIES, getAmpModelEntry } from './audio/ampCategories';
-import { readShareFromLocation, writeShareToLocation } from './state/share';
+import { DEFAULT_RIG_ENCODED, decodeShareState, readShareFromLocation, writeShareToLocation } from './state/share';
 import type { ChainItem, Preset, Snapshot } from './state/store';
 import {
   createChainItem,
@@ -26,6 +26,18 @@ import {
   saveSnapshots,
 } from './state/store';
 import { useMidi } from './midi/useMidi';
+import {
+  bindingMatches,
+  classifySource,
+  loadMidiBindings,
+  parseTarget,
+  saveMidiBindings,
+  upsertBinding,
+  type MidiBinding,
+  type MidiTarget,
+} from './midi/midiLearn';
+import type { ParsedMidiMessage } from './midi/midiMessage';
+import { AMP_MASTER_RANGE, AMP_TONE_RANGE, type AmpParamKey } from './midi/midiMapping';
 import { TopBar } from './components/TopBar';
 import { Tuner } from './components/Tuner';
 import { ChainView } from './components/ChainView';
@@ -105,6 +117,46 @@ export default function App() {
   const [showTuner, setShowTuner] = useState(false);
   const [ytBgActive, setYtBgActive] = useState(false);
 
+  // ---------- MIDI Learn(用户自定义映射,优先于默认映射) ----------
+  const [midiBindings, setMidiBindings] = useState<MidiBinding[]>(loadMidiBindings);
+  const [learnMode, setLearnMode] = useState(false);
+  const [armedTarget, setArmedTarget] = useState<MidiTarget | null>(null);
+  /** 开关型绑定从 CC 触发时的上升沿记忆(签名 → 上次值) */
+  const midiEdgeRef = useRef(new Map<string, number>());
+
+  useEffect(() => {
+    saveMidiBindings(midiBindings);
+  }, [midiBindings]);
+
+  // Learn 模式:点击捕获(data-midi-target)→ armed;同时高亮可学控件
+  useEffect(() => {
+    document.body.classList.toggle('midi-learn-mode', learnMode);
+    if (!learnMode) return;
+    const onClick = (e: MouseEvent) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-midi-target]');
+      if (!el) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const t = parseTarget(el.dataset.midiTarget ?? '');
+      if (t) setArmedTarget(t);
+    };
+    document.addEventListener('click', onClick, true);
+    return () => {
+      document.removeEventListener('click', onClick, true);
+      document.body.classList.remove('midi-learn-mode');
+    };
+  }, [learnMode]);
+
+  // armed 控件高亮(链变化/目标变化时重扫)
+  useEffect(() => {
+    if (!learnMode) return;
+    const sig = armedTarget ? JSON.stringify(armedTarget) : null;
+    document.querySelectorAll<HTMLElement>('[data-midi-target]').forEach((el) => {
+      const t = parseTarget(el.dataset.midiTarget ?? '');
+      el.classList.toggle('midi-armed', sig !== null && JSON.stringify(t) === sig);
+    });
+  }, [learnMode, armedTarget, chain]);
+
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputDevices, setOutputDevices] = useState<MediaDeviceInfo[]>([]);
   const [micId, setMicId] = useState('');
@@ -169,8 +221,11 @@ export default function App() {
 
   // ---------- URL 分享(读 hash 还原 + 变更时同步) ----------
 
-  // 启动时:若 URL 带 #p= 分享参数,还原配置(仅一次)
-  const [initialShare] = useState(() => readShareFromLocation());
+  // 启动时:若 URL 带 #p= 分享参数,还原配置(仅一次);
+  // 无分享参数则用出厂初始预设(DEFAULT_RIG_ENCODED)
+  const [initialShare] = useState(
+    () => readShareFromLocation() ?? decodeShareState(DEFAULT_RIG_ENCODED),
+  );
   useEffect(() => {
     if (!initialShare) return;
     setChain(initialShare.chain);
@@ -493,8 +548,97 @@ export default function App() {
 
   // ---------- MIDI(Synido TempoKEY K25,映射表见 src/midi/midiMapping.ts) ----------
 
+  /** 执行一条用户绑定(midiLearn):开关型用上升沿,连续型按 0..127 线性映射 */
+  const executeMidiBinding = (b: MidiBinding, msg: ParsedMidiMessage): void => {
+    const t = b.target;
+    const sig = `${b.source}:${b.msgType}:${b.number}`;
+    const edge = midiEdgeRef.current;
+    const toggleFire = (): boolean => {
+      if (msg.type === 'note') return msg.on;
+      const last = edge.get(sig) ?? 0;
+      edge.set(sig, msg.value);
+      return msg.value > 63 && last <= 63;
+    };
+    const v01 = Math.max(0, Math.min(127, msg.value)) / 127;
+    switch (t.kind) {
+      case 'pedal-toggle': {
+        if (!toggleFire()) return;
+        const item = chain[t.index];
+        if (item) handleToggle(item.uid);
+        return;
+      }
+      case 'snapshot':
+        if (toggleFire()) recallSnapshot(t.slot);
+        return;
+      case 'bypass':
+        if (toggleFire()) setGlobalBypass((x) => !x);
+        return;
+      case 'looper-record':
+        if (!toggleFire()) return;
+        if (audioEngine.currentLooperStatus.phase === 'recording') {
+          audioEngine.finishLoopRecording();
+        } else {
+          audioEngine.startLoopRecording();
+        }
+        return;
+      case 'looper-play':
+        if (toggleFire()) audioEngine.toggleLoopPlayback();
+        return;
+      case 'looper-clear':
+        if (toggleFire()) audioEngine.clearLoop();
+        return;
+      case 'master-volume':
+        setMasterVolume(v01);
+        audioEngine.setMasterVolume(v01);
+        return;
+      case 'amp-param': {
+        const range = t.key === 'master' ? AMP_MASTER_RANGE : AMP_TONE_RANGE;
+        handleAmpParam(t.key as AmpParamKey, range.min + v01 * (range.max - range.min));
+        return;
+      }
+      case 'pedal-treadle': {
+        const item = chain[t.index];
+        if (item) handleParam(item.uid, 'position', v01 * 100);
+        return;
+      }
+      case 'pedal-param': {
+        const item = chain[t.index];
+        if (!item) return;
+        const p = getEffectDef(item.effectId).params.find((x) => x.key === t.key);
+        if (!p) return;
+        handleParam(item.uid, t.key, p.min + v01 * (p.max - p.min));
+        return;
+      }
+    }
+  };
+
   // 回调每次渲染都新建,useMidi 内部用 ref 持有最新版本,MIDI 监听只挂一次
   const midi = useMidi({
+    // MIDI Learn:学习绑定 / 用户绑定优先于默认映射
+    beforeDefault: (msg, sourceName) => {
+      const src = classifySource(sourceName);
+      if (learnMode) {
+        // learn 模式吞掉所有消息(防误触);有 armed 目标则生成绑定
+        if (armedTarget && !(msg.type === 'note' && !msg.on)) {
+          setMidiBindings((cur) =>
+            upsertBinding(cur, {
+              msgType: msg.type,
+              number: msg.number,
+              source: src,
+              target: armedTarget,
+            }),
+          );
+          setArmedTarget(null);
+        }
+        return true;
+      }
+      const b = midiBindings.find((x) => bindingMatches(x, msg, src));
+      if (b) {
+        executeMidiBinding(b, msg);
+        return true;
+      }
+      return false;
+    },
     togglePedal: (index) => {
       const item = chain[index];
       if (item) handleToggle(item.uid);
@@ -725,6 +869,18 @@ export default function App() {
         showTuner={showTuner}
         onToggleTuner={() => setShowTuner((t) => !t)}
         midi={midi}
+        midiLearn={{
+          learnMode,
+          armedTarget,
+          bindings: midiBindings,
+          onToggleLearn: () => {
+            setLearnMode((m) => !m);
+            setArmedTarget(null);
+          },
+          onDisarm: () => setArmedTarget(null),
+          onDeleteBinding: (i) => setMidiBindings((cur) => cur.filter((_, j) => j !== i)),
+          onClearBindings: () => setMidiBindings([]),
+        }}
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
         engineReady={engineReady}

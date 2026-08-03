@@ -72,6 +72,7 @@ export function SnapshotSwitches({
               <span className={`snapshot-led ${ledClass}`} />
               <button
                 className={`footswitch snapshot-fs ${active ? 'fs-on' : ''}`}
+                data-midi-target={`snapshot:${i}`}
                 title={
                   filled
                     ? `${SLOT_NAMES[i]}:踩下恢复 · Shift+点击覆盖 · 长按清空(${SLOT_KEYS[i]} 快捷)`

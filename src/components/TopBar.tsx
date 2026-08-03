@@ -5,7 +5,7 @@ import { INPUT_TARGET_DB } from '../audio/level';
 import { LevelMeter } from './LevelMeter';
 import { MetronomePanel } from './MetronomePanel';
 import { LooperPanel } from './LooperPanel';
-import { MidiStatus } from './MidiStatus';
+import { MidiStatus, type MidiLearnProps } from './MidiStatus';
 import type { MidiState } from '../midi/useMidi';
 
 interface TopBarProps {
@@ -33,6 +33,8 @@ interface TopBarProps {
   onToggleTuner: () => void;
   /** MIDI 状态(未支持/未连接/已连接 + 调试监视器) */
   midi: MidiState;
+  /** MIDI Learn(自定义映射;未传则面板不显示 Learn 区) */
+  midiLearn?: MidiLearnProps;
   inputAnalyser: AnalyserNode | null;
   outputAnalyser: AnalyserNode | null;
   /** 引擎已初始化(用户手势后),录音按钮才可用 */
@@ -178,7 +180,7 @@ export function TopBar(props: TopBarProps) {
               ))}
             </select>
           )}
-          <label className="gain-ctrl">
+          <label className="gain-ctrl" data-midi-target="master-volume">
             MASTER
             <input
               type="range"
@@ -206,6 +208,7 @@ export function TopBar(props: TopBarProps) {
           </button>
           <button
             className={`bypass-btn ${props.globalBypass ? 'bypassed' : ''}`}
+            data-midi-target="bypass"
             onClick={props.onToggleBypass}
           >
             {props.globalBypass ? '已 Bypass' : 'Bypass'}
@@ -254,7 +257,7 @@ export function TopBar(props: TopBarProps) {
           <div className="console-group">
             <span className="group-label">MIDI</span>
             <div className="group-body">
-              <MidiStatus midi={props.midi} />
+              <MidiStatus midi={props.midi} learn={props.midiLearn} />
             </div>
           </div>
         </>

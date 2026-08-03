@@ -66,6 +66,7 @@ export function LooperPanel({ engineReady, hasInput }: LooperPanelProps) {
       <div className="group-body looper-body">
         <button
           className={`looper-primary ${isWriting ? 'writing' : ''}`}
+          data-midi-target="looper-record"
           disabled={
             !engineReady ||
             !status.available ||
@@ -83,6 +84,7 @@ export function LooperPanel({ engineReady, hasInput }: LooperPanelProps) {
         <button
           disabled={!hasLoop || status.phase === 'overdubbing'}
           title={status.phase === 'stopped' ? '继续循环' : '暂停循环'}
+          data-midi-target="looper-play"
           onClick={() => audioEngine.toggleLoopPlayback()}
         >
           {status.phase === 'stopped' ? '▶' : 'Ⅱ'}
@@ -98,6 +100,7 @@ export function LooperPanel({ engineReady, hasInput }: LooperPanelProps) {
           className="looper-clear"
           disabled={status.phase === 'empty'}
           title="清空循环"
+          data-midi-target="looper-clear"
           onClick={() => audioEngine.clearLoop()}
         >
           清空

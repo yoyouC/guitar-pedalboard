@@ -119,18 +119,19 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
         <div className="amp-faceplate">
           <div className="amp-knobs">
             {def.params.map((p) => (
-              <Knob
-                key={p.key}
-                value={values[p.key] ?? p.defaultValue}
-                min={p.min}
-                max={p.max}
-                step={p.step}
-                defaultValue={p.defaultValue}
-                label={p.label}
-                unit={p.unit}
-                disabled={!enabled}
-                onChange={(v) => onParam(p.key, v)}
-              />
+              <span key={p.key} data-midi-target={`amp-param:${p.key}`}>
+                <Knob
+                  value={values[p.key] ?? p.defaultValue}
+                  min={p.min}
+                  max={p.max}
+                  step={p.step}
+                  defaultValue={p.defaultValue}
+                  label={p.label}
+                  unit={p.unit}
+                  disabled={!enabled}
+                  onChange={(v) => onParam(p.key, v)}
+                />
+              </span>
             ))}
           </div>
 

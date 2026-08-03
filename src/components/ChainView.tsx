@@ -65,6 +65,7 @@ export function ChainView({
       <PedalCard
         item={item}
         def={getEffectDef(item.effectId)}
+        index={idx}
         analyser={audioEngine.getModuleAnalyser(item.uid)}
         showMeters={showMeters}
         onToggle={onToggle}

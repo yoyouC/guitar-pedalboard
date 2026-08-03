@@ -115,6 +115,10 @@ input[type='text'] {
 /* ---------- 顶部控制台 ---------- */
 
 .top-bar {
+  position: relative;
+  /* backdrop-filter 已创建层叠上下文:提升整条层级,让 MIDI 下拉面板
+     不被效果器板(z-index 2 的单块)遮挡 */
+  z-index: 40;
   display: flex;
   align-items: stretch;
   flex-wrap: wrap;
@@ -254,6 +258,9 @@ input[type='text'] {
   right: 0;
   z-index: 30;
   min-width: 260px;
+  max-width: 340px;
+  max-height: 60vh;
+  overflow-y: auto;
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2300,4 +2307,107 @@ body.ui-immersive.ui-peek .app > *:not(.yt-keep) {
 }
 body.ui-immersive:not(.ui-peek) {
   cursor: none;
+}
+
+/* ---------- MIDI Learn ---------- */
+
+/* data-midi-target 包裹 span:不改变原布局 */
+.pedal-knobs > span[data-midi-target],
+.amp-knobs > span[data-midi-target] {
+  display: block;
+}
+.pedal > span[data-midi-target] {
+  display: block;
+  align-self: stretch;
+}
+
+/* Learn 模式:可学控件虚线描边,armed 目标实线呼吸 */
+body.midi-learn-mode [data-midi-target] {
+  outline: 2px dashed rgba(255, 213, 77, 0.65);
+  outline-offset: 2px;
+  border-radius: 4px;
+  cursor: copy;
+}
+body.midi-learn-mode .midi-armed {
+  outline: 3px solid #ffd54d !important;
+  animation: midi-armed-pulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes midi-armed-pulse {
+  from { outline-color: #ffd54d; }
+  to { outline-color: rgba(255, 213, 77, 0.35); }
+}
+
+/* MidiStatus 面板 Learn 区 */
+.midi-learn-block {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.midi-learn-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.midi-learn-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #3a3f46;
+  background: #23272d;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.midi-learn-btn.active {
+  background: #ffd54d;
+  border-color: #ffd54d;
+  color: #1c1a12;
+  font-weight: 700;
+}
+
+.midi-learn-armed {
+  font-size: 11px;
+  color: #ffd54d;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.midi-learn-cancel {
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid #3a3f46;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+.midi-learn-cancel:hover {
+  color: var(--text);
+  border-color: #565d66;
+}
+
+.midi-bindings {
+  margin-top: 8px;
+}
+
+.midi-bindings-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.midi-binding-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--text);
 }

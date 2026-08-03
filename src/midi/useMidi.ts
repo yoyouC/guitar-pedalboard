@@ -25,6 +25,11 @@ export interface MidiActions {
   setPedalEnabled(index: number, enabled: boolean): void;
   /** 表情踏板位置,归一化 0..1;index 0 = 第 1 块(CC11),1 = 第 2 块(CC12) */
   setExpression(index: number, value: number): void;
+  /**
+   * 默认映射前的拦截(MIDI Learn):返回 true 表示消息已被消费,
+   * 不再走默认映射。用于学习绑定与用户绑定优先解析(见 midiLearn.ts)。
+   */
+  beforeDefault?(msg: ParsedMidiMessage, sourceName?: string | null): boolean;
 }
 
 /** 最近收到的一条原始消息,供 MidiStatus 调试面板显示 */
@@ -69,6 +74,8 @@ export function useMidi(actions: MidiActions): MidiState {
       const parsed = parseMidiMessage(event.data);
       setLastMessage({ hex: formatMidiBytes(event.data), parsed, at: Date.now() });
       if (!parsed) return;
+      // MIDI Learn / 用户绑定优先;被消费则跳过默认映射
+      if (actionsRef.current.beforeDefault?.(parsed, sourceName)) return;
       const action = resolveMidiAction(parsed, sourceName);
       if (!action) return;
       const a = actionsRef.current;

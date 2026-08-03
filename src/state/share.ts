@@ -138,6 +138,15 @@ export function decodeShareState(encoded: string): ShareState | null {
 
 export const SHARE_HASH_PREFIX = '#p=';
 
+/**
+ * 出厂初始配置(进入页面且无 URL 分享参数时的初始预设):
+ * DynaComp → Klon WDF → Analog Delay → Spring Reverb(后两块 FX Loop),
+ * JCM800 sweep NAM 箱头 + GB 4x12 箱体。
+ * 与用户分享的 #p= 编码同格式,可随时用新分享链接的编码替换。
+ */
+export const DEFAULT_RIG_ENCODED =
+  'eyJ2IjoxLCJjIjpbeyJpZCI6ImR5bmFjb21wIiwiZSI6MSwidiI6eyJzZW5zaXRpdml0eSI6NTUsImxldmVsIjowfSwicCI6MH0seyJpZCI6Imtsb253ZGYiLCJlIjoxLCJ2Ijp7ImdhaW4iOjIyLCJ0cmVibGUiOjUwLCJsZXZlbCI6LTExLjV9LCJwIjowfSx7ImlkIjoiYW5hbG9nZGVsYXkiLCJlIjoxLCJ2Ijp7InRpbWUiOjMwMCwiZmVlZGJhY2siOjYyLCJ0b25lIjo1NSwibW9kIjowLCJtaXgiOjM1fSwicCI6MX0seyJpZCI6InNwcmluZ3JldmVyYiIsImUiOjEsInYiOnsidGltZSI6MiwiZHdlbGwiOjUwLCJ0b25lIjo1MCwibWl4IjozMH0sInAiOjF9XSwiYSI6eyJjYXQiOiJjcnVuY2giLCJrZXkiOiJuYW0td2FzbS1wYWNrOmpjbTgwMC1zd2VlcCIsIm9uIjoxLCJ2Ijp7ImdhaW4iOjY0LCJiYXNzIjo1MCwibWlkIjo1MCwidHJlYmxlIjoxNSwicHJlc2VuY2UiOjUwLCJtYXN0ZXIiOjB9fSwiYiI6eyJpZCI6ImdiNHgxMiIsIm9uIjoxLCJ2Ijp7ImxldmVsIjotMTMuNX19fQ';
+
 export function readShareFromLocation(loc: Location = window.location): ShareState | null {
   if (!loc.hash.startsWith(SHARE_HASH_PREFIX)) return null;
   return decodeShareState(loc.hash.slice(SHARE_HASH_PREFIX.length));
