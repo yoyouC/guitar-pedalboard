@@ -14,6 +14,8 @@ import { distortionEffect } from './distortion';
 import { ratEffect } from './rat';
 import { fuzzEffect } from './fuzz';
 import { autowahEffect } from './autowah';
+import { crybabyWdfEffect } from './crybabywdf';
+import { wahpedalEffect } from './wahpedal';
 import { eqEffect } from './eq';
 import { chorusEffect } from './chorus';
 import { flangerEffect } from './flanger';
@@ -31,11 +33,13 @@ import { la2aEffect } from './la2a';
 import { fet1176Effect } from './fet1176';
 import { dynaCompEffect } from './dynacomp';
 import { volumeEffect } from './volume';
+import { whammyEffect } from './whammy';
 import { NAM_PEDAL_EFFECTS } from './namPedal';
 
 /** 效果器目录,按吉他信号链常见顺序排列 */
 export const EFFECT_REGISTRY: EffectDefinition[] = [
   noiseGateEffect,
+  whammyEffect,
   compressorEffect,
   la2aEffect,
   fet1176Effect,
@@ -53,6 +57,8 @@ export const EFFECT_REGISTRY: EffectDefinition[] = [
   ratEffect,
   fuzzEffect,
   autowahEffect,
+  crybabyWdfEffect,
+  wahpedalEffect,
   eqEffect,
   chorusEffect,
   flangerEffect,
