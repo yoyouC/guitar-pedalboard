@@ -48,6 +48,7 @@ import { CabPanel } from './components/CabPanel';
 import { Oscilloscope } from './components/Oscilloscope';
 import { FluidBackground } from './components/FluidBackground';
 import { YouTubeBackground } from './components/YouTubeBackground';
+import { Analytics } from '@vercel/analytics/react';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -834,6 +835,7 @@ export default function App() {
         <FluidBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
       )}
       <YouTubeBackground onActiveChange={setYtBgActive} />
+      <Analytics />
 
       <header className="app-header">
         <h1>🎸 Guitar Pedalboard</h1>
