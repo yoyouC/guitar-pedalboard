@@ -4,6 +4,7 @@ import {
   INITIAL_LOOPER_STATUS,
   MAX_LOOP_SECONDS,
   formatLooperTime,
+  looperPrimaryCommand,
   type LooperStatus,
 } from '../audio/looperState';
 
@@ -27,23 +28,7 @@ export function LooperPanel({ engineReady, hasInput }: LooperPanelProps) {
 
   useEffect(() => audioEngine.subscribeLooper(setStatus), [engineReady]);
 
-  const handlePrimary = () => {
-    switch (status.phase) {
-      case 'empty':
-        audioEngine.startLoopRecording();
-        break;
-      case 'recording':
-        audioEngine.finishLoopRecording();
-        break;
-      case 'playing':
-      case 'stopped':
-        audioEngine.startLoopOverdub();
-        break;
-      case 'overdubbing':
-        audioEngine.finishLoopOverdub();
-        break;
-    }
-  };
+  const handlePrimary = () => looperPrimaryCommand(audioEngine);
 
   const primaryLabel =
     status.phase === 'recording' || status.phase === 'overdubbing'

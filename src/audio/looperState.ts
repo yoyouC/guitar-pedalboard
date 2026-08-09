@@ -66,3 +66,33 @@ export function formatLooperTime(seconds: number): string {
   const remainder = safe % 60;
   return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
 }
+
+/**
+ * Looper 主按钮(初录/完成/叠录/完成叠录)按当前相位分派,
+ * 与 LooperPanel.handlePrimary 一致;MIDI(默认映射与 MIDI Learn)共用,
+ * 避免之前"录音键在非 recording 相位一律 startLoopRecording,
+ * 叠录无法开始也无法结束"的问题。
+ */
+export function looperPrimaryCommand(engine: {
+  startLoopRecording(): void;
+  finishLoopRecording(): void;
+  startLoopOverdub(): void;
+  finishLoopOverdub(): void;
+  currentLooperStatus: LooperStatus;
+}): void {
+  switch (engine.currentLooperStatus.phase) {
+    case 'empty':
+      engine.startLoopRecording();
+      break;
+    case 'recording':
+      engine.finishLoopRecording();
+      break;
+    case 'playing':
+    case 'stopped':
+      engine.startLoopOverdub();
+      break;
+    case 'overdubbing':
+      engine.finishLoopOverdub();
+      break;
+  }
+}

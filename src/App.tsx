@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { audioEngine } from './audio/AudioEngine';
+import { looperPrimaryCommand } from './audio/looperState';
 import type { InputSourceType } from './audio/AudioEngine';
 import { getEffectDef } from './audio/effects';
 import { getAmpDef } from './audio/amps';
@@ -576,11 +577,8 @@ export default function App() {
         return;
       case 'looper-record':
         if (!toggleFire()) return;
-        if (audioEngine.currentLooperStatus.phase === 'recording') {
-          audioEngine.finishLoopRecording();
-        } else {
-          audioEngine.startLoopRecording();
-        }
+        // 与 UI 主按钮同一状态机:初录→完成→叠录→完成叠录
+        looperPrimaryCommand(audioEngine);
         return;
       case 'looper-play':
         if (toggleFire()) audioEngine.toggleLoopPlayback();
@@ -646,14 +644,7 @@ export default function App() {
     },
     recallSnapshot,
     toggleBypass: () => setGlobalBypass((b) => !b),
-    looperRecord: () => {
-      // 录音中 → 结束;否则开始(引擎内部还有 canRunLooperCommand 守卫)
-      if (audioEngine.currentLooperStatus.phase === 'recording') {
-        audioEngine.finishLoopRecording();
-      } else {
-        audioEngine.startLoopRecording();
-      }
-    },
+    looperRecord: () => looperPrimaryCommand(audioEngine),
     looperTogglePlay: () => {
       audioEngine.toggleLoopPlayback();
     },
