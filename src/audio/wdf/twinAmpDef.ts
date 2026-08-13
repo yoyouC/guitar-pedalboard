@@ -36,7 +36,8 @@ export function wdfTwinDef(): EffectDefinition {
       voicing.frequency.value = 500;
       voicing.Q.value = 1.0;
       voicing.gain.value = -3;
-      // 音色栈
+      // 音色栈(有意不采用共享 toneStack 模块:Fender  voiced 中频 500Hz、
+      // 高频架 3000Hz,与规范链 700/3200 不符;pin 见 tests/tone-stack.test.ts)
       const bass = ctx.createBiquadFilter();
       bass.type = 'lowshelf';
       bass.frequency.value = 120;

@@ -6,6 +6,7 @@
  */
 import type { EffectDefinition, EffectInstance } from '../effects/types';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
+import { createToneStack } from '../toneStack';
 
 const DEFAULTS = { gain: 40, bass: 50, mid: 50, treble: 60, presence: 60, master: -6 };
 
@@ -28,42 +29,21 @@ export function wdfJc120Def(): EffectDefinition {
       const output = ctx.createGain();
 
       let node: AudioWorkletNode | null = null;
-      // 音色栈(±12dB)
-      const bass = ctx.createBiquadFilter();
-      bass.type = 'lowshelf';
-      bass.frequency.value = 120;
-      const mid = ctx.createBiquadFilter();
-      mid.type = 'peaking';
-      mid.frequency.value = 700;
-      mid.Q.value = 1;
-      const treble = ctx.createBiquadFilter();
-      treble.type = 'highshelf';
-      treble.frequency.value = 3200;
-      // PRESENCE → 5kHz 高架(brilliance,0~8dB)
-      const presence = ctx.createBiquadFilter();
-      presence.type = 'highshelf';
-      presence.frequency.value = 5000;
+      // 音色栈(±12dB,共享模块,见 toneStack.ts)
+      const tone = createToneStack(ctx, DEFAULTS);
       const masterGain = ctx.createGain();
 
-      const pctToDb = (v: number) => ((v - 50) / 50) * 12;
-      bass.gain.value = pctToDb(DEFAULTS.bass);
-      mid.gain.value = pctToDb(DEFAULTS.mid);
-      treble.gain.value = pctToDb(DEFAULTS.treble);
-      presence.gain.value = (DEFAULTS.presence / 100) * 8;
       masterGain.gain.value = levelDbToGain(DEFAULTS.master);
 
       try {
         node = new AudioWorkletNode(ctx, 'wdf-jc120');
         input.connect(node);
-        node.connect(bass);
+        node.connect(tone.input);
       } catch (e) {
         console.warn('WDF JC-120 worklet 未就绪,直通:', e);
-        input.connect(bass);
+        input.connect(tone.input);
       }
-      bass.connect(mid);
-      mid.connect(treble);
-      treble.connect(presence);
-      presence.connect(masterGain);
+      tone.output.connect(masterGain);
       masterGain.connect(output);
 
       return {
@@ -79,16 +59,10 @@ export function wdfJc120Def(): EffectDefinition {
               node?.parameters.get('chorus')?.setTargetAtTime(value, t, 0.01);
               break;
             case 'bass':
-              bass.gain.setTargetAtTime(pctToDb(value), t, 0.03);
-              break;
             case 'mid':
-              mid.gain.setTargetAtTime(pctToDb(value), t, 0.03);
-              break;
             case 'treble':
-              treble.gain.setTargetAtTime(pctToDb(value), t, 0.03);
-              break;
             case 'presence':
-              presence.gain.setTargetAtTime((value / 100) * 8, t, 0.03);
+              tone.update(key, value);
               break;
             case 'master':
               masterGain.gain.setTargetAtTime(levelDbToGain(value), t, 0.03);
@@ -96,7 +70,7 @@ export function wdfJc120Def(): EffectDefinition {
           }
         },
         dispose() {
-          [input, node, bass, mid, treble, presence, masterGain, output]
+          [input, node, ...tone.nodes, masterGain, output]
             .forEach((n) => n?.disconnect());
         },
       };

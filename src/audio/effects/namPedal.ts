@@ -1,6 +1,7 @@
 import type { EffectDefinition, EffectInstance } from './types';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
 import { createNamWasmVoice } from '../namWasmVoice';
+import { BASE_URL } from '../baseUrl';
 
 /**
  * NAM 单块(NAMKnobs 条件化 capture):
@@ -92,7 +93,7 @@ function createNamPedal(ctx: AudioContext, cfg: NamPedalConfig): EffectInstance 
   };
 }
 
-const NAMKNOBS = `${import.meta.env.BASE_URL}models/namknobs`;
+const NAMKNOBS = `${BASE_URL}models/namknobs`;
 
 function makeNamPedalDef(id: string, name: string, color: string, cfg: NamPedalConfig): EffectDefinition {
   return {
@@ -165,19 +166,19 @@ export const NAM_PEDAL_EFFECTS: EffectDefinition[] = [
   ...NAMKNOBS_PEDAL_EFFECTS,
   // 快照单块(pelennor2170/NAM_models,GPL-3.0;固定旋钮位的 capture,仅 LEVEL)
   makeNamPedalDef('namSd1', 'NAM SD-1', '#c8a24a', {
-    modelUrl: `${import.meta.env.BASE_URL}models/snapshot-pedals/boss-sd1.nam`,
+    modelUrl: `${BASE_URL}models/snapshot-pedals/boss-sd1.nam`,
     controls: [],
     labels: {},
     defaults: {},
   }),
   makeNamPedalDef('namFortin', 'NAM Fortin', '#7a7a7a', {
-    modelUrl: `${import.meta.env.BASE_URL}models/snapshot-pedals/fortin-grind.nam`,
+    modelUrl: `${BASE_URL}models/snapshot-pedals/fortin-grind.nam`,
     controls: [],
     labels: {},
     defaults: {},
   }),
   makeNamPedalDef('namKlone', 'NAM Klone', '#8a8f98', {
-    modelUrl: `${import.meta.env.BASE_URL}models/snapshot-pedals/klone.nam`,
+    modelUrl: `${BASE_URL}models/snapshot-pedals/klone.nam`,
     controls: [],
     labels: {},
     defaults: {},

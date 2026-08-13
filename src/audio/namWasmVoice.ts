@@ -7,7 +7,9 @@
  * dispose 时通知处理器停止渲染(suspend)。
  */
 
-const WASM_URL = `${import.meta.env.BASE_URL}nam-wasm/nam-wasm-glue.wasm`;
+import { BASE_URL } from './baseUrl';
+
+const WASM_URL = `${BASE_URL}nam-wasm/nam-wasm-glue.wasm`;
 
 let wasmBytesPromise: Promise<ArrayBuffer> | null = null;
 

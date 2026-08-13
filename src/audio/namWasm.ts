@@ -1,7 +1,9 @@
 import type { EffectInstance } from './effects/types';
 import { levelDbToGain } from './level';
+import { BASE_URL } from './baseUrl';
 import { createNamWasmVoice } from './namWasmVoice';
 import { reportAmpLoad, resetAmpLoad } from './loadProgress';
+import { createToneStack } from './toneStack';
 
 /** NAM 箱头的固定 6 旋钮默认值(GAIN 50 = 单位输入激励,MASTER dB 域见 level.ts) */
 export const NAM_AMP_DEFAULTS = {
@@ -29,30 +31,30 @@ export interface BundledNamWasmModel {
 
 const TRACKED_WAVENET_MODELS: BundledNamWasmModel[] = [
   // 清音
-  { id: 'fender-twinverb', name: 'Fender TwinVerb', url: `${import.meta.env.BASE_URL}models/fender-twinverb.nam` },
-  { id: 'peavey-5152-clean', name: '5152 Clean', url: `${import.meta.env.BASE_URL}models/peavey-5152-clean.nam` },
-  { id: 'vox-ac15', name: 'Vox AC15', url: `${import.meta.env.BASE_URL}models/vox-ac15.nam` },
-  { id: 'wavenet-ac10', name: 'Vox AC10 (WaveNet)', url: `${import.meta.env.BASE_URL}models/ac10-wavenet.nam` },
-  { id: 'wavenet-deluxe', name: 'Deluxe Reverb (WaveNet)', url: `${import.meta.env.BASE_URL}models/deluxe-wavenet.nam` },
-  { id: 'friedman-shirley-clean', name: 'Dirty Shirley Clean', url: `${import.meta.env.BASE_URL}models/friedman-shirley-clean.nam` },
-  { id: 'jcm2000-clean', name: 'JCM2000 Clean', url: `${import.meta.env.BASE_URL}models/jcm2000-clean.nam` },
+  { id: 'fender-twinverb', name: 'Fender TwinVerb', url: `${BASE_URL}models/fender-twinverb.nam` },
+  { id: 'peavey-5152-clean', name: '5152 Clean', url: `${BASE_URL}models/peavey-5152-clean.nam` },
+  { id: 'vox-ac15', name: 'Vox AC15', url: `${BASE_URL}models/vox-ac15.nam` },
+  { id: 'wavenet-ac10', name: 'Vox AC10 (WaveNet)', url: `${BASE_URL}models/ac10-wavenet.nam` },
+  { id: 'wavenet-deluxe', name: 'Deluxe Reverb (WaveNet)', url: `${BASE_URL}models/deluxe-wavenet.nam` },
+  { id: 'friedman-shirley-clean', name: 'Dirty Shirley Clean', url: `${BASE_URL}models/friedman-shirley-clean.nam` },
+  { id: 'jcm2000-clean', name: 'JCM2000 Clean', url: `${BASE_URL}models/jcm2000-clean.nam` },
   // crunch / 中增益
-  { id: 'jcm2000-crunch', name: 'JCM2000 Crunch', url: `${import.meta.env.BASE_URL}models/jcm2000-crunch.nam` },
-  { id: 'laney-gh100s', name: 'Laney GH100S Crunch', url: `${import.meta.env.BASE_URL}models/laney-gh100s.nam` },
-  { id: 'orange-rockerverb', name: 'Orange Rockerverb', url: `${import.meta.env.BASE_URL}models/orange-rockerverb.nam` },
-  { id: 'sovtek-mig50', name: 'Sovtek MIG50', url: `${import.meta.env.BASE_URL}models/sovtek-mig50.nam` },
+  { id: 'jcm2000-crunch', name: 'JCM2000 Crunch', url: `${BASE_URL}models/jcm2000-crunch.nam` },
+  { id: 'laney-gh100s', name: 'Laney GH100S Crunch', url: `${BASE_URL}models/laney-gh100s.nam` },
+  { id: 'orange-rockerverb', name: 'Orange Rockerverb', url: `${BASE_URL}models/orange-rockerverb.nam` },
+  { id: 'sovtek-mig50', name: 'Sovtek MIG50', url: `${BASE_URL}models/sovtek-mig50.nam` },
   // 高增益
-  { id: 'jcm900-g12', name: 'JCM900 HiGain G12', url: `${import.meta.env.BASE_URL}models/jcm900-dualverb-g12.nam` },
-  { id: 'jcm900-g16', name: 'JCM900 HiGain G16', url: `${import.meta.env.BASE_URL}models/jcm900-dualverb-g16.nam` },
-  { id: 'bug1990-lead', name: 'Bug1990 Lead (JCM800系)', url: `${import.meta.env.BASE_URL}models/bug1990-lead.nam` },
-  { id: '5150-blockletter', name: '5150 Block Letter', url: `${import.meta.env.BASE_URL}models/helga-5150-blockletter.nam` },
-  { id: '6505-red', name: '6505+ Red Ch', url: `${import.meta.env.BASE_URL}models/helga-6505-red.nam` },
+  { id: 'jcm900-g12', name: 'JCM900 HiGain G12', url: `${BASE_URL}models/jcm900-dualverb-g12.nam` },
+  { id: 'jcm900-g16', name: 'JCM900 HiGain G16', url: `${BASE_URL}models/jcm900-dualverb-g16.nam` },
+  { id: 'bug1990-lead', name: 'Bug1990 Lead (JCM800系)', url: `${BASE_URL}models/bug1990-lead.nam` },
+  { id: '5150-blockletter', name: '5150 Block Letter', url: `${BASE_URL}models/helga-5150-blockletter.nam` },
+  { id: '6505-red', name: '6505+ Red Ch', url: `${BASE_URL}models/helga-6505-red.nam` },
   // LSTM 架构 capture(与纯 JS LSTM 引擎合并后统一由 WASM Core 运行)
-  { id: 'lstm-demo', name: 'Test LSTM · Darkglass (H=3)', url: `${import.meta.env.BASE_URL}models/lstm-demo.nam` },
-  { id: 'deluxe-3x24', name: 'Deluxe Reverb 3×24 (LSTM)', url: `${import.meta.env.BASE_URL}models/DeluxeReverb-3x24.nam` },
-  { id: 'ref-2x16', name: 'Reference LSTM 2×16', url: `${import.meta.env.BASE_URL}models/reference-lstm-2x16.nam` },
-  { id: 'boss-1x16', name: 'Boss LSTM 1×16', url: `${import.meta.env.BASE_URL}models/BossLSTM-1x16.nam` },
-  { id: 'boss-2x16', name: 'Boss LSTM 2×16', url: `${import.meta.env.BASE_URL}models/BossLSTM-2x16.nam` },
+  { id: 'lstm-demo', name: 'Test LSTM · Darkglass (H=3)', url: `${BASE_URL}models/lstm-demo.nam` },
+  { id: 'deluxe-3x24', name: 'Deluxe Reverb 3×24 (LSTM)', url: `${BASE_URL}models/DeluxeReverb-3x24.nam` },
+  { id: 'ref-2x16', name: 'Reference LSTM 2×16', url: `${BASE_URL}models/reference-lstm-2x16.nam` },
+  { id: 'boss-1x16', name: 'Boss LSTM 1×16', url: `${BASE_URL}models/BossLSTM-1x16.nam` },
+  { id: 'boss-2x16', name: 'Boss LSTM 2×16', url: `${BASE_URL}models/BossLSTM-2x16.nam` },
 ];
 
 export const BUNDLED_WAVENET_MODELS: BundledNamWasmModel[] = TRACKED_WAVENET_MODELS;
@@ -89,8 +91,8 @@ export interface NamSweepPack {
   stages: NamSweepStage[];
 }
 
-const SWEEP_BASE = `${import.meta.env.BASE_URL}models/marshall-sweep`;
-const SWEEPS_BASE = `${import.meta.env.BASE_URL}models`;
+const SWEEP_BASE = `${BASE_URL}models/marshall-sweep`;
+const SWEEPS_BASE = `${BASE_URL}models`;
 
 /** 增益扫档包(已获作者授权,见 public/models/ATTRIBUTION.md) */
 export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
@@ -193,29 +195,13 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
   const drive = ctx.createGain();
   const normalizeGain = ctx.createGain();
 
-  const bass = ctx.createBiquadFilter();
-  bass.type = 'lowshelf';
-  bass.frequency.value = 120;
-  const mid = ctx.createBiquadFilter();
-  mid.type = 'peaking';
-  mid.frequency.value = 700;
-  mid.Q.value = 1;
-  const treble = ctx.createBiquadFilter();
-  treble.type = 'highshelf';
-  treble.frequency.value = 3200;
-  const presence = ctx.createBiquadFilter();
-  presence.type = 'highshelf';
-  presence.frequency.value = 5000;
+  // 音色栈(共享模块,见 toneStack.ts;初始值在模块内按 defaults 设置)
+  const tone = createToneStack(ctx, NAM_AMP_DEFAULTS);
   const masterGain = ctx.createGain();
 
   const d = NAM_AMP_DEFAULTS;
   drive.gain.value = Math.pow(10, pctToDb(d.gain, 12) / 20);
-  bass.gain.value = pctToDb(d.bass, 12);
-  mid.gain.value = pctToDb(d.mid, 12);
-  treble.gain.value = pctToDb(d.treble, 12);
-  presence.gain.value = (d.presence / 100) * 8;
   masterGain.gain.value = levelDbToGain(d.master);
-
   let disposed = false;
   input.connect(drive);
   const voice = createNamWasmVoice(ctx);
@@ -226,11 +212,8 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
     console.warn('[nam-wasm] AudioWorklet "nam-wasm" 不可用,回退为直通(仅音色栈)');
     drive.connect(normalizeGain);
   }
-  normalizeGain.connect(bass);
-  bass.connect(mid);
-  mid.connect(treble);
-  treble.connect(presence);
-  presence.connect(masterGain);
+  normalizeGain.connect(tone.input);
+  tone.output.connect(masterGain);
   masterGain.connect(output);
 
   // ---------- 扫档包模式:GAIN 旋钮在预载档位间瞬时切换 ----------
@@ -333,16 +316,10 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
           }
           break;
         case 'bass':
-          bass.gain.setTargetAtTime(pctToDb(value, 12), t, SMOOTH);
-          break;
         case 'mid':
-          mid.gain.setTargetAtTime(pctToDb(value, 12), t, SMOOTH);
-          break;
         case 'treble':
-          treble.gain.setTargetAtTime(pctToDb(value, 12), t, SMOOTH);
-          break;
         case 'presence':
-          presence.gain.setTargetAtTime((value / 100) * 8, t, SMOOTH);
+          tone.update(key, value);
           break;
         case 'master':
           masterGain.gain.setTargetAtTime(levelDbToGain(value), t, SMOOTH);
@@ -353,7 +330,7 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
       disposed = true;
       voice?.dispose();
       resetAmpLoad();
-      [input, drive, normalizeGain, bass, mid, treble, presence, masterGain, output].forEach((n) =>
+      [input, drive, normalizeGain, ...tone.nodes, masterGain, output].forEach((n) =>
         n?.disconnect(),
       );
     },
