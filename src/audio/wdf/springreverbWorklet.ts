@@ -10,6 +10,8 @@
  *
  * DSP 逻辑与 src/audio/wdf/springReverb.ts 一致——改动请两边同步。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `(() => {
 const MAIN_MS_A = 23.7;
 const AP_MS_A = [5.9, 4.4, 3.7, 3.3, 2.5, 2.1];
@@ -219,18 +221,5 @@ class WdfSpringReverbProcessor extends AudioWorkletProcessor {
 registerProcessor('wdf-springreverb', WdfSpringReverbProcessor);
 })();`;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadSpringReverbWdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadSpringReverbWdf = createWorkletLoader(processorSource);

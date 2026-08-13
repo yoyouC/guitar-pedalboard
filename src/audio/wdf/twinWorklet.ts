@@ -14,6 +14,8 @@
  * 与 triode.ts 的关键差异:栅流钳位用隐式 Newton(TriodeStage 的阻尼定点
  * 迭代在 vgk>0.85V 时发散至关断伪解,大激励下产生开关式极限环)。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `
 (() => {
 const KOREN_12AX7 = { mu: 100, ex: 1.4, kg: 1060, kp: 600, kvb: 300 };
@@ -263,18 +265,5 @@ registerProcessor('wdf-twin', WdfTwinProcessor);
 })();
 `;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadTwinWdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadTwinWdf = createWorkletLoader(processorSource);

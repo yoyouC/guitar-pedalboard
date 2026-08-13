@@ -15,6 +15,8 @@
  *   谐振形状与 Smith 模型一致,响度行为可控。
  * RESO 参数仅缩放 Q(改变峰宽),不改变峰值增益。
  */
+import { createWorkletLoader } from './workletLoader';
+
 const processorSource = `
 class CrybabyWahProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
@@ -91,18 +93,5 @@ class CrybabyWahProcessor extends AudioWorkletProcessor {
 registerProcessor('crybaby-wah', CrybabyWahProcessor);
 `;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadWahWorklet(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadWahWorklet = createWorkletLoader(processorSource);

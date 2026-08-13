@@ -9,6 +9,8 @@
  *
  * 失真级求解逻辑与 src/audio/wdf/ratDistortion.ts 一致——改动请两边同步。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `(() => {
 const DIODE = { Is: 2.52e-9, nVt: 1.752 * 25.85e-3 };
 const OS = 4, NT = 48;
@@ -215,18 +217,5 @@ class WdfRatProcessor extends AudioWorkletProcessor {
 registerProcessor('wdf-rat', WdfRatProcessor);
 })();`;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadRatWdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadRatWdf = createWorkletLoader(processorSource);

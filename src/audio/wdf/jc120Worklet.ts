@@ -12,6 +12,8 @@
  * 核心逻辑与 src/audio/wdf/jc120Core.ts 一致——改动请两边同步。
  * 全链非线性为显式无记忆 tanh(串联无反馈),无需 Newton。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `
 (() => {
 const OS = 4, NT = 48;
@@ -216,18 +218,5 @@ registerProcessor('wdf-jc120', WdfJc120Processor);
 })();
 `;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadJc120Wdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadJc120Wdf = createWorkletLoader(processorSource);

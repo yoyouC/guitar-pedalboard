@@ -9,6 +9,8 @@
  *   → LEVEL(线性,dB 域由外层转换)→ 输出
  *   内部 4x 过采样:多相升采样 + 48 阶 FIR 抗混叠降采样。IIFE 隔离全局名。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `(() => {
 const DIODE = { Is: 2.52e-9, nVt: 1.752 * 25.85e-3 };
 const MUFF = {
@@ -256,18 +258,5 @@ class WdfBigMuffProcessor extends AudioWorkletProcessor {
 registerProcessor('wdf-bigmuff', WdfBigMuffProcessor);
 })();`;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadBigMuffWdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadBigMuffWdf = createWorkletLoader(processorSource);

@@ -20,6 +20,8 @@
  * (交叉淡化区两读头相位差导致 ±fSaw 边带),与真机 Digitech Whammy
  * 单音版本的 warble 特性一致。
  */
+import { createWorkletLoader } from './workletLoader';
+
 const processorSource = `(() => {
   const BUF_LEN = 4096;        // 2 的幂,绕回用位与
   const BASE_DELAY = 48;       // 1ms @48k
@@ -117,18 +119,5 @@ const processorSource = `(() => {
   registerProcessor('whammy-shift', WhammyProcessor);
 })();`;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadWhammyWorklet(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadWhammyWorklet = createWorkletLoader(processorSource);

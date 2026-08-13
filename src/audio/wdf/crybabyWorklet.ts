@@ -10,6 +10,8 @@
  * 电路求解逻辑与 src/audio/wdf/crybabyStage.ts 一致——改动请两边同步。
  * position 为 a-rate(摇杆连续扫频),逐样本更新电位器两片电阻。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `(() => {
 	const OS = 4, NT = 48;
 
@@ -486,18 +488,5 @@ const processorSource = `(() => {
 	registerProcessor('wdf-crybaby', WdfCrybabyProcessor);
 	})();`;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadCrybabyWdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadCrybabyWdf = createWorkletLoader(processorSource);

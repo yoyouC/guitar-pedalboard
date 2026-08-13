@@ -11,6 +11,8 @@
  *
  * 三极管求解与重采样逻辑同 src/audio/wdf/triode.ts、resample.ts。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `
 (() => {
 const KOREN_12AX7 = { mu: 100, ex: 1.4, kg: 1060, kp: 600, kvb: 300 };
@@ -247,18 +249,5 @@ registerProcessor('wdf-bogner', WdfBognerProcessor);
 })();
 `;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadBognerWdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadBognerWdf = createWorkletLoader(processorSource);

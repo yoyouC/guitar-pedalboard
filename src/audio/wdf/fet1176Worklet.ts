@@ -9,6 +9,8 @@
  * 增益计算/包络/饱和逻辑与 src/audio/wdf/fetComp.ts 一致——改动请两边同步。
  * 重采样 FIR 与 resample.ts 同一份(48 阶 Blackman-sinc)。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `(() => {
 const OS = 4, NT = 48;
 const LN10_OVER_20 = Math.log(10) / 20;
@@ -190,18 +192,5 @@ class WdfFet1176Processor extends AudioWorkletProcessor {
 registerProcessor('wdf-fet1176', WdfFet1176Processor);
 })();`;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadFet1176(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadFet1176 = createWorkletLoader(processorSource);

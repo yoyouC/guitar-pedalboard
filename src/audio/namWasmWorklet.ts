@@ -1,17 +1,15 @@
 import processorSource from './namWasmProcessor.js?raw';
+import { BASE_URL } from './baseUrl';
+import { createWorkletLoader } from './workletLoader';
 
-const GLUE_URL = `${import.meta.env.BASE_URL}nam-wasm/nam-wasm-glue.js`;
-
-let loaded = false;
+const GLUE_URL = `${BASE_URL}nam-wasm/nam-wasm-glue.js`;
 
 /**
- * 幂等加载 NAM WASM worklet,使用前必须先 await。
- * worklet 作用域没有 importScripts,因此把 emscripten glue 与处理器
- * 拼成一个 Blob 脚本一次性 addModule(glue 定义的 NamWasmModule 工厂
- * 与处理器同处一个全局作用域)。
+ * 每次注册前现取处理器源码:worklet 作用域没有 importScripts,
+ * 因此把 emscripten glue 与处理器拼成一个脚本一次性 addModule
+ * (glue 定义的 NamWasmModule 工厂与处理器同处一个全局作用域)。
  */
-export async function loadNamWasmWorklet(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
+async function buildProcessorSource(): Promise<string> {
   const glue = await fetch(GLUE_URL).then((r) => {
     if (!r.ok) throw new Error(`glue 下载失败 HTTP ${r.status}`);
     return r.text();
@@ -20,13 +18,8 @@ export async function loadNamWasmWorklet(ctx: AudioContext): Promise<void> {
   const shim = `if (typeof self === 'undefined') globalThis.self = globalThis;
 if (typeof location === 'undefined') globalThis.location = { href: '' };
 `;
-  const url = URL.createObjectURL(
-    new Blob([shim + glue + '\n' + processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  return shim + glue + '\n' + processorSource;
 }
+
+/** 幂等加载 NAM WASM worklet(按 AudioContext 注册),使用前必须先 await */
+export const loadNamWasmWorklet = createWorkletLoader(buildProcessorSource);

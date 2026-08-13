@@ -5,6 +5,7 @@
  * 循环接缝。初录、回放与叠录始终保留 live through；循环最长两分钟。
  */
 import { MAX_LOOP_SECONDS } from './looperState';
+import { createWorkletLoader } from './workletLoader';
 
 const processorSource = `
 (() => {
@@ -192,17 +193,5 @@ registerProcessor('single-track-looper', SingleTrackLooperProcessor);
 })();
 `;
 
-const loadedContexts = new WeakSet<AudioContext>();
-
-export async function loadLooperWorklet(ctx: AudioContext): Promise<void> {
-  if (loadedContexts.has(ctx)) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loadedContexts.add(ctx);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadLooperWorklet = createWorkletLoader(processorSource);

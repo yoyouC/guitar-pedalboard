@@ -10,6 +10,8 @@
  *
  * 削波级与旋钮映射逻辑与 src/audio/wdf/klonCentaur.ts 一致——改动请两边同步。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `(() => {
 const DIODE = { Is: 1e-6, nVt: 0.034 };
 const OS = 4, NT = 48;
@@ -175,18 +177,5 @@ class WdfKlonProcessor extends AudioWorkletProcessor {
 registerProcessor('wdf-klon', WdfKlonProcessor);
 })();`;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadKlonWdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadKlonWdf = createWorkletLoader(processorSource);

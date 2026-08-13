@@ -3,6 +3,8 @@
  * 算法:以整块 RMS 与阈值比较得到目标增益(0/1),再按 attack/release 系数
  * 对增益做逐样本平滑,避免开关爆音与立体声像抖动。
  */
+import { createWorkletLoader } from './workletLoader';
+
 const processorSource = `
 class NoiseGateProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
@@ -62,18 +64,5 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
 registerProcessor('noise-gate', NoiseGateProcessor);
 `;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadNoiseGate(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadNoiseGate = createWorkletLoader(processorSource);

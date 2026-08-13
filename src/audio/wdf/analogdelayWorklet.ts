@@ -8,6 +8,8 @@
  *
  * DSP 逻辑与 src/audio/wdf/analogDelay.ts 的 BbdAnalogDelay 一致——改动请两边同步。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `(() => {
 const NOISE_AMP = 3e-4;
 const LP_IN_HZ = 2500;
@@ -129,18 +131,5 @@ class BbdAnalogDelayProcessor extends AudioWorkletProcessor {
 registerProcessor('bbd-analog-delay', BbdAnalogDelayProcessor);
 })();`;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadAnalogDelayWdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadAnalogDelayWdf = createWorkletLoader(processorSource);

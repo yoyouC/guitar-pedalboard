@@ -11,6 +11,8 @@
  * DSP 逻辑与 src/audio/wdf/tapeDelay.ts 一致(含 resample.ts 的 Up4/Down4/FIR)
  * —— 改动请两边同步。离线验证:scripts/wdf-tapedelay-eval.ts。
  */
+import { createWorkletLoader } from '../workletLoader';
+
 const processorSource = `(() => {
 	const OS = 4, NT = 48;
 	const WOW_HZ = 0.8, FLUTTER_HZ = 6.4;
@@ -210,18 +212,5 @@ const processorSource = `(() => {
 	registerProcessor('wdf-tapedelay', WdfTapeDelayProcessor);
 	})();`;
 
-let loaded = false;
-
-/** 幂等加载,使用前必须先 await */
-export async function loadTapeDelayWdf(ctx: AudioContext): Promise<void> {
-  if (loaded) return;
-  const url = URL.createObjectURL(
-    new Blob([processorSource], { type: 'application/javascript' }),
-  );
-  try {
-    await ctx.audioWorklet.addModule(url);
-    loaded = true;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+/** 幂等加载(按 AudioContext 注册),使用前必须先 await */
+export const loadTapeDelayWdf = createWorkletLoader(processorSource);
