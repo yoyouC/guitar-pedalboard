@@ -14,6 +14,8 @@ const posToFreq = (pos: number) =>
  * (450Hz→2.2kHz)与 Q(8→4),分子含 DC 零点,峰值增益 +14→+20dB。
  * position 参数由 UI 摇杆驱动,后续可接 MIDI CC。
  * worklet 未加载时回退为普通扫频带通(明显不如,但保证可用)。
+ * 注:不采用 defineWorkletEffect 数据化工厂——本效果有兜底带通链与
+ * 独立 levelGain 输出级,且参数键经改名/缩放(wah/resoScale),超出工厂形状。
  */
 export const wahpedalEffect: EffectDefinition = {
   id: 'wahpedal',

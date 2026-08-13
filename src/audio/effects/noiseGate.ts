@@ -1,11 +1,11 @@
-import type { EffectDefinition, EffectInstance } from './types';
+import { defineWorkletEffect } from './workletEffect';
 
 /**
  * Noise Gate —— 基于 AudioWorklet('noise-gate')的噪声门。
  * 门限以下信号被衰减;attack/release 控制开门/关门速度。
  * 若 worklet 处理器未加载(构造抛错),兜底为直通。
  */
-export const noiseGateEffect: EffectDefinition = {
+export const noiseGateEffect = defineWorkletEffect({
   id: 'noiseGate',
   name: 'Noise Gate',
   color: '#8a8f98',
@@ -38,45 +38,8 @@ export const noiseGateEffect: EffectDefinition = {
       unit: 's',
     },
   ],
-  create(ctx: AudioContext): EffectInstance {
-    const input = ctx.createGain();
-    const output = ctx.createGain();
-
-    let gateNode: AudioWorkletNode | null = null;
-    try {
-      gateNode = new AudioWorkletNode(ctx, 'noise-gate');
-      input.connect(gateNode);
-      gateNode.connect(output);
-    } catch {
-      // worklet 处理器未加载,兜底为直通
-      console.warn('[noiseGate] AudioWorklet "noise-gate" 不可用,回退为直通');
-      input.connect(output);
-    }
-
-    const update = (key: string, value: number): void => {
-      if (!gateNode) return;
-      const param = gateNode.parameters.get(key);
-      if (param) {
-        param.setTargetAtTime(value, ctx.currentTime, 0.02);
-      }
-    };
-
-    const dispose = (): void => {
-      input.disconnect();
-      output.disconnect();
-      if (gateNode) {
-        // 通知处理器停止渲染(返回 false),防止僵尸 worklet 空转音频线程
-        try {
-          gateNode.port.postMessage({ type: 'suspend' });
-          gateNode.port.onmessage = null;
-        } catch {
-          /* 端口已关闭 */
-        }
-        gateNode.disconnect();
-        gateNode = null;
-      }
-    };
-
-    return { input, output, update, dispose };
-  },
-};
+  processor: 'noise-gate',
+  fallbackWarn: '[noiseGate] AudioWorklet "noise-gate" 不可用,回退为直通',
+  smoothing: 0.02,
+  suspendOnDispose: true,
+});

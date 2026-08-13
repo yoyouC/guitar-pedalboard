@@ -7,6 +7,8 @@ const SMOOTH = 0.03;
  * Whammy 移调踏板:调制延迟线移调(见 whammyWorklet.ts),摇杆从 0 扫到
  * RANGE 指定的音程(±1/±2 半音,向下为负)。TREADLE 由摇杆驱动
  * (a-rate 逐样本),后续可接 MIDI CC。worklet 未加载时兜底直通。
+ * 注:不采用 defineWorkletEffect 数据化工厂——semitones 由 position×range
+ * 双键合成(需每实例状态),超出工厂的单键映射形状。
  */
 export const whammyEffect: EffectDefinition = {
   id: 'whammy',
