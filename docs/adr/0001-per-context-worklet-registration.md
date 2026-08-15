@@ -38,3 +38,6 @@ fetch+shim 拼装的源码,失败同样传播、可重试。
   没有任何调用方依赖(AudioEngine 只有一个 context,且重建场景
   下旧行为是 bug)。
 - WeakSet 不阻止 context 被 GC;条目随 context 回收自动消失。
+- 注(2026-08):NAM 单块与非 NAM 箱头移除后,委托到该工厂的加载
+  模块从 26 个降为 21 个;计数随模块增减,以
+  `grep -rl createWorkletLoader src` 为准。
