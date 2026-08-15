@@ -1,15 +1,6 @@
 import { useRef, useState } from 'react';
-import type { Snapshot } from '../state/store';
-
-interface SnapshotSwitchesProps {
-  snapshots: (Snapshot | null)[];
-  activeSlot: number;
-  /** 当前状态与激活槽不一致(已修改) */
-  activeDirty: boolean;
-  onRecall: (slot: number) => void;
-  onStore: (slot: number) => void;
-  onClear: (slot: number) => void;
-}
+import { isSnapshotDirty } from '../state/rigStore';
+import { rigStore, useRig } from '../state/useRig';
 
 const SLOT_NAMES = ['A', 'B', 'C', 'D'];
 const SLOT_KEYS = ['Q', 'W', 'E', 'R'];
@@ -17,14 +8,10 @@ const SLOT_KEYS = ['Q', 'W', 'E', 'R'];
 const LONG_PRESS_MS = 650;
 
 /** 板载快照切换器:4 个金属踩钉 + LED(空=存入,亮=恢复;Shift+点=覆盖,长按=清空) */
-export function SnapshotSwitches({
-  snapshots,
-  activeSlot,
-  activeDirty,
-  onRecall,
-  onStore,
-  onClear,
-}: SnapshotSwitchesProps) {
+export function SnapshotSwitches() {
+  const snapshots = useRig((s) => s.snapshots);
+  const activeSlot = useRig((s) => s.activeSlot);
+  const activeDirty = useRig((s) => isSnapshotDirty(s, s.activeSlot));
   const timers = useRef<(ReturnType<typeof setTimeout> | null)[]>([null, null, null, null]);
   const longFired = useRef([false, false, false, false]);
   const [holding, setHolding] = useState<number | null>(null);
@@ -37,7 +24,7 @@ export function SnapshotSwitches({
       timers.current[i] = null;
       longFired.current[i] = true;
       setHolding(null);
-      onClear(i);
+      rigStore.clearSnapshot(i);
     }, LONG_PRESS_MS);
   };
 
@@ -88,11 +75,11 @@ export function SnapshotSwitches({
                     return;
                   }
                   if (e.shiftKey) {
-                    onStore(i);
+                    rigStore.captureSnapshot(i);
                     return;
                   }
-                  if (filled) onRecall(i);
-                  else onStore(i);
+                  if (filled) rigStore.recallSnapshot(i);
+                  else rigStore.captureSnapshot(i);
                 }}
               >
                 <span className="footswitch-cap" />

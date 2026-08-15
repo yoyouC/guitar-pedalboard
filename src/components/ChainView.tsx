@@ -2,31 +2,15 @@ import { useState } from 'react';
 import type { ChainItem } from '../state/store';
 import { getEffectDef } from '../audio/effects';
 import { audioEngine } from '../audio/AudioEngine';
+import { rigStore, useRig } from '../state/useRig';
 import { PedalCard } from './PedalCard';
 import { AddEffectMenu } from './AddEffectMenu';
 
-interface ChainViewProps {
-  items: ChainItem[];
-  showMeters: boolean;
-  onReorder: (from: number, to: number) => void;
-  onToggle: (uid: string) => void;
-  onRemove: (uid: string) => void;
-  onParam: (uid: string, key: string, value: number) => void;
-  onAdd: (effectId: string) => void;
-  onToggleSlot: (uid: string) => void;
-}
-
 /** 横向 pedalboard:前置(箱头前)与 FX Loop(箱头后、箱体前)分区,拖拽排序/跨区 */
-export function ChainView({
-  items,
-  showMeters,
-  onReorder,
-  onToggle,
-  onRemove,
-  onParam,
-  onAdd,
-  onToggleSlot,
-}: ChainViewProps) {
+export function ChainView({ showMeters }: { showMeters: boolean }) {
+  const items = useRig((s) => s.chain);
+  // 图谱重建后重读引擎侧模块电平表节点引用
+  useRig((s) => s.graphVersion);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
   const [overDivider, setOverDivider] = useState(false);
@@ -53,7 +37,7 @@ export function ChainView({
       onDragLeave={() => setOverIndex((cur) => (cur === idx ? null : cur))}
       onDrop={(e) => {
         e.preventDefault();
-        if (dragIndex !== null && dragIndex !== idx) onReorder(dragIndex, idx);
+        if (dragIndex !== null && dragIndex !== idx) rigStore.movePedal(dragIndex, idx);
         setDragIndex(null);
         setOverIndex(null);
       }}
@@ -68,10 +52,10 @@ export function ChainView({
         index={idx}
         analyser={audioEngine.getModuleAnalyser(item.uid)}
         showMeters={showMeters}
-        onToggle={onToggle}
-        onRemove={onRemove}
-        onParam={onParam}
-        onToggleSlot={onToggleSlot}
+        onToggle={rigStore.togglePedal}
+        onRemove={rigStore.removePedal}
+        onParam={rigStore.setPedalParam}
+        onToggleSlot={rigStore.setPedalPost}
       />
       {!isLast && <div className="patch-cable" />}
     </div>
@@ -94,7 +78,7 @@ export function ChainView({
           e.preventDefault();
           if (dragIndex !== null) {
             const item = items[dragIndex];
-            if (!item.post) onToggleSlot(item.uid);
+            if (!item.post) rigStore.setPedalPost(item.uid);
           }
           setDragIndex(null);
           setOverIndex(null);
@@ -110,7 +94,7 @@ export function ChainView({
       </div>
 
       {postItems.map((item) => renderSlot(item, items.indexOf(item), false))}
-      <AddEffectMenu onAdd={onAdd} />
+      <AddEffectMenu onAdd={rigStore.addPedal} />
     </div>
   );
 }

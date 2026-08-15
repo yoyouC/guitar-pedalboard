@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { InputSourceType } from '../audio/AudioEngine';
 import { audioEngine } from '../audio/AudioEngine';
 import { INPUT_TARGET_DB } from '../audio/level';
+import { rigStore, useRig } from '../state/useRig';
 import { LevelMeter } from './LevelMeter';
 import { MetronomePanel } from './MetronomePanel';
 import { LooperPanel } from './LooperPanel';
@@ -21,12 +22,6 @@ interface TopBarProps {
   outputId: string;
   onOutputChange: (id: string) => void;
   outputSelectSupported: boolean;
-  inputGain: number;
-  onInputGain: (v: number) => void;
-  masterVolume: number;
-  onMasterVolume: (v: number) => void;
-  globalBypass: boolean;
-  onToggleBypass: () => void;
   showMeters: boolean;
   onToggleMeters: () => void;
   showTuner: boolean;
@@ -51,6 +46,9 @@ function formatRecordTime(seconds: number): string {
 /** 顶部控制台:输入源 / 输入电平 / 输出 / 录音 四组,分组标签 + 竖分隔 */
 export function TopBar(props: TopBarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const inputGain = useRig((s) => s.inputGain);
+  const masterVolume = useRig((s) => s.masterVolume);
+  const globalBypass = useRig((s) => s.globalBypass);
 
   // 录音状态在 React 侧管理;引擎只提供流(start/stopRecording)
   const [recording, setRecording] = useState(false);
@@ -148,8 +146,8 @@ export function TopBar(props: TopBarProps) {
               min={0}
               max={2}
               step={0.01}
-              value={props.inputGain}
-              onChange={(e) => props.onInputGain(Number(e.target.value))}
+              value={inputGain}
+              onChange={(e) => rigStore.setInputGain(Number(e.target.value))}
             />
           </label>
           <LevelMeter
@@ -187,8 +185,8 @@ export function TopBar(props: TopBarProps) {
               min={0}
               max={1}
               step={0.01}
-              value={props.masterVolume}
-              onChange={(e) => props.onMasterVolume(Number(e.target.value))}
+              value={masterVolume}
+              onChange={(e) => rigStore.setMasterVolume(Number(e.target.value))}
             />
           </label>
           <LevelMeter analyser={props.showMeters ? props.outputAnalyser : null} label="OUT" />
@@ -207,11 +205,11 @@ export function TopBar(props: TopBarProps) {
             调音表
           </button>
           <button
-            className={`bypass-btn ${props.globalBypass ? 'bypassed' : ''}`}
+            className={`bypass-btn ${globalBypass ? 'bypassed' : ''}`}
             data-midi-target="bypass"
-            onClick={props.onToggleBypass}
+            onClick={() => rigStore.setGlobalBypass(!globalBypass)}
           >
-            {props.globalBypass ? '已 Bypass' : 'Bypass'}
+            {globalBypass ? '已 Bypass' : 'Bypass'}
           </button>
           <span
             className="gain-hint"

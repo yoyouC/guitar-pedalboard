@@ -77,8 +77,10 @@ src/
 │   ├── noiseGateWorklet.ts   # 噪声门 AudioWorklet(Blob 内联加载)
 │   └── impulseResponse.ts    # 程序生成混响 IR
 ├── state/store.ts            # ChainItem / Preset 模型 + localStorage 持久化(纯函数)
+├── state/rigStore.ts         # rigStore:Rig 状态单一事实源(createRigStore 工厂 + verb,ADR-0002)
+├── state/useRig.ts           # 生产单例(注入 audioEngine)+ useRig React 绑定
 ├── components/               # 全部 UI 组件(见 frontend-architecture.md)
-├── App.tsx                   # 唯一有状态组件:状态树 + 所有事件处理 + 引擎同步
+├── App.tsx                   # shell:输入源/设备/纯 UI 开关 + URL 分享与 MIDI 投影
 ├── main.tsx                  # 入口(StrictMode)
 └── index.css                 # 全部样式:拟物皮肤体系
 ```

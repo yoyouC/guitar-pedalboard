@@ -1,17 +1,13 @@
 import { CAB_REGISTRY } from '../audio/cabs';
 import type { EffectDefinition } from '../audio/effects/types';
+import { audioEngine } from '../audio/AudioEngine';
+import { rigStore, useRig } from '../state/useRig';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 
 interface CabPanelProps {
-  cabId: string;
-  enabled: boolean;
-  values: Record<string, number>;
-  analyser: AnalyserNode | null;
   showMeters: boolean;
-  onSelect: (cabId: string) => void;
-  onToggle: () => void;
-  onParam: (key: string, value: number) => void;
+  engineReady: boolean;
 }
 
 function getDef(cabId: string): EffectDefinition {
@@ -19,8 +15,14 @@ function getDef(cabId: string): EffectDefinition {
 }
 
 /** 箱体模拟面板:型号选择 + 箱体外观(网罩 + LEVEL 旋钮 + DI 直通开关) */
-export function CabPanel({ cabId, enabled, values, analyser, showMeters, onSelect, onToggle, onParam }: CabPanelProps) {
+export function CabPanel({ showMeters, engineReady }: CabPanelProps) {
+  const cabId = useRig((s) => s.cabId);
+  const enabled = useRig((s) => s.cabEnabled);
+  const values = useRig((s) => s.cabValues);
+  // 图谱重建后重读引擎侧电平表节点引用
+  useRig((s) => s.graphVersion);
   const def = getDef(cabId);
+  const analyser = engineReady ? audioEngine.cabAnalyser : null;
 
   return (
     <div className="cab-section">
@@ -30,7 +32,7 @@ export function CabPanel({ cabId, enabled, values, analyser, showMeters, onSelec
           <button
             key={d.id}
             className={`cab-tab ${d.id === cabId ? 'active' : ''}`}
-            onClick={() => onSelect(d.id)}
+            onClick={() => rigStore.setCab(d.id)}
           >
             {d.name}
           </button>
@@ -54,13 +56,13 @@ export function CabPanel({ cabId, enabled, values, analyser, showMeters, onSelec
               label={p.label}
               unit={p.unit}
               disabled={!enabled}
-              onChange={(v) => onParam(p.key, v)}
+              onChange={(v) => rigStore.setCabParam(p.key, v)}
             />
           ))}
           <button
             className={`cab-power ${enabled ? 'power-on' : ''}`}
             title={enabled ? '关闭箱体(DI 直通)' : '开启箱体'}
-            onClick={onToggle}
+            onClick={() => rigStore.setCabEnabled(!enabled)}
           >
             {enabled ? 'CAB ON' : 'DI 直通'}
           </button>

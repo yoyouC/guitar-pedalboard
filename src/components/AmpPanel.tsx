@@ -1,35 +1,45 @@
 import { useSyncExternalStore } from 'react';
 import { AMP_CATEGORIES } from '../audio/ampCategories';
 import { getAmpDef } from '../audio/amps';
-import { NAM_SWEEP_PACKS } from '../audio/namWasm';
+import { NAM_SWEEP_PACKS, loadNamWasmModelFromFile } from '../audio/namWasm';
+import { audioEngine } from '../audio/AudioEngine';
 import { getAmpLoadState, subscribeAmpLoad } from '../audio/loadProgress';
+import { rigStore, useRig } from '../state/useRig';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 
 interface AmpPanelProps {
-  categoryId: string;
-  modelKey: string;
-  enabled: boolean;
-  values: Record<string, number>;
-  analyser: AnalyserNode | null;
   showMeters: boolean;
-  onCategorySelect: (categoryId: string) => void;
-  onModelSelect: (modelKey: string) => void;
-  onToggle: () => void;
-  onParam: (key: string, value: number) => void;
-  /** NAM 型号(nam-wasm)的自定义模型名与本地 .nam 加载回调 */
-  namCustomName?: string | null;
-  onNamModelFile?: (file: File) => void;
+  engineReady: boolean;
 }
 
 /** 箱头模拟面板:4 个分类 tab(Fender Clean / Vox / Marshall Crunch / High Gain)+ 类内型号选择 */
-export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, showMeters, onCategorySelect, onModelSelect, onToggle, onParam, namCustomName, onNamModelFile }: AmpPanelProps) {
+export function AmpPanel({ showMeters, engineReady }: AmpPanelProps) {
   const loadState = useSyncExternalStore(subscribeAmpLoad, getAmpLoadState);
+  const categoryId = useRig((s) => s.ampCategoryId);
+  const modelKeys = useRig((s) => s.ampModelKeys);
+  const enabled = useRig((s) => s.ampEnabled);
+  const values = useRig((s) => s.ampValues);
+  const namCustomName = useRig((s) => s.namCustomName);
+  // 图谱重建后重读引擎侧电平表节点引用
+  useRig((s) => s.graphVersion);
+  const modelKey = modelKeys[categoryId];
   const category = AMP_CATEGORIES.find((c) => c.id === categoryId) ?? AMP_CATEGORIES[0];
   const model = category.models.find((m) => m.key === modelKey) ?? category.models[0];
   const def = getAmpDef(
     model.kind === 'builtin' ? model.ref : 'nam-wasm',
   );
+  const analyser = engineReady ? audioEngine.ampAnalyser : null;
+
+  // NAM:加载本地 .nam 模型(WASM Core 支持全架构),成功后置为当前类的型号
+  const handleNamModelFile = async (file: File) => {
+    try {
+      const model = await loadNamWasmModelFromFile(file);
+      rigStore.setNamCustomModel(model.displayName);
+    } catch (e) {
+      alert(`加载 .nam 模型失败: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
   const isNam = model.kind !== 'builtin';
   // 扫档包:由 GAIN 旋钮值推导当前档位标签(g5.5 等)
   const sweepPack = model.kind === 'nam-wasm-pack' ? NAM_SWEEP_PACKS[model.ref] : null;
@@ -50,7 +60,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
           <button
             key={c.id}
             className={`amp-tab ${c.id === categoryId ? 'active' : ''}`}
-            onClick={() => onCategorySelect(c.id)}
+            onClick={() => rigStore.setAmpModel(c.id, modelKeys[c.id] ?? c.models[0].key)}
           >
             {c.name}
           </button>
@@ -61,7 +71,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
         <select
           className="nam-model-select"
           value={modelKey}
-          onChange={(e) => onModelSelect(e.target.value)}
+          onChange={(e) => rigStore.setAmpModel(categoryId, e.target.value)}
         >
           {category.models.map((m) => (
             <option key={m.key} value={m.key}>
@@ -73,7 +83,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
           )}
         </select>
         {sweepStage !== null && <span className="nam-stage-label">档位 g{sweepStage}</span>}
-        {model.kind === 'nam-wasm' && onNamModelFile && (
+        {model.kind === 'nam-wasm' && (
           <label className="nam-load-btn">
             加载 .nam…
             <input
@@ -82,7 +92,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
               hidden
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) onNamModelFile(f);
+                if (f) void handleNamModelFile(f);
                 e.target.value = '';
               }}
             />
@@ -129,7 +139,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
                   label={p.label}
                   unit={p.unit}
                   disabled={!enabled}
-                  onChange={(v) => onParam(p.key, v)}
+                  onChange={(v) => rigStore.setAmpParam(p.key, v)}
                 />
               </span>
             ))}
@@ -138,7 +148,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
           <button
             className={`amp-power ${enabled ? 'power-on' : ''}`}
             title={enabled ? '关闭箱头(直通)' : '开启箱头'}
-            onClick={onToggle}
+            onClick={() => rigStore.setAmpEnabled(!enabled)}
           >
             <span className="amp-power-lever" />
             <span className="amp-power-label">{enabled ? 'ON' : 'OFF'}</span>

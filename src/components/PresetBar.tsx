@@ -1,35 +1,25 @@
 import { useRef, useState } from 'react';
-import type { Preset } from '../state/store';
-
-interface PresetBarProps {
-  presets: Preset[];
-  onSave: (name: string) => void;
-  onLoad: (name: string) => void;
-  onDelete: (name: string) => void;
-  onImport: (json: string) => number;
-  onExport: () => string;
-  /** 生成当前配置的分享 URL */
-  onShare: () => string;
-}
+import { rigToShareState } from '../state/rigStore';
+import { writeShareToLocation } from '../state/share';
+import { rigStore, useRig } from '../state/useRig';
 
 /** 完整 Rig 预设:localStorage 持久化、JSON 导入导出与 URL 分享。 */
-export function PresetBar({
-  presets,
-  onSave,
-  onLoad,
-  onDelete,
-  onImport,
-  onExport,
-  onShare,
-}: PresetBarProps) {
+export function PresetBar() {
+  const presets = useRig((s) => s.presets);
   const importRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState('');
   const [shared, setShared] = useState(false);
   const [transferStatus, setTransferStatus] = useState('');
 
+  const handleLoad = (presetName: string) => {
+    const result = rigStore.loadPreset(presetName);
+    if (!result.ok && result.message) alert(result.message);
+  };
+
+  /** 生成当前配置的分享 URL(同步 hash 并返回) */
   const handleShare = async () => {
-    const url = onShare();
+    const url = writeShareToLocation(rigToShareState(rigStore.getState()));
     let copied = false;
     try {
       await navigator.clipboard.writeText(url);
@@ -47,7 +37,7 @@ export function PresetBar({
 
   const handleImport = async (file: File) => {
     try {
-      const count = onImport(await file.text());
+      const count = rigStore.importPresets(await file.text());
       setTransferStatus(`✓ 已导入 ${count} 个`);
     } catch (error) {
       setTransferStatus(
@@ -57,7 +47,7 @@ export function PresetBar({
   };
 
   const handleExport = () => {
-    const blob = new Blob([onExport()], { type: 'application/json' });
+    const blob = new Blob([rigStore.exportPresets()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     const stamp = new Date().toISOString().slice(0, 10);
@@ -84,10 +74,10 @@ export function PresetBar({
           </option>
         ))}
       </select>
-      <button disabled={!selected} onClick={() => onLoad(selected)}>
+      <button disabled={!selected} onClick={() => handleLoad(selected)}>
         加载
       </button>
-      <button disabled={!selected} onClick={() => { onDelete(selected); setSelected(''); }}>
+      <button disabled={!selected} onClick={() => { rigStore.deletePreset(selected); setSelected(''); }}>
         删除
       </button>
       <span className="preset-divider" />
@@ -101,7 +91,7 @@ export function PresetBar({
         disabled={!name.trim()}
         onClick={() => {
           const presetName = name.trim();
-          onSave(presetName);
+          rigStore.savePreset(presetName);
           setSelected(presetName);
           setName('');
         }}
