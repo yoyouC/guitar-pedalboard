@@ -128,17 +128,17 @@ const sampleLevels = `(() => {
            amp: m(e.ampAnalyser), cab: m(e.cabAnalyser), output: m(e.outputAnalyser) };
 })()`;
 
-console.log('== 步骤 1: 点击 测试音源(默认 crunch 箱头)==');
+console.log('== 步骤 1: 点击 测试音源(默认 Fender Clean → fender-twinverb)==');
 console.log(await evaluate(clickButton('测试音源')));
 await sleep(2500);
 console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
 
-console.log('\n== 步骤 2: 点击 NAM 箱头(分类:Marshall Crunch → jcm2000-clean)==');
+console.log('\n== 步骤 2: 点击 NAM 箱头(分类:Marshall Crunch → jcm2000-crunch)==');
 console.log(await evaluate(clickButton('Marshall Crunch')));
 await sleep(2500);
 console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
 
-console.log('\n== 步骤 3: 再切回内置 crunch 对比 ==');
+console.log('\n== 步骤 3: 再点一次 Marshall Crunch(型号记忆应保持)==');
 console.log(await evaluate(clickButton('Marshall Crunch')));
 await sleep(1500);
 console.log(JSON.stringify(await evaluate(sampleLevels), null, 2));
