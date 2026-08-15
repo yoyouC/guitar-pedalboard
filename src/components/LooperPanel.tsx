@@ -49,31 +49,33 @@ export function LooperPanel({ engineReady, hasInput }: LooperPanelProps) {
     <div className="console-group looper-group">
       <span className="group-label">LOOPER · {PHASE_LABEL[status.phase]}</span>
       <div className="group-body looper-body">
-        <button
-          className={`looper-primary ${isWriting ? 'writing' : ''}`}
-          data-midi-target="looper-record"
-          disabled={
-            !engineReady ||
-            !status.available ||
-            (status.phase === 'empty' && !hasInput)
-          }
-          title={
-            status.available
-              ? '初录后自动循环；播放中可叠录'
-              : '请先选择输入源以初始化音频引擎'
-          }
-          onClick={handlePrimary}
-        >
-          {primaryLabel}
-        </button>
-        <button
-          disabled={!hasLoop || status.phase === 'overdubbing'}
-          title={status.phase === 'stopped' ? '继续循环' : '暂停循环'}
-          data-midi-target="looper-play"
-          onClick={() => audioEngine.toggleLoopPlayback()}
-        >
-          {status.phase === 'stopped' ? '▶' : 'Ⅱ'}
-        </button>
+        <span data-midi-target="looper-record">
+          <button
+            className={`looper-primary ${isWriting ? 'writing' : ''}`}
+            disabled={
+              !engineReady ||
+              !status.available ||
+              (status.phase === 'empty' && !hasInput)
+            }
+            title={
+              status.available
+                ? '初录后自动循环；播放中可叠录'
+                : '请先选择输入源以初始化音频引擎'
+            }
+            onClick={handlePrimary}
+          >
+            {primaryLabel}
+          </button>
+        </span>
+        <span data-midi-target="looper-play">
+          <button
+            disabled={!hasLoop || status.phase === 'overdubbing'}
+            title={status.phase === 'stopped' ? '继续循环' : '暂停循环'}
+            onClick={() => audioEngine.toggleLoopPlayback()}
+          >
+            {status.phase === 'stopped' ? '▶' : 'Ⅱ'}
+          </button>
+        </span>
         <button
           disabled={!status.canUndo || isWriting}
           title="撤销最后一次叠录"
@@ -81,15 +83,16 @@ export function LooperPanel({ engineReady, hasInput }: LooperPanelProps) {
         >
           ↶
         </button>
-        <button
-          className="looper-clear"
-          disabled={status.phase === 'empty'}
-          title="清空循环"
-          data-midi-target="looper-clear"
-          onClick={() => audioEngine.clearLoop()}
-        >
-          清空
-        </button>
+        <span data-midi-target="looper-clear">
+          <button
+            className="looper-clear"
+            disabled={status.phase === 'empty'}
+            title="清空循环"
+            onClick={() => audioEngine.clearLoop()}
+          >
+            清空
+          </button>
+        </span>
         <span className="looper-time">
           {formatLooperTime(
             status.phase === 'recording'
