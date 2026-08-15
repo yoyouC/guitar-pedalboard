@@ -35,14 +35,6 @@ const CANONICAL: BandSpec[] = [
   { key: 'presence', type: 'highshelf', frequency: 5000 },
 ];
 
-/** twin 的音色栈偏离规范:mid 500Hz、treble 3000Hz(见 twinAmpDef 注释) */
-const TWIN: BandSpec[] = [
-  { key: 'bass', type: 'lowshelf', frequency: 120 },
-  { key: 'mid', type: 'peaking', frequency: 500, Q: 1 },
-  { key: 'treble', type: 'highshelf', frequency: 3000 },
-  { key: 'presence', type: 'highshelf', frequency: 5000 },
-];
-
 interface SiteSpec {
   ampId: string;
   bands: BandSpec[];
@@ -50,19 +42,8 @@ interface SiteSpec {
 }
 
 const SITES: SiteSpec[] = [
-  // createAmp 的三个采用者 + createCrunchAmp(crunch 为 customCreate)
-  { ampId: 'clean', bands: CANONICAL, defaults: { bass: 55, mid: 45, treble: 65, presence: 50 } },
-  { ampId: 'crunch', bands: CANONICAL, defaults: { bass: 50, mid: 65, treble: 60, presence: 55 } },
-  { ampId: 'recto', bands: CANONICAL, defaults: { bass: 60, mid: 40, treble: 60, presence: 60 } },
-  { ampId: 'chime', bands: CANONICAL, defaults: { bass: 45, mid: 55, treble: 65, presence: 65 } },
-  // wdfBognerDef(amps.ts)
-  { ampId: 'wdfbogner', bands: CANONICAL, defaults: { bass: 50, mid: 60, treble: 60, presence: 55 } },
-  // wdfJc120Def(wdf/jc120AmpDef.ts)
-  { ampId: 'wdfjc120', bands: CANONICAL, defaults: { bass: 50, mid: 50, treble: 60, presence: 60 } },
   // createNamWasmAmp(namWasm.ts)
   { ampId: 'nam-wasm', bands: CANONICAL, defaults: { bass: 50, mid: 50, treble: 50, presence: 50 } },
-  // wdfTwinDef(wdf/twinAmpDef.ts):偏离规范,钉死今日值
-  { ampId: 'wdftwin', bands: TWIN, defaults: { bass: 55, mid: 40, treble: 60, presence: 50 } },
 ];
 
 const expectedDb = (key: BandSpec['key'], v: number) =>
@@ -74,8 +55,7 @@ for (const site of SITES) {
     const def = getAmpDef(site.ampId);
     const inst = def.create(ctx as unknown as AudioContext);
 
-    // 按 type+频率 找到各段节点;twin 的 voicing 与 mid 同为 peaking@500,
-    // 用初始增益区分(voicing 固定 -3dB,mid 由默认旋钮位决定)
+    // 按 type+频率 找到各段节点(同名候选多于一个时,用初始增益区分)
     const bandNodes = new Map<string, StubBiquadFilterNode>();
     for (const band of site.bands) {
       const candidates = ctx

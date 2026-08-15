@@ -1,7 +1,7 @@
 /**
  * 4x 抗混叠重采样:多相升采样 + 31 阶 Blackman-sinc FIR 降采样。
  * 替代线性插值(镜像抑制差,非线性处理后产生混叠"滋滋"声)。
- * worklet(champWorklet/bognerWorklet)内联同一份 JS,改动请两边同步。
+ * worklet(fet1176Worklet/tapedelayWorklet 等)内联同一份 JS,改动请两边同步。
  */
 
 export const OS_FACTOR = 4;

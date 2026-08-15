@@ -27,10 +27,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
   const loadState = useSyncExternalStore(subscribeAmpLoad, getAmpLoadState);
   const category = AMP_CATEGORIES.find((c) => c.id === categoryId) ?? AMP_CATEGORIES[0];
   const model = category.models.find((m) => m.key === modelKey) ?? category.models[0];
-  const def = getAmpDef(
-    model.kind === 'builtin' ? model.ref : 'nam-wasm',
-  );
-  const isNam = model.kind !== 'builtin';
+  const def = getAmpDef('nam-wasm');
   // 扫档包:由 GAIN 旋钮值推导当前档位标签(g5.5 等)
   const sweepPack = model.kind === 'nam-wasm-pack' ? NAM_SWEEP_PACKS[model.ref] : null;
   const sweepStage = sweepPack
@@ -68,7 +65,7 @@ export function AmpPanel({ categoryId, modelKey, enabled, values, analyser, show
               {m.name}
             </option>
           ))}
-          {isNam && modelKey.endsWith(':custom') && (
+          {modelKey.endsWith(':custom') && (
             <option value={modelKey}>{namCustomName ?? '自定义模型'}(自定义)</option>
           )}
         </select>

@@ -23,9 +23,9 @@
 - 链条自由配置:添加/删除、**拖拽排序**、单块 bypass、参数实时平滑调节
 - 完整 Rig 预设:保存/加载效果链、箱头、箱体与全局控制(localStorage),支持 JSON 导入导出和旧版预设迁移
 
-### 箱头模拟(4 款)
+### 箱头模拟(NAM 神经网络建模)
 
-Clean Twin / British Crunch / Modern Recto / AC Chime,位于效果链之后,含前级削波、voicing、音色栈(BASS/MID/TREBLE/PRESENCE)、后级饱和与箱体模拟,MASTER 总音量。
+全部箱头由 NAM(Neural Amp Modeler)WASM 引擎驱动:4 个分类(Fender Clean / Vox / Marshall Crunch / High Gain)下 21 款内置 capture + 5 个增益扫档包,也可加载本地 .nam 模型。位于效果链之后,含模型后音色栈(BASS/MID/TREBLE/PRESENCE)与箱体模拟,MASTER 总音量。
 
 ### 输入 / 输出
 
@@ -68,7 +68,7 @@ src/
 ├── audio/
 │   ├── AudioEngine.ts      # 音频引擎:输入源/效果链/箱头/输出路由
 │   ├── looperWorklet.ts    # PCM 无缝循环、叠录与撤销
-│   ├── amps.ts             # 4 款箱头模型
+│   ├── amps.ts             # 箱头注册表(NAM WASM)
 │   ├── noiseGateWorklet.ts # 噪声门 AudioWorklet(Blob 内联)
 │   ├── impulseResponse.ts  # 程序生成混响 IR
 │   └── effects/            # 17 个效果器模块 + 统一接口 + 注册表

@@ -82,10 +82,10 @@ export default function App() {
   const [snapshots, setSnapshots] = useState<(Snapshot | null)[]>(loadSnapshots);
   const [activeSlot, setActiveSlot] = useState(-1);
 
-  const [ampId, setAmpId] = useState('crunch');
+  const [ampId, setAmpId] = useState('nam-wasm');
   const [ampEnabled, setAmpEnabled] = useState(true);
   const [ampValues, setAmpValues] = useState<Record<string, number>>(() =>
-    defaultAmpValues('crunch'),
+    defaultAmpValues('nam-wasm'),
   );
 
   const [cabId, setCabId] = useState('gb4x12');
@@ -95,12 +95,12 @@ export default function App() {
   );
 
   // 箱头分类(4 类)与每类记住的型号(key = `${kind}:${ref}`,见 ampCategories.ts)
-  const [ampCategoryId, setAmpCategoryId] = useState('crunch');
+  const [ampCategoryId, setAmpCategoryId] = useState('clean');
   const [ampModelKeys, setAmpModelKeys] = useState<Record<string, string>>({
-    clean: 'builtin:clean',
-    chime: 'builtin:chime',
-    crunch: 'builtin:crunch',
-    recto: 'builtin:recto',
+    clean: 'nam-wasm:fender-twinverb',
+    chime: 'nam-wasm:vox-ac15',
+    crunch: 'nam-wasm:jcm2000-crunch',
+    recto: 'nam-wasm:jcm900-g12',
   });
 
   // NAM 箱头:当前模型源 id(自定义文件时为 'custom')与模型版本(换模型 = 结构变化,重建音频图)
@@ -501,11 +501,6 @@ export default function App() {
     const sep = key.indexOf(':');
     const kind = key.slice(0, sep);
     const ref = key.slice(sep + 1);
-    if (kind === 'builtin') {
-      setAmpId(ref);
-      setAmpValues(defaultAmpValues(ref));
-      return;
-    }
     if (kind === 'nam-wasm-pack') {
       const pack = NAM_SWEEP_PACKS[ref];
       if (pack) setNamWasmPack(pack);

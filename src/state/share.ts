@@ -97,7 +97,7 @@ export function decodeShareState(encoded: string): ShareState | null {
       }
     }
 
-    const ampModelKey = payload.a?.key ?? 'builtin:crunch';
+    const ampModelKey = payload.a?.key ?? 'nam-wasm:fender-twinverb';
     const ampEntry = getAmpModelEntry(ampModelKey);
     const ampCategory = getAmpModelCategory(ampModelKey);
 
@@ -114,16 +114,13 @@ export function decodeShareState(encoded: string): ShareState | null {
       }
     }
 
-    // 箱头参数钳制(def 由型号 kind 解析:builtin→ref,其余→nam-wasm)
-    const resolvedKey = ampEntry ? ampModelKey : 'builtin:crunch';
-    const resolvedEntry = ampEntry ?? getAmpModelEntry(resolvedKey)!;
-    const ampDefId =
-      resolvedEntry.kind === 'builtin' ? resolvedEntry.ref : 'nam-wasm';
-    const ampValues = clampValues(getAmpDef(ampDefId).params, payload.a?.v);
+    // 箱头参数钳制(所有型号都走 nam-wasm 箱头定义)
+    const resolvedKey = ampEntry ? ampModelKey : 'nam-wasm:fender-twinverb';
+    const ampValues = clampValues(getAmpDef('nam-wasm').params, payload.a?.v);
 
     return {
       chain,
-      ampCategoryId: ampCategory?.id ?? 'crunch',
+      ampCategoryId: ampCategory?.id ?? 'clean',
       ampModelKey: resolvedKey,
       ampEnabled: payload.a?.on !== 0,
       ampValues,

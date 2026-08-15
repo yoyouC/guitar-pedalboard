@@ -54,12 +54,12 @@ const RIG_PRESET_CATALOG: RigPresetCatalog = {
     category.models.map((model) => ({
       key: model.key,
       categoryId: category.id,
-      ampId: model.kind === 'builtin' ? model.ref : 'nam-wasm',
+      ampId: 'nam-wasm',
     })),
   ),
   ampCategoryIds: AMP_CATEGORIES.map((category) => category.id),
   defaults: {
-    ampModelKey: 'builtin:crunch',
+    ampModelKey: 'nam-wasm:fender-twinverb',
     cabId: 'gb4x12',
     inputGain: 1,
     masterVolume: 0.5,

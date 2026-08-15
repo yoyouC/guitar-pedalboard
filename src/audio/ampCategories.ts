@@ -2,20 +2,19 @@ import { BUNDLED_WAVENET_MODELS, NAM_SWEEP_PACKS } from './namWasm';
 
 /**
  * 箱头分类(4 类,对应 4 个箱头皮肤 amp-clean/chime/crunch/recto):
- * 每类一个 tab,类内可再选具体型号(内置手工建模 / NAM WASM / 增益扫档包)。
+ * 每类一个 tab,类内可再选具体型号(NAM WASM 单模型 / 增益扫档包)。
  *
- * 型号寻址:`${kind}:${ref}`,kind ∈ builtin(AMP_REGISTRY 的手工箱头 id)/
- * nam-wasm(BUNDLED_WAVENET_MODELS id)/
+ * 型号寻址:`${kind}:${ref}`,kind ∈ nam-wasm(BUNDLED_WAVENET_MODELS id)/
  * nam-wasm-pack(NAM_SWEEP_PACKS id);
- * 自定义文件加载用 `${kind}:custom`(源已由 loadNam*FromFile 设置)。
+ * 自定义文件加载用 `nam-wasm:custom`(源已由 loadNamWasmFromFile 设置)。
  */
-export type AmpModelKind = 'builtin' | 'nam-wasm' | 'nam-wasm-pack';
+export type AmpModelKind = 'nam-wasm' | 'nam-wasm-pack';
 
 export interface AmpModelEntry {
   key: string;
   name: string;
   kind: AmpModelKind;
-  /** builtin: 箱头 def id;nam-*: 对应 BUNDLED 清单的模型 id */
+  /** 对应 BUNDLED 清单的模型 id 或扫档包 id */
   ref: string;
 }
 
@@ -26,7 +25,6 @@ export interface AmpCategory {
   models: AmpModelEntry[];
 }
 
-const builtin = (ref: string, name: string): AmpModelEntry => ({ key: `builtin:${ref}`, name, kind: 'builtin', ref });
 const wasm = (ref: string, name: string): AmpModelEntry => ({ key: `nam-wasm:${ref}`, name, kind: 'nam-wasm', ref });
 const wasmPack = (ref: string): AmpModelEntry => ({
   key: `nam-wasm-pack:${ref}`,
@@ -45,10 +43,6 @@ export const AMP_CATEGORIES: AmpCategory[] = [
     id: 'clean',
     name: 'Fender Clean',
     models: [
-      builtin('clean', 'Clean Twin(内置建模)'),
-      builtin('wdfchamp', 'WDF Champ ⚗(WDF 电路建模)'),
-      builtin('wdftwin', 'WDF Twin ⚗(WDF 电路建模)'),
-      builtin('wdfjc120', 'WDF JC-120 ⚗(WDF 电路建模)'),
       ...sweepEntry('bassman-sweep'),
       wasm('fender-twinverb', WASM_NAME.get('fender-twinverb')!),
       wasm('wavenet-deluxe', WASM_NAME.get('wavenet-deluxe')!),
@@ -62,8 +56,6 @@ export const AMP_CATEGORIES: AmpCategory[] = [
     id: 'chime',
     name: 'Vox',
     models: [
-      builtin('chime', 'AC Chime(内置建模)'),
-      builtin('wdfac30', 'WDF AC30 ⚗(WDF 电路建模)'),
       wasm('wavenet-ac10', WASM_NAME.get('wavenet-ac10')!),
       wasm('vox-ac15', WASM_NAME.get('vox-ac15')!),
     ],
@@ -72,7 +64,6 @@ export const AMP_CATEGORIES: AmpCategory[] = [
     id: 'crunch',
     name: 'Marshall Crunch',
     models: [
-      builtin('crunch', 'British Crunch(内置建模)'),
       wasm('jcm2000-clean', WASM_NAME.get('jcm2000-clean')!),
       wasm('jcm2000-crunch', WASM_NAME.get('jcm2000-crunch')!),
       ...sweepEntry('jcm800-sweep'),
@@ -90,8 +81,6 @@ export const AMP_CATEGORIES: AmpCategory[] = [
     id: 'recto',
     name: 'High Gain',
     models: [
-      builtin('recto', 'Modern Recto(内置建模)'),
-      builtin('wdfbogner', 'WDF Bogner ⚗(WDF 电路建模)'),
       ...sweepEntry('evh-green-sweep'),
       ...sweepEntry('recto-red-sweep'),
       wasm('jcm900-g12', WASM_NAME.get('jcm900-g12')!),
@@ -110,7 +99,7 @@ export function getAmpModelEntry(key: string): AmpModelEntry | null {
   return null;
 }
 
-/** 型号所属分类(如 builtin:crunch → crunch 分类) */
+/** 型号所属分类(如 nam-wasm:jcm2000-crunch → crunch 分类) */
 export function getAmpModelCategory(key: string): AmpCategory | null {
   for (const c of AMP_CATEGORIES) {
     if (c.models.some((m) => m.key === key)) return c;

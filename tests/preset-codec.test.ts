@@ -27,10 +27,6 @@ const catalog: RigPresetCatalog = {
   ],
   amps: [
     {
-      id: 'clean',
-      params: [{ key: 'gain', min: 0, max: 100, defaultValue: 40 }],
-    },
-    {
       id: 'nam-wasm',
       params: [{ key: 'gain', min: 0, max: 100, defaultValue: 50 }],
     },
@@ -42,11 +38,11 @@ const catalog: RigPresetCatalog = {
     },
   ],
   ampModels: [
-    { key: 'builtin:clean', categoryId: 'clean', ampId: 'clean' },
+    { key: 'nam-wasm:fender-twinverb', categoryId: 'clean', ampId: 'nam-wasm' },
   ],
   ampCategoryIds: ['clean', 'crunch'],
   defaults: {
-    ampModelKey: 'builtin:clean',
+    ampModelKey: 'nam-wasm:fender-twinverb',
     cabId: 'open1x12',
     inputGain: 1,
     masterVolume: 0.5,
@@ -63,7 +59,7 @@ test('full rig preset round-trips and clamps every parameter domain', () => {
     }],
     amp: {
       categoryId: 'clean',
-      modelKey: 'builtin:clean',
+      modelKey: 'nam-wasm:fender-twinverb',
       enabled: false,
       values: { gain: -20 },
       customName: null,
@@ -109,7 +105,7 @@ test('legacy chain-only presets migrate with safe rig defaults', () => {
   assert.equal(imported[0].version, 2);
   assert.equal(imported[0].rig.chain[0].post, true);
   assert.equal(imported[0].rig.chain[0].values.time, 2);
-  assert.equal(imported[0].rig.amp.modelKey, 'builtin:clean');
+  assert.equal(imported[0].rig.amp.modelKey, 'nam-wasm:fender-twinverb');
   assert.equal(imported[0].rig.cab.id, 'open1x12');
   assert.deepEqual(imported[0].rig.globals, {
     inputGain: 1,
@@ -123,7 +119,7 @@ test('preset export envelope imports again and drops unknown modules', () => {
     chain: [],
     amp: {
       categoryId: 'clean',
-      modelKey: 'builtin:clean',
+      modelKey: 'nam-wasm:fender-twinverb',
       enabled: true,
       values: {},
       customName: null,

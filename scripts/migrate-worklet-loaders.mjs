@@ -10,9 +10,9 @@ const FILES = [
   'src/audio/wahWorklet.ts',
   'src/audio/whammyWorklet.ts',
   ...[
-    'ac30', 'analogdelay', 'bigmuff', 'bogner', 'champ', 'crybaby', 'ds1',
-    'dynacomp', 'fet1176', 'fuzzface', 'jc120', 'klon', 'la2a', 'pingpong',
-    'plate', 'rat', 'shimmer', 'springreverb', 'tapedelay', 'ts808', 'twin',
+    'analogdelay', 'bigmuff', 'crybaby', 'ds1',
+    'dynacomp', 'fet1176', 'fuzzface', 'klon', 'la2a', 'pingpong',
+    'plate', 'rat', 'shimmer', 'springreverb', 'tapedelay', 'ts808',
   ].map((n) => `src/audio/wdf/${n}Worklet.ts`),
 ];
 

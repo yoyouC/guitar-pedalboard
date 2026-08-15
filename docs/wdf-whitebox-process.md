@@ -66,16 +66,15 @@
 ### 2.2 工具链
 
 ```bash
-npm run wdf:test          # 三极管级 / Champ / Bogner 链稳定性 + 混叠对比
+npm run wdf:test          # 三极管级 / 链稳定性 + 混叠对比
 npm run wdf:ts-eval       # TS808 L0~L3
 npm run wdf:ts-spice      # TS808 L4(vs ngspice,RMSE 0.8%)
 npm run wdf:crybaby-eval  # Crybaby GCB-95 L0~L3(峰频轨迹/GEO 偏置/worklet parity)
 npm run wdf:crybaby-spice # Crybaby GCB-95 L4(vs ngspice,RMSE 7.1%)
-node scripts/wdf-bogner-spice-compare.ts  # Bogner L4 多档
-node scripts/wdf-ac30-eval.ts             # AC30 L0~L3(清音余量/边缘压缩量化)
-node scripts/wdf-ac30-spice-compare.ts    # AC30 L4 多档(RMSE 1~4%)
-node scripts/wdf-ac30-worklet-parity.ts   # AC30 worklet 内联一致性抽检
 ```
+
+(WDF 箱头的 eval/spice 脚本——Bogner/AC30/Champ/Twin/JC-120——已随非 NAM
+箱头移除;§3/§4 中的相关结果保留作过程记录。)
 
 SPICE 参考网表在 `scripts/spice/`(Koren B-source 子电路 + 理想运放/缓冲)。
 
@@ -153,19 +152,16 @@ spice 参考电路同样出现,治理用经典疗法:耦合电容 22nF→4.7nF
 
 ## 5. 目录结构
 
+> 注:WDF 箱头(ac30/bogner/champ/twin/jc120 及其 eval/spice 脚本与网表)已随
+> 非 NAM 箱头整体移除;本文保留其建模过程记录作为方法参考。以下为现存文件。
+
 ```
 src/audio/wdf/
 ├── triode.ts          # 共阴极三极管级(TS 参考实现,Node 可测)
-├── ac30Core.ts        # AC30 核心:EL84 参数 + 稳健三极管级(二分栅流钳位+板极负载)
-│                      #   + 阴极跟随器(栅漏偏置)+ top-boost 音色 + 变压器/临场峰
-├── ac30Worklet.ts     # WDF AC30 处理器(IIFE 内联,音色栈在 worklet 内)
-├── ac30AmpDef.ts      # wdfAc30Def():箱头定义(id 'wdfac30',注册由主代理收口)
 ├── diodeClipper.ts    # TS808 运放+二极管对 WDF 级
 ├── ratDistortion.ts   # RAT 失真核心(增益级+摆率 LP+二极管硬削波/FILTER 联立 Newton)
 ├── tapeDelay.ts       # 磁带延迟核心(EP-3 风格:调制延迟线+环内损耗/软削波,Node 可测)
 ├── resample.ts        # 4x 多相升采样 + 48 阶 FIR 降采样
-├── champWorklet.ts    # WDF Champ 处理器(IIFE 内联)
-├── bognerWorklet.ts   # WDF Bogner 处理器
 ├── ratWorklet.ts      # RAT WDF 处理器
 ├── tapedelayWorklet.ts # 磁带延迟处理器
 └── ts808Worklet.ts    # TS808 WDF 处理器
@@ -175,12 +171,8 @@ scripts/
 ├── wdf-ts-spice-compare.ts      # TS808 L4
 ├── wdf-rat-eval.ts    # RAT L0~L3
 ├── wdf-tapedelay-eval.ts # 磁带延迟 L0~L3(时间精度/饱和 THD/wow 解调/高频衰减/自激有界)
-├── wdf-ac30-eval.ts   # AC30 L0~L3(含清音余量/边缘压缩两区间量化)
-├── wdf-ac30-worklet-parity.ts   # AC30 worklet 内联 vs 核心链样本级一致性
-├── wdf-ac30-spice-compare.ts    # AC30 L4
 ├── wdf-rat-spice-compare.ts     # RAT L4
-├── wdf-bogner-spice-compare.ts  # Bogner L4 多档
-└── spice/             # ngspice 参考网表(含 ac30.cir:CF 偏置 + 串联 RLC 临场峰)
+└── spice/             # ngspice 参考网表(ts808/rat/bigmuff/ds1/klon/crybaby/fuzzface)
 ```
 
 worklet 内联 JS 与 `triode.ts`/`resample.ts` 的 TS 参考实现保持逻辑一致——

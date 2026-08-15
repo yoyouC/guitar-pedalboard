@@ -135,70 +135,42 @@ interface EffectDefinition {   // "目录项":描述 + 工厂
 
 ## 4. 箱头(`src/audio/amps.ts`)
 
-4 款箱头复用效果器接口,分为两类实现:
+箱头复用效果器接口(`EffectDefinition`),实现只有一路:NAM 引擎(见 §4.2)。
+`AMP_REGISTRY` 只含 `nam-wasm` 一款定义,具体音色由所选 .nam 模型决定
+(型号清单见 §4.3)。6 个固定旋钮:`gain/bass/mid/treble/presence/master`
+(0~100,master 为 dB);`getAmpDef(id)` 按 id 查找。
 
-### 4.1 配置驱动(3 款:clean / recto / chime)
-
-`AMP_MODELS` 用一份配置描述音色特征,通用工厂 `createAmp(ctx, cfg)` 拼装固定拓扑:
-
-```
-input → 高通(preHpHz,切低频保持紧实)
-      → preGain(1 ~ preGainMax,GAIN 旋钮驱动)
-      → WaveShaper tanh 前级削波(preClipK,4x oversample)
-      → voicing(peaking,特征峰/凹陷)
-      → 音色栈: lowshelf 120Hz(BASS) → peaking 700Hz(MID)
-              → highshelf 3.2kHz(TREBLE) → highshelf 5kHz(PRESENCE,0~+8dB)
-      → WaveShaper 后级饱和(powerClipK)
-      → masterGain → output
-```
-
-配置项:`preGainMax` / `preClipK` / `preHpHz` / `voicingFreq` / `voicingGainDb` / `powerClipK` / 六个旋钮默认值。BASS/MID/TREBLE 旋钮按 `(v-50)/50 × 12dB` 映射。
-
-### 4.2 定制电路(crunch,British Crunch)
-
-`customCreate: createCrunchAmp` 指向独立函数,做 Plexi/JCM800 级电路建模(详见 `amps.ts` 头部大注释):
-
-- 120Hz 早切低频 → V1B 增益级软削 → Miller 高频滚降(6.5k LP)+ bright cap 高频补偿(2.5k 高架 +3dB)
-- **cold clipper**:固定激励 4× + 不对称削波曲线(负半周 tanh 4.5 硬削、正半周 tanh 1.1 软削),产生以二次谐波为主的失真
-- 暖偏置级 → 第二级 Miller 滚降 → 阴极跟随器
-- 音色栈带 500Hz 特征凹陷(-3.5dB)
-- EL34 后级 → 输出变压器带宽限制(80Hz HP + 6.5kHz LP)
-
-### 4.3 参数与注册
-
-6 个固定旋钮:`gain/bass/mid/treble/presence/master`(0~100)。`makeAmpDef()` 包装成 `EffectDefinition` 进入 `AMP_REGISTRY`,`getAmpDef(id)` 查找。新增箱头:优先在 `AMP_MODELS` 加配置;不够用时加 `customCreate`。
-
-### 4.4 NAM 引擎单一化说明(原纯 JS LSTM 路线已移除)
+### 4.1 NAM 引擎单一化说明(原纯 JS LSTM 路线已移除)
 
 项目曾有两条 NAM 推理路线:纯 JS LSTM worklet(`nam.ts`/`namProcessor.js`,方案 A)与
 WASM NAM Core(方案 B)。数值对拍证明两者输出一致(误差 ~2e-7),而 WASM 路线覆盖全
 架构且性能更好,**已删除纯 JS 引擎**,全部 capture(含 LSTM)统一由 WASM Core 运行
-(见 §4.5)。原 5 个 LSTM 模型(lstm-demo/DeluxeReverb-3x24/reference-lstm/BossLSTM
+(见 §4.2)。原 5 个 LSTM 模型(lstm-demo/DeluxeReverb-3x24/reference-lstm/BossLSTM
 ×2)仍在分类清单中,kind 统一为 `nam-wasm`。
 
-### 4.5 NAM 引擎(nam-wasm,WASM 全架构)
+### 4.2 NAM 引擎(nam-wasm,WASM 全架构)
 
 `src/audio/namWasm.ts` + `src/audio/namWasmProcessor.js` + `public/nam-wasm/`,方案 B:**在 AudioWorklet 内运行 NAM Core 官方 C++**(emscripten 编译为 WASM),支持全部架构(WaveNet/LSTM/ConvNet/Container)。
 
 - **WASM 构建**(自有工具链,非官方模块):tone-3000 官方模块(t3k-wasm-module)会自建 AudioContext 且需 COOP/COEP(SharedArrayBuffer),无法嵌入本引擎,因此用极简绑定 `wasm/nam-dsp-binding.cpp`(`setDsp`/`processAudio`/`setConditioning`/`getNumInputChannels`/`setSampleRate`,不碰 Web Audio)+ `wasm/build-nam-wasm.sh`(em++,依赖 /tmp/emsdk 与 /tmp/nam-wasm-src 源码树)产出 `nam-wasm-glue.js`(33KB)+ `nam-wasm-glue.wasm`(650KB)。单线程、无 SAB,无需特殊响应头。
 - **加载链路**:worklet 无 `importScripts`,故 `namWasmWorklet.ts` 把 glue + 处理器拼成单 Blob `addModule`;wasm 字节由主线程 fetch 后经 `port.postMessage` 传入,worklet 内以 `instantiateWasm` 覆盖实例化(不依赖 worklet 内 fetch/XHR)。模型 .nam JSON 全文送 `_setDsp`。
-- **旋钮/归一化/重建语义**(drive → worklet → normalizeGain → 音色栈 → master):GAIN=输入激励(扫档包例外,见 §4.7),BASS/MID/TREBLE/PRESENCE=模型后 biquad 音色栈,MASTER=输出电平(dB);响度归一化对齐官方插件 Normalized 模式(-18LUFS - metadata.loudness,钳制 [-12, +36]dB)。模型清单 `BUNDLED_WAVENET_MODELS`(含原 LSTM 路线的 5 个模型),本地文件加载接受任意架构。
+- **旋钮/归一化/重建语义**(drive → worklet → normalizeGain → 音色栈 → master):GAIN=输入激励(扫档包例外,见 §4.4),BASS/MID/TREBLE/PRESENCE=模型后 biquad 音色栈,MASTER=输出电平(dB);响度归一化对齐官方插件 Normalized 模式(-18LUFS - metadata.loudness,钳制 [-12, +36]dB)。模型清单 `BUNDLED_WAVENET_MODELS`(含原 LSTM 路线的 5 个模型),本地文件加载接受任意架构。
 - **对齐官方模块的两个细节**:模型加载后 `prewarm()`(静默驱动内部状态到位);输出经 10Hz DC blocker(系数按 `_setSampleRate` 的实际采样率计算,WaveNet 常见缓慢 DC 漂移)。
 - **僵尸节点防护**:worklet 断开连接后 Chrome 仍可能继续调用其 `process()`,因此两个 worklet(nam-wasm/noiseGate)都支持 `suspend` 消息——宿主实例 `dispose()` 时通知处理器返回 `false`,让节点立即停止渲染,防止空转音频线程(对 ~19% 单核的 WaveNet 实例尤其重要)。
 - **验证**:`node scripts/verify-nam-wasm.cjs` —— ① lstm-demo 经 WASM 与经纯 JS 参考实现对拍,误差 ~2e-7(两条路线互相印证);② WaveNet 标准模型推理 100s 音频耗时 19s(约单核 19%),静音与大声输入耗时接近(无 denormal 悬崖),实时余量充足。
 - **voice 实例隔离(关键约束)**:wasm 模块/模型/I/O 缓冲必须挂在处理器实例上(`this.module` 等),绝不能用脚本级全局变量——同一 worklet 全局作用域里多个 'nam-wasm' 节点共享全局状态时会互相覆盖模型,链条退化为"同一模型串联两次"。
 - **已知限制**:采样率不匹配仅告警;conditioned 箱头模型的条件输入未接(NAM Core 支持,UI 未暴露);无 DC blocker(官方模块有,本项目输出侧已有箱体高通与限幅器)。模型均已获授权随 git 发布,管理见 `docs/deployment.md`。
 
-### 4.6 箱头分类(`src/audio/ampCategories.ts`)
+### 4.3 箱头分类(`src/audio/ampCategories.ts`)
 
-4 个分类 tab:**Fender Clean / Vox / Marshall Crunch / High Gain**,分类 id 与皮肤 CSS 类同名(`amp-clean/chime/crunch/recto`)。类内型号下拉统一三类来源:
+4 个分类 tab:**Fender Clean / Vox / Marshall Crunch / High Gain**,分类 id 与皮肤 CSS 类同名(`amp-clean/chime/crunch/recto`)。类内型号下拉统一两类来源:
 
-- `builtin`:内置手工建模(clean/chime/crunch/recto);
-- `nam-wasm`:`BUNDLED_WAVENET_MODELS`(WASM 全架构,或"加载 .nam"的自定义文件,记为 `${kind}:custom`)。
+- `nam-wasm`:`BUNDLED_WAVENET_MODELS`(WASM 全架构,或"加载 .nam"的自定义文件,记为 `nam-wasm:custom`);
+- `nam-wasm-pack`:`NAM_SWEEP_PACKS` 增益扫档包(见 §4.4)。
 
-型号寻址 `${kind}:${ref}`;App 侧状态 `ampCategoryId` + `ampModelKeys`(每类记住选中型号),`applyAmpModel` 按 kind 分发:`setAmpId`(built-in)或设置模型源 + `setAmpId('nam'/'nam-wasm')` + bump `namVersion` 重建。AmpPanel 按分类渲染 tab 与型号 select,新增 capture 只需往对应分类的 `models` 数组加一行。
+型号寻址 `${kind}:${ref}`;App 侧状态 `ampCategoryId` + `ampModelKeys`(每类记住选中型号),`applyAmpModel` 按 kind 分发:设置模型源/扫档包 + `setAmpId('nam-wasm')` + bump `namVersion` 重建。AmpPanel 按分类渲染 tab 与型号 select,新增 capture 只需往对应分类的 `models` 数组加一行。
 
-### 4.7 增益扫档包(`NAM_SWEEP_PACKS`,nam-wasm-pack)
+### 4.4 增益扫档包(`NAM_SWEEP_PACKS`,nam-wasm-pack)
 
 快照 capture 的 GAIN 是死的,社区的常见解法:**同一箱头按增益档位采集多个 .nam,旋钮在档位间切换**。实现(以 `jcm800-sweep` 为例,g1.0~g10 共 8 档):
 
@@ -242,7 +214,7 @@ input → 高通(hpHz) → 低频共振峰(lowBump) → 临场峰(peak,可调 Q)
 
 完成。UI 会自动出现:"添加效果器"下拉多出该选项,`PedalCard` 按 `params` 渲染旋钮并套用 `skin-vibe` CSS 类(想定制外壳配色/字体就在 `index.css` 加 `.skin-vibe { … }`,不加也有默认皮肤)。预设系统按 `effectId` 存取,无需改动。
 
-新增箱头/箱体同理:改 `AMP_MODELS` + `AMP_REGISTRY`(或 `CAB_MODELS` + `CAB_REGISTRY`),面板自动出现新选项卡。
+新增箱头型号:往 `ampCategories.ts` 对应分类的 `models` 数组加一行 NAM 模型/扫档包;新增箱体同理:改 `CAB_MODELS` + `CAB_REGISTRY`,面板自动出现新选项。
 
 ## 8. 已知限制与注意事项
 

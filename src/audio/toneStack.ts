@@ -7,8 +7,7 @@
  * update 用 setTargetAtTime 平滑(时间常数 0.03s,与各调用点原值一致)。
  *
  * 行为由 tests/tone-stack.test.ts 的 pin 测试钉死:采用本模块前后的
- * 频率、Q、连接顺序与映射必须逐点一致。wdftwin 偏离(mid 500/treble 3000),
- * 不采用本模块。
+ * 频率、Q、连接顺序与映射必须逐点一致。
  */
 
 const SMOOTHING = 0.03;

@@ -37,13 +37,13 @@ test('stub 记录节点创建:类型、worklet 构造名与创建顺序', () => 
 
   const gain = ctx.createGain();
   const filter = ctx.createBiquadFilter();
-  const worklet = new StubAudioWorkletNode(ctx, 'wdf-twin', { outputChannelCount: [2] });
+  const worklet = new StubAudioWorkletNode(ctx, 'wdf-ts808', { outputChannelCount: [2] });
 
   assert.equal(gain.id, 2);
   assert.equal(filter.id, 3);
   assert.deepEqual(ctx.nodesOfKind('GainNode'), [gain]);
   assert.equal(worklet.kind, 'AudioWorkletNode');
-  assert.equal(worklet.processorName, 'wdf-twin');
+  assert.equal(worklet.processorName, 'wdf-ts808');
   assert.deepEqual(worklet.options.outputChannelCount, [2]);
 });
 

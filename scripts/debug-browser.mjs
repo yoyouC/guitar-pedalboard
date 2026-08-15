@@ -221,10 +221,10 @@ await sleep(1200);
 console.log(await evaluate(setModel('nam-wasm:fender-twinverb')));
 await sleep(2500);
 console.log('twinverb amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
-// Marshall Crunch → 内置建模(builtin)
+// Marshall Crunch → 类内记住的型号(默认 JCM2000 Crunch NAM)
 console.log(await evaluate(clickButton('Marshall Crunch')));
 await sleep(1200);
-console.log('builtin crunch amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
+console.log('crunch 类默认型号 amp:', JSON.stringify((await evaluate(sampleLevels)).amp));
 // High Gain → 5150
 console.log(await evaluate(clickButton('High Gain')));
 await sleep(1200);
