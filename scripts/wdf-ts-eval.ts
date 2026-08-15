@@ -2,8 +2,8 @@
  * TS808 WDF 正确性评测(L0~L3,Node 直跑:npm run wdf:ts-eval)
  * 对照基准:ElectroSmash TS 电路分析(720Hz 反馈 HP / 723Hz 音色级 LP / 对称软削波)
  */
-import { TsClipperStage } from '../src/audio/wdf/diodeClipper.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { TsClipperStage } from '../src/audio/wdf/diodeClipper.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -11,7 +11,7 @@ const T = 1 / FS;
 
 /** 与 worklet 同构的完整 TS808 链(削波级 + 723Hz LP + tone 高架) */
 function makeChain(drive: number, tone: number) {
-  const clipper = new TsClipperStage({ fs: FS });
+  const clipper = new TsClipperStage(FS);
   clipper.setDrive(drive);
   const fir = makeAntiAliasFIR();
   const up = new Upsampler4x(fir);
@@ -83,7 +83,7 @@ function check(name: string, ok: boolean, detail: string) {
 // ---------- L0 求解器健康 ----------
 console.log('L0 求解器健康');
 {
-  const c = new TsClipperStage({ fs: FS });
+  const c = new TsClipperStage(FS);
   c.setDrive(0.8);
   let nan = 0, maxAbs = 0;
   for (let i = 0; i < FS / 2; i++) {
@@ -96,7 +96,7 @@ console.log('L0 求解器健康');
   const avgIter = c.iterTotal / Math.max(1, c.iterCount);
   check('Newton 收敛(平均 <10 次)', avgIter < 10, `avg=${avgIter.toFixed(1)}`);
 
-  const c2 = new TsClipperStage({ fs: FS });
+  const c2 = new TsClipperStage(FS);
   let silentMax = 0;
   for (let i = 0; i < FS / 10; i++) silentMax = Math.max(silentMax, Math.abs(c2.process(0)));
   check('静音→静音(无极限环)', silentMax < 1e-9, `silentMax=${silentMax.toExponential(1)}`);
@@ -105,7 +105,7 @@ console.log('L0 求解器健康');
 // ---------- L1 静态传输特性 ----------
 console.log('L1 静态传输特性(慢扫,削波级)');
 {
-  const c = new TsClipperStage({ fs: FS });
+  const c = new TsClipperStage(FS);
   c.setDrive(0.5);
   // 1Hz 慢扫 ≈ 静态;跑两个完整周期,测最后一个整周期
   let maxPos = 0, maxNeg = 0;
@@ -160,7 +160,7 @@ console.log('L3 非线性行为');
 
   // 频率选择性失真:在削波级出口直接测(剔除音色级 LP 对高次谐波的衰减干扰)
   const thdAt = (freq: number) => {
-    const c = new TsClipperStage({ fs: FS });
+    const c = new TsClipperStage(FS);
     c.setDrive(0.7);
     const N = 8192 * OS_FACTOR;
     const y = new Float64Array(N);

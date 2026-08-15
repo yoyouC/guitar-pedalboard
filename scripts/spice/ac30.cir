@@ -1,5 +1,5 @@
 WDF AC30 参考电路(L4 评测:2x12AX7 + 阴极跟随器 + EL84 A 类 + 变压器/临场峰)
-* 与 src/audio/wdf/ac30Core.ts 同构:60Hz 输入 HP、级间分压、
+* 与 src/audio/wdf/ac30Core.dsp.js 同构:60Hz 输入 HP、级间分压、
 * CF 栅漏 +60V 偏置、75Hz/5.5kHz 输出变压器、2.5kHz 串联 RLC 临场峰支路。
 * 音色栈在 WDF 侧为 RBJ 双二阶,50=平直=精确直通,故网表略去(对比取全 50)。
 * 首行为标题(ngspice 跳过)。

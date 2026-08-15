@@ -4,8 +4,8 @@
  * 输出 RMSE / RMS 差 / 峰值 / THD 对比。目标:相对 RMSE<25%,RMS 差 <3dB。
  */
 import { execFileSync } from 'node:child_process';
-import { BigMuffChain } from '../src/audio/wdf/bigmuff.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { BigMuffChain } from '../src/audio/wdf/bigmuff.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;

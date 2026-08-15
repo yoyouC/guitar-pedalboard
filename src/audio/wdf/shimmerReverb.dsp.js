@@ -1,5 +1,5 @@
 /**
- * 微光混响(Shimmer Reverb)DSP 核心——纯 TS,Node 可测,不依赖 AudioContext。
+ * 微光混响(Shimmer Reverb)DSP 核——单一来源(ADR-0003)。
  *
  * 结构(线性时变系统,无非线性,故不需过采样,直接跑 sampleRate):
  *   输入 → 20ms 预延迟 ─────────────────────────────┐
@@ -19,7 +19,10 @@
  * 稳定性:直接环增益 g_i < 1;shimmer 环每圈把能量 ×2 频移(f→2f→4f…),
  * 唯一不动点是 DC,被环内 HP 与交替取号的湿声求和双重扼杀 → 无条件有界。
  *
- * shimmerWorklet.ts 内联同一份 JS 逻辑——改动请两边同步。
+ * 双模式消费:worklet 经 `?raw` 取源码字符串拼装 Blob;eval/测试直接 import。
+ * 只用单行 import 与内联 export(buildProcessorSource 依赖此约定剥离)。
+ * 本文件以原 shimmerWorklet.ts 内联版为权威逐表达式平移(构造签名
+ * (fs, channel) 位置参数,issue #7)。
  */
 
 /** 4 条 FDN 延迟线长度(48k 基准样本数,互质比例,~31.6~46.1ms) */
@@ -41,58 +44,42 @@ const SHIM_OUT = 0.8;
  */
 const LOOP_FILTER_LOSS_DBPS = 2.1;
 
-export interface ShimmerReverbOptions {
-  /** 采样率(时序类效果不重采样,直接用 sampleRate) */
-  fs: number;
-  /** 声道索引:奇数声道延迟线微偏调 + 变调相位错开,立体声去相关 */
-  channel?: number;
-}
-
+/**
+ * 微光混响单链(每通道一条)。
+ * @param {number} fs 采样率(时序类效果不重采样,直接用 sampleRate)
+ * @param {number} channel 声道索引:奇数声道延迟线微偏调 + 变调相位错开,
+ *   立体声去相关
+ */
 export class ShimmerReverb {
-  private readonly fs: number;
-  // 预延迟
-  private readonly pdBuf: Float32Array;
-  private pdPos = 0;
-  // FDN 延迟线
-  private readonly lines: Float32Array[] = [];
-  private readonly pos = [0, 0, 0, 0];
-  private readonly g = [0, 0, 0, 0]; // 各线反馈增益(setTime 计算)
-  private readonly lp = [0, 0, 0, 0]; // 阻尼 LP 状态
-  private readonly hp = [0, 0, 0, 0]; // 环内 HP 的 LP 状态
-  private readonly fb = [0, 0, 0, 0];
-  private readonly aHp: number;
-  // 变调器(双读头 Hann 窗调制延迟)
-  private readonly G: number; // 粒度(样本)
-  private readonly sBuf: Float32Array;
-  private sPos = 0;
-  private ph0: number;
-  private ph1: number;
-  private shHp = 0; // 变调输入 HP 的 LP 状态
-  private wetPrev = 0;
-  // 参数
-  private aDamp: number;
-  private sGain = 0;
-  private dryGain = 1;
-  private wetGain = 0;
-
-  constructor(opts: ShimmerReverbOptions) {
-    this.fs = opts.fs;
-    const ch = opts.channel ?? 0;
+  constructor(fs, channel) {
+    this.fs = fs;
     // 奇数声道线长 +0.41%,立体声尾部去相关
-    const scale = ch % 2 === 1 ? 1.0041 : 1.0;
-    for (const len48 of LINE_LENS_48K) {
-      const len = Math.max(16, Math.round((len48 / 48000) * opts.fs * scale));
-      this.lines.push(new Float32Array(len));
-    }
-    this.pdBuf = new Float32Array(Math.max(1, Math.round(PREDELAY_S * opts.fs)));
-    this.G = Math.max(64, Math.round(GRAIN_S * opts.fs));
+    const scale = channel % 2 === 1 ? 1.0041 : 1.0;
+    this.lines = LINE_LENS_48K.map((len48) => {
+      const len = Math.max(16, Math.round((len48 / 48000) * fs * scale));
+      return new Float32Array(len);
+    });
+    this.pos = [0, 0, 0, 0];
+    this.g = [0, 0, 0, 0]; // 各线反馈增益(setTime 计算)
+    this.lp = [0, 0, 0, 0]; // 阻尼 LP 状态
+    this.hp = [0, 0, 0, 0]; // 环内 HP 的 LP 状态
+    this.fb = [0, 0, 0, 0];
+    this.pdBuf = new Float32Array(Math.max(1, Math.round(PREDELAY_S * fs)));
+    this.pdPos = 0;
+    this.G = Math.max(64, Math.round(GRAIN_S * fs)); // 粒度(样本)
     this.sBuf = new Float32Array(this.G + 8);
+    this.sPos = 0;
     // 奇数声道变调相位错开 0.31 周期
-    this.ph0 = ch % 2 === 1 ? 0.31 : 0;
+    this.ph0 = channel % 2 === 1 ? 0.31 : 0;
     this.ph1 = (this.ph0 + 0.5) % 1;
-    const T = 1 / opts.fs;
+    this.shHp = 0; // 变调输入 HP 的 LP 状态
+    this.wetPrev = 0;
+    const T = 1 / fs;
     this.aHp = T / (1 / (2 * Math.PI * HP_FC) + T);
     this.aDamp = T / (1 / (2 * Math.PI * 10000) + T);
+    this.sGain = 0;
+    this.dryGain = 1;
+    this.wetGain = 0;
     this.setTime(4.5);
     this.setShimmer(40);
     this.setDamp(40);
@@ -100,7 +87,7 @@ export class ShimmerReverb {
   }
 
   /** time 2~8 s → RT60;g_i = 10^(-3·d_i/RT60) + 环内滤波损耗预补偿 */
-  setTime(seconds: number): void {
+  setTime(seconds) {
     const t60 = Math.min(8, Math.max(2, seconds));
     for (let i = 0; i < 4; i++) {
       const d = this.lines[i].length / this.fs;
@@ -109,12 +96,12 @@ export class ShimmerReverb {
   }
 
   /** shimmer 0~100 → 变调混入量 0~1 */
-  setShimmer(pct: number): void {
+  setShimmer(pct) {
     this.sGain = Math.min(100, Math.max(0, pct)) / 100;
   }
 
   /** damp 0~100 → 环内 LP 截止 10kHz→1kHz(指数) */
-  setDamp(pct: number): void {
+  setDamp(pct) {
     const p = Math.min(100, Math.max(0, pct)) / 100;
     const fc = 10000 * Math.pow(0.1, p);
     const T = 1 / this.fs;
@@ -122,14 +109,14 @@ export class ShimmerReverb {
   }
 
   /** mix 0~100 → 等功率交叉淡化 dry=cos θ, wet=sin θ */
-  setMix(pct: number): void {
+  setMix(pct) {
     const theta = (Math.min(100, Math.max(0, pct)) / 100) * (Math.PI / 2);
     this.dryGain = Math.cos(theta);
     this.wetGain = Math.sin(theta);
   }
 
   /** +1 八度变调:延迟量以 1 样本/样本斜率下行,读速 2 倍;双读头 Hann 互补窗 */
-  private shift(x: number): number {
+  shift(x) {
     const L = this.sBuf.length;
     this.sBuf[this.sPos] = x;
     this.sPos = (this.sPos + 1) % L;
@@ -152,7 +139,7 @@ export class ShimmerReverb {
     return acc;
   }
 
-  process(x: number): number {
+  process(x) {
     // 预延迟
     const pre = this.pdBuf[this.pdPos];
     this.pdBuf[this.pdPos] = x;
@@ -190,5 +177,57 @@ export class ShimmerReverb {
     wet *= 0.25;
     this.wetPrev = wet;
     return this.dryGain * x + this.wetGain * (wet + SHIM_OUT * shim);
+  }
+}
+
+/**
+ * 微光混响全链路引擎。process(inputs, outputs, params) 语义与
+ * AudioWorkletProcessor.process 一致;采样率由构造注入(替代 worklet 全局
+ * sampleRate),引擎内不含任何 AudioWorklet API。
+ * 每通道独立链(声道索引 = 链序号,核内 %2 决定去谐/相位);
+ * lastParams 四元组缓存与原内联处理器一致(参数变化才对全链重设)。
+ */
+export class WdfShimmerEngine {
+  /** @param {number} sampleRate 采样率 */
+  constructor(sampleRate) {
+    this.sampleRate = sampleRate;
+    /** @type {ShimmerReverb[]} 每通道独立链 */
+    this.chains = [];
+    /** @type {number[] | null} */
+    this.lastParams = null;
+  }
+
+  process(inputs, outputs, params) {
+    const input = inputs[0];
+    const output = outputs[0];
+    if (!input || !input.length) return true;
+    while (this.chains.length < input.length) {
+      this.chains.push(new ShimmerReverb(this.sampleRate, this.chains.length));
+    }
+
+    const time = params.time[0];
+    const shimmer = params.shimmer[0];
+    const damp = params.damp[0];
+    const mix = params.mix[0];
+    const lp = this.lastParams;
+    const changed =
+      !lp || lp[0] !== time || lp[1] !== shimmer || lp[2] !== damp || lp[3] !== mix;
+    if (changed) {
+      for (const c of this.chains) {
+        c.setTime(time);
+        c.setShimmer(shimmer);
+        c.setDamp(damp);
+        c.setMix(mix);
+      }
+      this.lastParams = [time, shimmer, damp, mix];
+    }
+
+    for (let ch = 0; ch < input.length; ch++) {
+      const c = this.chains[ch];
+      const inp = input[ch];
+      const out = output[ch];
+      for (let i = 0; i < inp.length; i++) out[i] = c.process(inp[i]);
+    }
+    return true;
   }
 }

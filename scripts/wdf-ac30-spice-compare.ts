@@ -6,8 +6,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { Ac30Chain, AC30, ac30Drive } from '../src/audio/wdf/ac30Core.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { Ac30Chain, AC30, ac30Drive } from '../src/audio/wdf/ac30Core.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;

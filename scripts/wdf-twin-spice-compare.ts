@@ -6,8 +6,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { TwinStage, KOREN_6L6_APPROX } from '../src/audio/wdf/twinStages.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { TwinStage, KOREN_6L6_APPROX } from '../src/audio/wdf/twinStages.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -65,13 +65,13 @@ function runSpice(ra: number, rb: number): number[] {
 }
 
 function runWdf(vol: number, n: number): number[] {
-  const st1 = new TwinStage({ fs: FS, Rk: 1.5e3, Ck: 25e-6, Co: 22e-9, Rs: 34e3 });
-  const st2 = new TwinStage({ fs: FS, Rk: 1.5e3, Ck: 25e-6, Co: 22e-9, Rs: 100e3 });
-  const cf = new TwinStage({
-    fs: FS, Rp: 0, Rk: 100e3, Ck: 0, Co: 22e-9, Rs: 47e3, Vbias: 95, cathodeTap: true,
+  const st1 = new TwinStage(FS, { Rk: 1.5e3, Ck: 25e-6, Co: 22e-9, Rs: 34e3 });
+  const st2 = new TwinStage(FS, { Rk: 1.5e3, Ck: 25e-6, Co: 22e-9, Rs: 100e3 });
+  const cf = new TwinStage(FS, {
+    Rp: 0, Rk: 100e3, Ck: 0, Co: 22e-9, Rs: 47e3, Vbias: 95, cathodeTap: true,
   });
-  const pw = new TwinStage({
-    fs: FS, koren: KOREN_6L6_APPROX, Bplus: 420, Rp: 2e3, Rk: 250, Ck: 0,
+  const pw = new TwinStage(FS, {
+    koren: KOREN_6L6_APPROX, Bplus: 420, Rp: 2e3, Rk: 250, Ck: 0,
     Co: 1e-3, Rload: 1e6, Rs: 220e3,
   });
   const xfHp = makeHp(60), xfLp = makeLp(5500);

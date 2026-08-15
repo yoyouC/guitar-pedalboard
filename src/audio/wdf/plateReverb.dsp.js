@@ -1,5 +1,5 @@
 /**
- * 板式混响(Plate Reverb,EMT-140 风格)DSP 核心 —— 纯 TS,无 AudioContext 依赖,Node 可测。
+ * 板式混响(Plate Reverb,EMT-140 风格)DSP 核——单一来源(ADR-0003)。
  *
  * 拓扑(Dattorro plate 的 FDN 变体):
  *   输入 → PREDELAY(0~100ms;分数延迟线性插值,读位置一阶平滑 → 调参无爆音)
@@ -20,8 +20,13 @@
  *   RT60(f) 随频率升高而缩短(板式物理特性),DAMP 控制程度,中低频不受影响。
  * - 线性系统,无需过采样,直接用 sampleRate。
  *
- * variant 0/1 为两组互质延迟长度;worklet 左右声道各用一组 → 立体声天然去相关。
- * worklet(src/audio/wdf/plateWorklet.ts)内联同一份逻辑 —— 改动必须两边同步。
+ * variant 0/1 为两组互质延迟长度;引擎左右声道各用一组(按通道号奇偶)→
+ * 立体声天然去相关。
+ *
+ * 双模式消费:worklet 经 `?raw` 取源码字符串拼装 Blob;eval/测试直接 import。
+ * 只用单行 import 与内联 export(buildProcessorSource 依赖此约定剥离)。
+ * 本文件以原 plateWorklet.ts 内联版为权威逐表达式平移(类名
+ * PlateReverbCore → PlateReverb 沿用旧 TS core 命名,issue #7)。
  */
 
 /** 输入扩散级全通增益(比 Dattorro 0.75 小:收敛单程扩散振铃的 RT60 地板) */
@@ -50,16 +55,14 @@ const TAPS2 = [0.11, 0.26, 0.43, 0.59, 0.79, 0.93];
 
 /** Schroeder 全通:y[n] = x[n-D] - k·x[n] + k·y[n-D];|k|<1 时 |H(e^jω)|≡1 */
 class Allpass {
-  readonly len: number;
-  private readonly k: number;
-  private readonly buf: Float32Array;
-  private pos = 0;
-  constructor(len: number, k: number) {
+  constructor(len, k) {
     this.len = len;
     this.k = k;
     this.buf = new Float32Array(len);
+    this.pos = 0;
   }
-  process(x: number): number {
+
+  process(x) {
     const b = this.buf[this.pos];
     const y = b - this.k * x;
     this.buf[this.pos] = x + this.k * y;
@@ -70,23 +73,23 @@ class Allpass {
 
 /** 带抽头延迟线(环形缓冲,head 单调递增避免回绕歧义) */
 class TapDelay {
-  readonly len: number;
-  private readonly buf: Float32Array;
-  private head = 0;
-  constructor(len: number) {
+  constructor(len) {
     this.len = len;
     this.buf = new Float32Array(len);
+    this.head = 0;
   }
+
   /** 写入 x[n],返回 x[n-len] */
-  process(x: number): number {
+  process(x) {
     const i = this.head % this.len;
     const y = this.buf[i];
     this.buf[i] = x;
     this.head++;
     return y;
   }
+
   /** 读 x[n-m+1](1 ≤ m ≤ len-1);须在本样本 process() 之后调用 */
-  tap(m: number): number {
+  tap(m) {
     let i = (this.head - m) % this.len;
     if (i < 0) i += this.len;
     return this.buf[i];
@@ -95,22 +98,21 @@ class TapDelay {
 
 /** 预延迟:浮点读位置 + 线性插值 + 位置一阶平滑(τ≈10ms,调参防爆音) */
 class PreDelay {
-  private readonly buf: Float32Array;
-  private readonly kPos: number;
-  private readonly fs: number;
-  private head = 0;
-  private pos = 0;
-  private target = 0;
-  constructor(fs: number, maxMs: number) {
+  constructor(fs, maxMs) {
     this.fs = fs;
     this.buf = new Float32Array(Math.ceil((fs * maxMs) / 1000) + 2);
     this.kPos = 1 - Math.exp(-1 / (0.01 * fs));
+    this.head = 0;
+    this.pos = 0;
+    this.target = 0;
   }
-  setMs(ms: number): void {
+
+  setMs(ms) {
     const c = Math.min(MAX_PREDELAY_MS, Math.max(0, ms));
     this.target = Math.min((c * this.fs) / 1000, this.buf.length - 2);
   }
-  process(x: number): number {
+
+  process(x) {
     const len = this.buf.length;
     this.buf[this.head % len] = x;
     this.head++;
@@ -127,59 +129,40 @@ class PreDelay {
   }
 }
 
-export interface PlateReverbOptions {
-  /** 采样率(线性系统,直接用过采样前的 sampleRate) */
-  fs: number;
-  /** 延迟长度组:0/1 两组互质,立体声两链各用一组去相关 */
-  variant?: 0 | 1;
-}
-
+/**
+ * 板式混响单链(每通道一条)。
+ * @param {number} fs 采样率(线性系统,直接用 sampleRate)
+ * @param {number} variant 延迟长度组:0/1 两组互质,立体声两链各用一组去相关
+ */
 export class PlateReverb {
-  private readonly fs: number;
-  private readonly pre: PreDelay;
-  private readonly apIn: Allpass[];
-  private readonly ap1: Allpass;
-  private readonly ap2: Allpass;
-  private readonly ap3: Allpass;
-  private readonly ap4: Allpass;
-  private readonly d1: TapDelay;
-  private readonly d2: TapDelay;
-  private readonly taps1: number[];
-  private readonly taps2: number[];
-  /** 环路总延迟(样本):4 个环内全通 + 2 条延迟线 */
-  private readonly loopSamples: number;
-
-  private dampS = 0;
-  private fb = 0;
-  private g = 0;
-  private dampCoef = 0;
-  private dry = Math.SQRT1_2;
-  private wet = Math.SQRT1_2;
-  private timeS = 0;
-  private damp01 = -1;
-  private mix01 = -1;
-
-  constructor(opts: PlateReverbOptions) {
-    const fs = opts.fs;
+  constructor(fs, variant) {
     this.fs = fs;
     const s = fs / BASE_FS;
-    const len = (base: number): number => Math.max(4, Math.round(base * s));
+    const len = (base) => Math.max(4, Math.round(base * s));
     this.pre = new PreDelay(fs, MAX_PREDELAY_MS);
     this.apIn = INPUT_AP_LEN.map((L) => new Allpass(len(L), K_INPUT));
-    const table = LOOP_LEN[opts.variant ?? 0];
+    const table = LOOP_LEN[variant];
     this.ap1 = new Allpass(len(table.ap[0]), K_LOOP);
     this.ap2 = new Allpass(len(table.ap[1]), K_LOOP);
     this.ap3 = new Allpass(len(table.ap[2]), K_LOOP);
     this.ap4 = new Allpass(len(table.ap[3]), K_LOOP);
     this.d1 = new TapDelay(len(table.d[0]));
     this.d2 = new TapDelay(len(table.d[1]));
-    const offs = (fracs: number[], L: number): number[] =>
-      fracs.map((f) => Math.min(L - 1, Math.max(1, Math.round(f * L))));
+    const offs = (fracs, L) => fracs.map((f) => Math.min(L - 1, Math.max(1, Math.round(f * L))));
     this.taps1 = offs(TAPS1, this.d1.len);
     this.taps2 = offs(TAPS2, this.d2.len);
+    /** 环路总延迟(样本):4 个环内全通 + 2 条延迟线 */
     this.loopSamples =
       this.ap1.len + this.ap2.len + this.ap3.len + this.ap4.len + this.d1.len + this.d2.len;
-
+    this.dampS = 0;
+    this.fb = 0;
+    this.g = 0;
+    this.dampCoef = 0;
+    this.dry = Math.SQRT1_2;
+    this.wet = Math.SQRT1_2;
+    this.timeS = 0;
+    this.damp01 = -1;
+    this.mix01 = -1;
     this.setTime(2.5);
     this.setDamp(0.4);
     this.setPreDelayMs(0);
@@ -187,7 +170,7 @@ export class PlateReverb {
   }
 
   /** TIME:RT60 目标(秒),0.5~6 */
-  setTime(t: number): void {
+  setTime(t) {
     const tc = Math.min(6, Math.max(0.5, t));
     if (tc === this.timeS) return;
     this.timeS = tc;
@@ -198,7 +181,7 @@ export class PlateReverb {
   }
 
   /** DAMP 0~1 → 环内一阶低通系数(0 = 无阻尼,全频段 RT60 一致) */
-  setDamp(d: number): void {
+  setDamp(d) {
     const dc = Math.min(1, Math.max(0, d));
     if (dc === this.damp01) return;
     this.damp01 = dc;
@@ -206,12 +189,12 @@ export class PlateReverb {
   }
 
   /** PREDELAY 0~100ms */
-  setPreDelayMs(ms: number): void {
+  setPreDelayMs(ms) {
     this.pre.setMs(ms);
   }
 
   /** MIX 0~1:等功率交叉,0 = 全干,1 = 全湿 */
-  setMix(m: number): void {
+  setMix(m) {
     const mc = Math.min(1, Math.max(0, m));
     if (mc === this.mix01) return;
     this.mix01 = mc;
@@ -219,7 +202,7 @@ export class PlateReverb {
     this.wet = Math.sin((mc * Math.PI) / 2);
   }
 
-  process(x: number): number {
+  process(x) {
     let s = this.pre.process(x);
     for (let i = 0; i < this.apIn.length; i++) s = this.apIn[i].process(s);
     const u = s + this.fb;
@@ -236,5 +219,46 @@ export class PlateReverb {
     for (let i = 0; i < this.taps2.length; i++)
       w += (i % 2 === 0 ? -1 : 1) * this.d2.tap(this.taps2[i]);
     return this.dry * x + this.wet * (WET_NORM * w);
+  }
+}
+
+/**
+ * 板式混响全链路引擎。process(inputs, outputs, params) 语义与
+ * AudioWorkletProcessor.process 一致;采样率由构造注入(替代 worklet 全局
+ * sampleRate),引擎内不含任何 AudioWorklet API。
+ * 每通道独立链,variant = 通道号 % 2;damp/mix 的 /100 归一化与 setter
+ * 早退缓存均与原内联处理器一致。
+ */
+export class PlateReverbEngine {
+  /** @param {number} sampleRate 采样率 */
+  constructor(sampleRate) {
+    this.sampleRate = sampleRate;
+    /** @type {PlateReverb[]} 每通道独立链 */
+    this.chains = [];
+  }
+
+  process(inputs, outputs, params) {
+    const input = inputs[0];
+    const output = outputs[0];
+    if (!input || !input.length) return true;
+    while (this.chains.length < input.length)
+      this.chains.push(new PlateReverb(this.sampleRate, this.chains.length % 2));
+
+    const time = params.time[0];
+    const damp = params.damp[0] / 100;
+    const preDelay = params.preDelay[0];
+    const mix = params.mix[0] / 100;
+
+    for (let ch = 0; ch < input.length; ch++) {
+      const c = this.chains[ch];
+      c.setTime(time);
+      c.setDamp(damp);
+      c.setPreDelayMs(preDelay);
+      c.setMix(mix);
+      const inp = input[ch];
+      const out = output[ch];
+      for (let i = 0; i < inp.length; i++) out[i] = c.process(inp[i]);
+    }
+    return true;
   }
 }

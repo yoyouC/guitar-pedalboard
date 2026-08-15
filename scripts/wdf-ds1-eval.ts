@@ -4,8 +4,8 @@
  *   (运放级 72Hz 反馈 HP / 增益 1.47~22.7 / 1N4148 对地对称硬削 /
  *    TONE = LP 723Hz 与 HP 7.2kHz 交叉淡化,中位 ~2kHz 中频凹陷)
  */
-import { Ds1ClipperStage } from '../src/audio/wdf/ds1Clipper.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { Ds1ClipperStage } from '../src/audio/wdf/ds1Clipper.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -17,7 +17,7 @@ const WIN = BASE;
 
 /** 与 worklet 同构的完整 DS-1 链(输入HP → booster tanh → 削波级 → TONE 交叉淡化) */
 function makeChain(dist: number, tone: number) {
-  const stage = new Ds1ClipperStage({ fs: FS });
+  const stage = new Ds1ClipperStage(FS);
   stage.setDist(dist);
   const fir = makeAntiAliasFIR();
   const up = new Upsampler4x(fir);
@@ -101,7 +101,7 @@ function check(name: string, ok: boolean, detail: string) {
 // ---------- L0 求解器健康 ----------
 console.log('L0 求解器健康');
 {
-  const c = new Ds1ClipperStage({ fs: FS });
+  const c = new Ds1ClipperStage(FS);
   c.setDist(0.8);
   let nan = 0, maxAbs = 0;
   for (let i = 0; i < FS / 2; i++) {
@@ -114,7 +114,7 @@ console.log('L0 求解器健康');
   const avgIter = c.iterTotal / Math.max(1, c.iterCount);
   check('Newton 收敛(平均 <10 次)', avgIter < 10, `avg=${avgIter.toFixed(1)}`);
 
-  const c2 = new Ds1ClipperStage({ fs: FS });
+  const c2 = new Ds1ClipperStage(FS);
   let silentMax = 0;
   for (let i = 0; i < FS / 10; i++) silentMax = Math.max(silentMax, Math.abs(c2.process(0)));
   check('静音→静音(无极限环)', silentMax < 1e-9, `silentMax=${silentMax.toExponential(1)}`);
@@ -133,7 +133,7 @@ console.log('L0 求解器健康');
 // ---------- L1 静态传输特性 ----------
 console.log('L1 静态传输特性(慢扫,削波级)');
 {
-  const c = new Ds1ClipperStage({ fs: FS });
+  const c = new Ds1ClipperStage(FS);
   c.setDist(0.5);
   // 1Hz 慢扫 ≈ 静态;跑两个完整周期,测最后一个整周期
   let maxPos = 0, maxNeg = 0;

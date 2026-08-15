@@ -8,18 +8,19 @@
  *   - ngspice 同网表 AC 扫频(见 L2 注释):w≤0.9 时峰频轨迹与本模型一致;
  *     w→1 时 Q2 失去偏置截止,响应退化为宽架(电路真实行为,非模型缺陷——
  *     真实踏板机械行程到不了电气端点,GEO "Pot Secrets")。
- * 另含 worklet 内联实现与 TS 参考的逐样本一致性检查。
+ * 另含 worklet 装配串(?raw 拼装)与 dsp.js 直驱链的逐样本一致性检查。
  */
-import { readFileSync } from 'node:fs';
-import { CrybabyStage } from '../src/audio/wdf/crybabyStage.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { CrybabyStage } from '../src/audio/wdf/crybabyStage.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
+import { buildProcessorSource } from '../src/audio/workletLoader.ts';
+import { extractAssembledProcessor } from '../tests/helpers/wdf-golden.ts';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
 
 /** 与 worklet 同构的完整链(升采样 → 放大级 → 降采样) */
 function makeChain(position: number) {
-  const stage = new CrybabyStage({ fs: FS });
+  const stage = new CrybabyStage(FS);
   stage.setPosition(position);
   const fir = makeAntiAliasFIR();
   const up = new Upsampler4x(fir);
@@ -50,7 +51,7 @@ function goertzelOS(y: Float64Array, f: number): number {
 
 /** 直接驱动放大级:0.5s 建立(≥0.5s 规范)后采 N 个 OS 样本 */
 function captureStage(position: number, amp: number, freq: number, n: number) {
-  const s = new CrybabyStage({ fs: FS });
+  const s = new CrybabyStage(FS);
   s.setPosition(position);
   const settle = Math.floor(FS * 0.5);
   for (let i = 0; i < settle; i++) s.process(amp * Math.sin((2 * Math.PI * freq * i) / FS));
@@ -81,7 +82,7 @@ console.log('L0 求解器健康');
   let nan = 0, maxAbs = 0, totalNC = 0, totalIter = 0, totalCnt = 0;
   for (const amp of [0.01, 0.1, 0.5, 1.0]) {
     for (const freq of [100, 1000, 5000]) {
-      const s = new CrybabyStage({ fs: FS });
+      const s = new CrybabyStage(FS);
       const M = FS / 4;
       for (let i = 0; i < M; i++) {
         s.setPosition(0.5 + 0.5 * Math.sin((2 * Math.PI * i) / M));
@@ -101,7 +102,7 @@ console.log('L0 求解器健康');
   check('Newton 收敛速度(平均 <10 次/样本)', avgIter < 10, `avg=${avgIter.toFixed(2)}`);
 
   // 静音 → 静音(无极限环):1s 静音建立后测 0.1s
-  const s2 = new CrybabyStage({ fs: FS });
+  const s2 = new CrybabyStage(FS);
   for (let i = 0; i < FS; i++) s2.process(0);
   let silentMax = 0;
   for (let i = 0; i < FS / 10; i++) silentMax = Math.max(silentMax, Math.abs(s2.process(0)));
@@ -110,7 +111,7 @@ console.log('L0 求解器健康');
   // DC 偏置(对照 GEO 实测:Q1 集电极 4.14V、Q2 基极 3.64V,容差 ±0.6V)
   const names = ['vB0', 'vE0', 'vB1', 'vC1', 'vE1', 'vB2', 'vE2', 'vX', 'vY'];
   const biasAt = (w: number) => {
-    const s = new CrybabyStage({ fs: FS });
+    const s = new CrybabyStage(FS);
     s.setPosition(w);
     for (let i = 0; i < FS / 10; i++) s.process(0);
     return s.nodeVoltages;
@@ -247,47 +248,27 @@ console.log('L3 非线性行为(w=0.5,550Hz 谐振峰,THD 随幅度单调性)');
   check('大驱动失真显著(0.3V THD >1%)', thds[3].thd > 0.01, `${(thds[3].thd * 100).toFixed(2)}%`);
 }
 
-// ---------- worklet 内联实现一致性 ----------
-console.log('worklet 内联 JS 与 TS 参考逐样本一致');
+// ---------- worklet 装配串一致性 ----------
+console.log('worklet 装配串与 dsp.js 直驱链逐样本一致');
 {
-  // 从 worklet 文件提取 processorSource,在 shim 环境中实例化处理器
-  const src = readFileSync('src/audio/wdf/crybabyWorklet.ts', 'utf-8');
-  const m = src.match(/const processorSource = `([\s\S]*?)`;\n\nlet loaded/);
-  if (!m) {
-    check('提取 processorSource', false, '正则未匹配');
-  } else {
-    let captured: unknown = null;
-    class ShimAWP {
-      // AudioWorkletProcessor 的 port(suspend 消息用)
-      port: { onmessage: unknown } = { onmessage: null };
-    }
-    const registerProcessor = (_name: string, ctor: unknown) => {
-      captured = ctor;
-    };
-    const run = new Function(
-      'AudioWorkletProcessor',
-      'registerProcessor',
-      'sampleRate',
-      m[1],
-    );
-    run(ShimAWP, registerProcessor, BASE);
-    const Ctor = captured as new () => {
-      chains: unknown[];
-      process(inputs: Float32Array[][], outputs: Float32Array[][], params: Record<string, number[]>): boolean;
-    };
-    const proc = new Ctor();
-    // 驱动:0.3s 激励(含 0.2s 建立);WebAudio 结构:inputs[io][channel]
-    const chain = makeChain(0.5);
-    const N3 = Math.floor(BASE * 0.3);
-    const inCh = new Float32Array(N3);
-    const outCh = new Float32Array(N3);
-    for (let i = 0; i < N3; i++) inCh[i] = 0.05 * Math.sin((2 * Math.PI * 1000 * i) / BASE);
-    proc.process([[inCh]], [[outCh]], { position: [50], level: [1] });
-    let maxDiff = 0;
-    for (let i = 0; i < N3; i++) maxDiff = Math.max(maxDiff, Math.abs(outCh[i] - chain.process(inCh[i])));
-    // Float32 vs Float64 精度 + 重采样器初始相位应完全一致
-    check('worklet 与 TS 输出一致(maxDiff < 1e-4)', maxDiff < 1e-4, `maxDiff=${maxDiff.toExponential(2)}`);
-  }
+  // ADR-0003 后 worklet 与评测共享同一 dsp.js;此处验证 ?raw 装配串
+  // (实际发给 AudioWorklet 的代码)在 shim 中与直驱链输出一致
+  const { ctor: Ctor } = extractAssembledProcessor(
+    'src/audio/wdf/crybabyWorklet.ts',
+    buildProcessorSource,
+  );
+  const proc = new Ctor();
+  // 驱动:0.3s 激励(含 0.2s 建立);WebAudio 结构:inputs[io][channel]
+  const chain = makeChain(0.5);
+  const N3 = Math.floor(BASE * 0.3);
+  const inCh = new Float32Array(N3);
+  const outCh = new Float32Array(N3);
+  for (let i = 0; i < N3; i++) inCh[i] = 0.05 * Math.sin((2 * Math.PI * 1000 * i) / BASE);
+  proc.process([[inCh]], [[outCh]], { position: [50], level: [1] });
+  let maxDiff = 0;
+  for (let i = 0; i < N3; i++) maxDiff = Math.max(maxDiff, Math.abs(outCh[i] - chain.process(inCh[i])));
+  // Float32 vs Float64 精度 + 重采样器初始相位应完全一致
+  check('worklet 装配串与直驱链输出一致(maxDiff < 1e-4)', maxDiff < 1e-4, `maxDiff=${maxDiff.toExponential(2)}`);
 }
 
 console.log(failures === 0 ? '\n全部通过 ✓' : `\n${failures} 项未过 ✗`);

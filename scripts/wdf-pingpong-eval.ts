@@ -5,12 +5,12 @@
  * (3.5kHz)使重复渐暗。全线性,无时变元件,故无需 DFT 整数周期窗,
  * 全部用窗内能量/RMS/峰值位置度量;参数变更后照例跑 ≥0.5s 建立期(§4.2)。
  */
-import { PingPongDelay, PINGPONG_LP_FC } from '../src/audio/wdf/pingPongDelay.ts';
+import { PingPongDelay, PINGPONG_LP_FC } from '../src/audio/wdf/pingPongDelay.dsp.js';
 
 const FS = 48000;
 
 function makeCore(timeMs: number, fbPct: number, mixPct: number): PingPongDelay {
-  const c = new PingPongDelay({ fs: FS });
+  const c = new PingPongDelay(FS);
   c.setTimeMs(timeMs);
   c.setFeedback(fbPct / 100);
   c.setMix(mixPct / 100);

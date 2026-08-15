@@ -1,5 +1,5 @@
 * Boss DS-1 参考电路(L4 评测:输入HP → BJT前级 → 运放可变增益 → 1N4148对地削波 → TONE交叉淡化)
-* 与 src/audio/wdf/ds1Clipper.ts / ds1Worklet.ts 同构(dist=0.5, tone=0.5)。
+* 与 src/audio/wdf/ds1Clipper.dsp.js / ds1Worklet.ts 同构(dist=0.5, tone=0.5)。
 * 元件值按 ElectroSmash DS-1 分析。首行为标题。
 * 运行: ngspice -b ds1.cir
 

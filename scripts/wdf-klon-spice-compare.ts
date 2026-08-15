@@ -8,8 +8,8 @@ import {
   KlonClipperStage,
   klonDryCoeff,
   klonGainForKnob,
-} from '../src/audio/wdf/klonCentaur.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+} from '../src/audio/wdf/klonCentaur.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;

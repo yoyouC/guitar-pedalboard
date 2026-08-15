@@ -6,8 +6,8 @@
  * 用法: node scripts/wdf-crybaby-spice-compare.ts
  */
 import { execFileSync } from 'node:child_process';
-import { CrybabyStage } from '../src/audio/wdf/crybabyStage.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { CrybabyStage } from '../src/audio/wdf/crybabyStage.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -57,7 +57,7 @@ console.log(
 );
 
 // ---------- 2) WDF 链(w=0.5,与 pedal 同构:升采样→放大级→降采样) ----------
-const stage = new CrybabyStage({ fs: FS });
+const stage = new CrybabyStage(FS);
 stage.setPosition(0.5);
 const fir = makeAntiAliasFIR();
 const up = new Upsampler4x(fir);

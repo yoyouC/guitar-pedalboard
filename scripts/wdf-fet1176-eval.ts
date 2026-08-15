@@ -8,7 +8,7 @@
  * - 静态比率曲线用 DC 电平扫描(精确),另用 1kHz 正弦 + 快启动/慢释放(峰值贴轨)抽点;
  * - 频谱测量一律整数周期窗 + Goertzel(见 docs/wdf-whitebox-process.md §4.3)。
  */
-import { FetCompressor } from '../src/audio/wdf/fetComp.ts';
+import { FetCompressor } from '../src/audio/wdf/fetComp.dsp.js';
 
 const FS = 48000;
 
@@ -68,7 +68,7 @@ function timeToFracDown(gr: number[], frac: number): number {
 // ---------- L0 健康 ----------
 console.log('L0 健康(无 NaN / 有界 / 静音→静音 / 参数扫掠)');
 {
-  const c = new FetCompressor({ fs: FS });
+  const c = new FetCompressor(FS);
   let nan = 0, maxAbs = 0;
   for (let i = 0; i < FS; i++) {
     const out = c.process(0.5 * Math.sin((2 * Math.PI * 1000 * i) / FS));
@@ -78,7 +78,7 @@ console.log('L0 健康(无 NaN / 有界 / 静音→静音 / 参数扫掠)');
   check('无 NaN', nan === 0, `nan=${nan}`);
   check('输出有界(<10)', maxAbs < 10, `maxAbs=${maxAbs.toFixed(3)}`);
 
-  const c2 = new FetCompressor({ fs: FS });
+  const c2 = new FetCompressor(FS);
   let silentMax = 0;
   for (let i = 0; i < FS / 5; i++) silentMax = Math.max(silentMax, Math.abs(c2.process(0)));
   check('静音→静音(无极限环)', silentMax < 1e-9, `silentMax=${silentMax.toExponential(1)}`);
@@ -88,7 +88,7 @@ console.log('L0 健康(无 NaN / 有界 / 静音→静音 / 参数扫掠)');
   for (let r = 0; r <= 4; r++) {
     for (const atk of [20, 200, 800]) {
       for (const rel of [50, 300, 1100]) {
-        const cc = new FetCompressor({ fs: FS });
+        const cc = new FetCompressor(FS);
         cc.setThresholdDb(-30);
         cc.setRatioIndex(r);
         cc.setAttackUs(atk);
@@ -103,7 +103,7 @@ console.log('L0 健康(无 NaN / 有界 / 静音→静音 / 参数扫掠)');
     }
   }
   for (const thr of [-60, -45, -30, -15, 0]) {
-    const cc = new FetCompressor({ fs: FS });
+    const cc = new FetCompressor(FS);
     cc.setThresholdDb(thr);
     cc.setRatioIndex(3);
     cc.setAttackUs(20);
@@ -126,7 +126,7 @@ console.log('L1 特征指标(启动/释放时间、静态比率曲线)');
   const atkResults: string[] = [];
   let atkOk = true;
   for (const tauUs of attacks) {
-    const c = new FetCompressor({ fs: FS });
+    const c = new FetCompressor(FS);
     c.setThresholdDb(-20);
     c.setRatioIndex(0);
     c.setAttackUs(tauUs);
@@ -150,7 +150,7 @@ console.log('L1 特征指标(启动/释放时间、静态比率曲线)');
   const relResults: string[] = [];
   let relOk = true;
   for (const tauMs of releases) {
-    const c = new FetCompressor({ fs: FS });
+    const c = new FetCompressor(FS);
     c.setThresholdDb(-20);
     c.setRatioIndex(0);
     c.setAttackUs(20);
@@ -174,7 +174,7 @@ console.log('L1 特征指标(启动/释放时间、静态比率曲线)');
   const ratioDetail: string[] = [];
   let ratioOk = true;
   for (const [idx, R] of ratios) {
-    const c = new FetCompressor({ fs: FS });
+    const c = new FetCompressor(FS);
     c.setThresholdDb(-30);
     c.setRatioIndex(idx);
     c.setAttackUs(200);
@@ -197,7 +197,7 @@ console.log('L1 特征指标(启动/释放时间、静态比率曲线)');
 
   // ALL 档压限:超阈输出被压回阈值附近
   {
-    const c = new FetCompressor({ fs: FS });
+    const c = new FetCompressor(FS);
     c.setThresholdDb(-30);
     c.setRatioIndex(4);
     c.setAttackUs(200);
@@ -216,7 +216,7 @@ console.log('L1 特征指标(启动/释放时间、静态比率曲线)');
 
   // 正弦抽点:1kHz -10dBFS,R=8,快启动+慢释放(峰值贴轨),理想 -27.5dB
   {
-    const c = new FetCompressor({ fs: FS });
+    const c = new FetCompressor(FS);
     c.setThresholdDb(-30);
     c.setRatioIndex(1);
     c.setAttackUs(20);
@@ -235,7 +235,7 @@ console.log('L1 特征指标(启动/释放时间、静态比率曲线)');
 console.log('L2 行为特征(GR 单调性、ALL 更深、超快启动压瞬态)');
 {
   // GR 随输入电平单调上升
-  const c = new FetCompressor({ fs: FS });
+  const c = new FetCompressor(FS);
   c.setThresholdDb(-30);
   c.setRatioIndex(1);
   c.setAttackUs(200);
@@ -252,7 +252,7 @@ console.log('L2 行为特征(GR 单调性、ALL 更深、超快启动压瞬态)'
 
   // ALL 档 GR 深于 20:1
   const grAt = (idx: number) => {
-    const cc = new FetCompressor({ fs: FS });
+    const cc = new FetCompressor(FS);
     cc.setThresholdDb(-30);
     cc.setRatioIndex(idx);
     cc.setAttackUs(200);
@@ -265,7 +265,7 @@ console.log('L2 行为特征(GR 单调性、ALL 更深、超快启动压瞬态)'
 
   // 超快启动压瞬态:1kHz 突发,20µs vs 800µs 的首 1ms 峰值
   const burstPeak = (atkUs: number) => {
-    const cc = new FetCompressor({ fs: FS });
+    const cc = new FetCompressor(FS);
     cc.setThresholdDb(-30);
     cc.setRatioIndex(3);
     cc.setAttackUs(atkUs);
@@ -288,7 +288,7 @@ console.log('L3 非线性行为(高比率失真、ALL 重饱和、阈下近透�
   // (低频 + 快释放 → GR 纹波深,增益调制失真最强,1176 的典型失真区)
   const FREQ = 50;
   const harmonics = (ratioIdx: number) => {
-    const c = new FetCompressor({ fs: FS });
+    const c = new FetCompressor(FS);
     c.setThresholdDb(-30);
     c.setRatioIndex(ratioIdx);
     c.setAttackUs(20);
@@ -316,7 +316,7 @@ console.log('L3 非线性行为(高比率失真、ALL 重饱和、阈下近透�
 
   // 阈下小信号:仅轻微饱和,近透明
   {
-    const c = new FetCompressor({ fs: FS });
+    const c = new FetCompressor(FS);
     c.setThresholdDb(-20);
     c.setRatioIndex(0);
     for (let i = 0; i < FS; i++) c.process(0.05 * Math.sin((2 * Math.PI * 1000 * i) / FS));

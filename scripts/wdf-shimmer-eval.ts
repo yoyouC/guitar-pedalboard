@@ -16,7 +16,7 @@
  *  - RT60 用倍频程带限(350~700Hz)冲激响应 + Schroeder 反向积分(-5~-35dB 段),
  *    避免宽带 IR 中高频快衰污染拟合(模型 damp=0 仍有 10kHz 环内 LP)。
  */
-import { ShimmerReverb } from '../src/audio/wdf/shimmerReverb.ts';
+import { ShimmerReverb } from '../src/audio/wdf/shimmerReverb.dsp.js';
 
 const FS = 48000;
 /** 分析窗:0.2s = 9600 样本,5Hz 分辨率 */
@@ -31,7 +31,7 @@ interface Params {
 }
 
 function makeChain(p: Params): ShimmerReverb {
-  const c = new ShimmerReverb({ fs: FS, channel: p.channel ?? 0 });
+  const c = new ShimmerReverb(FS, p.channel ?? 0);
   c.setTime(p.time);
   c.setShimmer(p.shimmer);
   c.setDamp(p.damp);

@@ -4,8 +4,8 @@
  * 报告 RMSE / RMS 差 / THD / 峰值;通过判据:相对 RMSE <25% 且 RMS 差 <3dB。
  */
 import { execFileSync } from 'node:child_process';
-import { RatStage } from '../src/audio/wdf/ratDistortion.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { RatStage } from '../src/audio/wdf/ratDistortion.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -31,7 +31,7 @@ if (spiceOut.length < 4096) {
 const N = Math.min(9600, spiceOut.length); // 9600 = 1kHz 的 200 整周期
 
 // ---------- 2) WDF 链(drive=0.5, filter=35,level=1) ----------
-const rat = new RatStage({ fs: FS });
+const rat = new RatStage(FS);
 rat.setDrive(0.5);
 rat.setFilter(35);
 const fir = makeAntiAliasFIR();

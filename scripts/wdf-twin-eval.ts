@@ -7,8 +7,8 @@
  * 区间量化:大输入不削波区(GAIN≤50,输入 ≤150mV,THD<3%)与
  *   边缘压缩区(GAIN 75~100,输出 RMS 随输入亚线性增长)。
  */
-import { TwinStage, KOREN_6L6_APPROX } from '../src/audio/wdf/twinStages.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { TwinStage, KOREN_6L6_APPROX } from '../src/audio/wdf/twinStages.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -21,13 +21,13 @@ const volOf = (g: number) => 0.4 * Math.pow(g / 100, 2);
 
 /** 与 worklet 同构的完整链(含 4x 重采样与输出变压器) */
 function makeChain() {
-  const st1 = new TwinStage({ fs: FS, Rk: 1.5e3, Ck: 25e-6, Co: 22e-9, Rs: 34e3 });
-  const st2 = new TwinStage({ fs: FS, Rk: 1.5e3, Ck: 25e-6, Co: 22e-9, Rs: 100e3 });
-  const cf = new TwinStage({
-    fs: FS, Rp: 0, Rk: 100e3, Ck: 0, Co: 22e-9, Rs: 47e3, Vbias: 95, cathodeTap: true,
+  const st1 = new TwinStage(FS, { Rk: 1.5e3, Ck: 25e-6, Co: 22e-9, Rs: 34e3 });
+  const st2 = new TwinStage(FS, { Rk: 1.5e3, Ck: 25e-6, Co: 22e-9, Rs: 100e3 });
+  const cf = new TwinStage(FS, {
+    Rp: 0, Rk: 100e3, Ck: 0, Co: 22e-9, Rs: 47e3, Vbias: 95, cathodeTap: true,
   });
-  const pw = new TwinStage({
-    fs: FS, koren: KOREN_6L6_APPROX, Bplus: 420, Rp: 2e3, Rk: 250, Ck: 0,
+  const pw = new TwinStage(FS, {
+    koren: KOREN_6L6_APPROX, Bplus: 420, Rp: 2e3, Rk: 250, Ck: 0,
     Co: 1e-3, Rload: 1e6, Rs: 220e3,
   });
   const fir = makeAntiAliasFIR();

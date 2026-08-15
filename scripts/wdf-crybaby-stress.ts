@@ -5,7 +5,7 @@
  *   B. 内部 fuzz:极限幅度/方波/随机信号 × 极端踏板位置,有限输入必须有限输出
  *   C. 长时运行漂移检查
  */
-import { CrybabyStage } from '../src/audio/wdf/crybabyStage.ts';
+import { CrybabyStage } from '../src/audio/wdf/crybabyStage.dsp.js';
 
 const FS = 48000 * 4;
 let failures = 0;
@@ -22,7 +22,7 @@ function allFinite(s: CrybabyStage): boolean {
 console.log('A. 外部注入恢复(有限输出 +  stage 仍存活)');
 for (const bad of [NaN, Infinity, -Infinity]) {
   const probe = (badValue: number) => {
-    const s = new CrybabyStage({ fs: FS });
+    const s = new CrybabyStage(FS);
     s.setPosition(0.5);
     for (let i = 0; i < 1000; i++) s.process(0.1 * Math.sin(i / 20));
     if (badValue !== 0) s.process(badValue); // 注入一个坏样本
@@ -59,7 +59,7 @@ console.log('B. 内部极限 fuzz');
     { name: '±0.5V 吉他 + 位置跳变', gen: (i) => 0.5 * Math.sin(i / 10), pos: (i) => (Math.floor(i / 700) % 2 ? 0.98 : 0.02) },
   ];
   for (const sc of scenarios) {
-    const s = new CrybabyStage({ fs: FS });
+    const s = new CrybabyStage(FS);
     let bad = -1;
     for (let i = 0; i < 100000; i++) {
       s.setPosition(sc.pos(i));
@@ -76,7 +76,7 @@ console.log('B. 内部极限 fuzz');
 // ---------- C. 长时漂移 ----------
 console.log('C. 长时运行(500 万样本混合信号)');
 {
-  const s = new CrybabyStage({ fs: FS });
+  const s = new CrybabyStage(FS);
   let bad = -1;
   let maxAbs = 0;
   for (let i = 0; i < 5_000_000; i++) {

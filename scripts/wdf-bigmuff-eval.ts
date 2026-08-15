@@ -5,8 +5,8 @@
  *    + TONE 交叉淡化(LP 39k/10n ≈ 325Hz,HP 4n/22k ≈ 1.8kHz,中位中频凹陷)
  *  - ngspice 全 BJT 小信号校准:级间 Miller 加载极点 ~920Hz、级间耦合 HP ~155Hz
  */
-import { BigMuffChain, MuffClipStage, MuffTone, MUFF } from '../src/audio/wdf/bigmuff.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { BigMuffChain, MuffClipStage, MuffTone, MUFF } from '../src/audio/wdf/bigmuff.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;

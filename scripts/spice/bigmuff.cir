@@ -1,5 +1,5 @@
 * Big Muff Pi(V3)WDF 参考电路(L4 评测用,sustain=0.5, tone=0.5)
-* 与 src/audio/wdf/bigmuff.ts 同构:理想反相增益块(ngspice 2N5088 小信号
+* 与 src/audio/wdf/bigmuff.dsp.js 同构:理想反相增益块(ngspice 2N5088 小信号
 * 校准:A1=16, A2=42)+ 戴维南电阻 + 反并联 1N4148 对地削波 + 无源 TONE
 * 交叉淡化。所有集总滤波节间用单位增益缓冲隔离(与 WDF 一阶节一致)。
 * 运行: ngspice -b bigmuff.cir
