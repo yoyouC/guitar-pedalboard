@@ -1,5 +1,5 @@
 /**
- * WDF 版 Pro Co RAT 的 AudioWorklet 处理器(Blob 内联,免构建配置)。
+ * WDF 版 Pro Co RAT 的 AudioWorklet 处理器(Blob 加载,免构建配置)。
  *
  * DSP 核见同目录 ratDistortion.dsp.js(链路说明也在那里)——经 `?raw` 取源码字符串,
  * 与下方 wrapper(parameterDescriptors / Processor 子类 / registerProcessor)

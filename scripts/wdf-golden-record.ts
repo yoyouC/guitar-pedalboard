@@ -14,6 +14,7 @@ import {
   N,
   BLOCK,
   SIGNALS,
+  GOLDEN_ENTRIES,
   assertAllFinite,
   extractAssembledProcessor,
   extractInlineProcessor,
@@ -36,31 +37,6 @@ function extractCurrentProcessor(workletPath: string): {
   }
 }
 
-/** fixture 名 → worklet 文件(顺序即录制/断言顺序) */
-const WORKLETS: Record<string, string> = {
-  champ: 'champWorklet.ts',
-  bogner: 'bognerWorklet.ts',
-  twin: 'twinWorklet.ts',
-  ac30: 'ac30Worklet.ts',
-  jc120: 'jc120Worklet.ts',
-  ts808: 'ts808Worklet.ts',
-  ds1: 'ds1Worklet.ts',
-  rat: 'ratWorklet.ts',
-  bigmuff: 'bigmuffWorklet.ts',
-  fuzzface: 'fuzzfaceWorklet.ts',
-  crybaby: 'crybabyWorklet.ts',
-  klon: 'klonWorklet.ts',
-  fet1176: 'fet1176Worklet.ts',
-  la2a: 'la2aWorklet.ts',
-  dynacomp: 'dynacompWorklet.ts',
-  analogdelay: 'analogdelayWorklet.ts',
-  tapedelay: 'tapedelayWorklet.ts',
-  pingpong: 'pingpongWorklet.ts',
-  springreverb: 'springreverbWorklet.ts',
-  plate: 'plateWorklet.ts',
-  shimmer: 'shimmerWorklet.ts',
-};
-
 const DIR = 'tests/fixtures/wdf';
 mkdirSync(DIR, { recursive: true });
 
@@ -74,7 +50,8 @@ const manifest: Record<string, unknown> = {
 };
 const effects = manifest.effects as Record<string, unknown>;
 
-for (const [name, file] of Object.entries(WORKLETS)) {
+for (const { name } of GOLDEN_ENTRIES) {
+  const file = `${name}Worklet.ts`;
   const { ctor, params } = extractCurrentProcessor(`src/audio/wdf/${file}`);
   for (const sig of SIGNALS) {
     const proc = new ctor();
@@ -90,4 +67,4 @@ for (const [name, file] of Object.entries(WORKLETS)) {
 }
 
 writeFileSync(`${DIR}/manifest.json`, JSON.stringify(manifest, null, 2) + '\n');
-console.log(`\n已录制 ${Object.keys(WORKLETS).length} 个效果 × ${SIGNALS.length} 种信号 → ${DIR}/`);
+console.log(`\n已录制 ${GOLDEN_ENTRIES.length} 个效果 × ${SIGNALS.length} 种信号 → ${DIR}/`);

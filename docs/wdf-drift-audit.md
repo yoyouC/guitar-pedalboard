@@ -120,3 +120,20 @@ parameterDescriptors 默认 `gain 30, bass 50, mid 55, treble 60, presence 55`�
   AudioWorklet 的完整字符串,shim 实例化驱动。
 - 重录基线:裁定例外导致行为变化时,`node scripts/wdf-golden-record.ts`
   重录(对已迁移 worklet 走 ?raw 装配形态,同一 harness)。
+
+## 手动 A/B 听音清单(交付物,浏览器执行)
+
+黄金断言覆盖数值逐位一致,但最终判据是耳朵:每款迁移的单块/箱头与重构前
+构建(main 分支 `npm run dev`)对比听音。逐款过一遍,重点关注:
+
+- **champ / bogner** —— 三极管求解(阻尼定点 solveGrid,例外 1);
+- **ac30** —— 分叉三极管变体(WdfTriodeStage 二分法,例外 3 的默认值差异
+  也顺便核对:descriptor 默认 gain 30);
+- **crybaby** —— 哇音(a-rate position 逐样本路径、踏板全程扫动);
+- **fuzzface** —— starve 区(例外 4:亏电区扭 FUZZ 旋钮时的状态重置行为);
+- **spring / plate / shimmer** —— 混响尾音(长衰减、反馈环稳定性)。
+
+听音发现问题时的回退判据:对应效果的黄金测试若仍绿,则差异来自 wrapper/
+装配层;若红,则是 dsp.js 提取偏差——两种情况下 `git diff` 该效果的
+dsp.js 与原内联串(main 分支 *Worklet.ts)即可定位。
+

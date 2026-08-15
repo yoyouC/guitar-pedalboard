@@ -1,5 +1,5 @@
 /**
- * WDF AC30(Vox Top Boost 风格)箱头的 AudioWorklet 处理器(Blob 内联,免构建配置)。
+ * WDF AC30(Vox Top Boost 风格)箱头的 AudioWorklet 处理器(Blob 加载,免构建配置)。
  *
  * DSP 核见同目录 ac30Core.dsp.js(链路说明、CathodeFollower 与二分法栅流
  * 钳位的分叉原因也在那里)——经 `?raw` 取源码字符串,与下方 wrapper

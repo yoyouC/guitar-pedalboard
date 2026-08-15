@@ -18,6 +18,42 @@ export const N = 4096;
 export const SIGNALS = ['impulse', 'sweep', 'noise'] as const;
 export type SignalName = (typeof SIGNALS)[number];
 
+/**
+ * 21 个 WDF 效果的契约表(唯一一份,录制与断言共用):
+ * name 同时是 fixture 前缀与 worklet 文件名(<name>Worklet.ts);
+ * module/engine 是 *.dsp.js 与其引擎导出名(构造注入 sampleRate,
+ * process(inputs, outputs, params) 语义同 AudioWorkletProcessor)。
+ */
+export interface GoldenEntry {
+  name: string;
+  module: string;
+  engine: string;
+}
+
+export const GOLDEN_ENTRIES: GoldenEntry[] = [
+  { name: 'champ', module: 'champ.dsp.js', engine: 'WdfChampEngine' },
+  { name: 'bogner', module: 'bogner.dsp.js', engine: 'WdfBognerEngine' },
+  { name: 'twin', module: 'twinStages.dsp.js', engine: 'WdfTwinEngine' },
+  { name: 'ac30', module: 'ac30Core.dsp.js', engine: 'WdfAc30Engine' },
+  { name: 'jc120', module: 'jc120Core.dsp.js', engine: 'WdfJc120Engine' },
+  { name: 'ts808', module: 'diodeClipper.dsp.js', engine: 'WdfTs808Engine' },
+  { name: 'ds1', module: 'ds1Clipper.dsp.js', engine: 'WdfDs1Engine' },
+  { name: 'rat', module: 'ratDistortion.dsp.js', engine: 'WdfRatEngine' },
+  { name: 'bigmuff', module: 'bigmuff.dsp.js', engine: 'WdfBigMuffEngine' },
+  { name: 'fuzzface', module: 'fuzzFaceStage.dsp.js', engine: 'WdfFuzzFaceEngine' },
+  { name: 'crybaby', module: 'crybabyStage.dsp.js', engine: 'WdfCrybabyEngine' },
+  { name: 'klon', module: 'klonCentaur.dsp.js', engine: 'WdfKlonEngine' },
+  { name: 'fet1176', module: 'fetComp.dsp.js', engine: 'WdfFet1176Engine' },
+  { name: 'la2a', module: 'la2aOpto.dsp.js', engine: 'La2aOptoEngine' },
+  { name: 'dynacomp', module: 'dynaComp.dsp.js', engine: 'WdfDynaCompEngine' },
+  { name: 'analogdelay', module: 'analogDelay.dsp.js', engine: 'BbdAnalogDelayEngine' },
+  { name: 'tapedelay', module: 'tapeDelay.dsp.js', engine: 'WdfTapeDelayEngine' },
+  { name: 'pingpong', module: 'pingPongDelay.dsp.js', engine: 'PingPongDelayEngine' },
+  { name: 'springreverb', module: 'springReverb.dsp.js', engine: 'WdfSpringReverbEngine' },
+  { name: 'plate', module: 'plateReverb.dsp.js', engine: 'PlateReverbEngine' },
+  { name: 'shimmer', module: 'shimmerReverb.dsp.js', engine: 'WdfShimmerEngine' },
+];
+
 /** mulberry32 定种子 PRNG,噪声信号可复现 */
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -130,6 +166,11 @@ export function extractInlineProcessor(workletPath: string): {
  * 迁移后:按 worklet 文件的 ?raw import 列表与 wrapper 模板,重建运行时
  * processorSource(与 buildProcessorSource 同一函数),在 shim 中实例化。
  * 这验证的就是实际发给 AudioWorklet 的那段字符串。
+ *
+ * 格式契约(脆弱点,改 worklet 文件时注意):依赖 worklet 保持
+ * `import xSource from './foo.dsp.js?raw';`(单引号、单行)与
+ * `buildProcessorSource([...], \`wrapper\`)`(wrapper 为无插值模板字面量)
+ * 的写法;偏离任一写法这里会抛提取失败。
  */
 export function extractAssembledProcessor(
   workletPath: string,

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   FS,
   SIGNALS,
+  GOLDEN_ENTRIES,
   assertBitEqual,
   extractAssembledProcessor,
   makeSignal,
@@ -24,41 +25,9 @@ import { buildProcessorSource } from '../src/audio/workletLoader.ts';
  *      buildProcessorSource 重建实际发给 AudioWorklet 的完整字符串,
  *      在 shim 中实例化运行。
  *
- * fixtures 由 scripts/wdf-golden-record.ts 录制(迁移前)。
+ * fixtures 由 scripts/wdf-golden-record.ts 录制;效果清单见
+ * tests/helpers/wdf-golden.ts 的 GOLDEN_ENTRIES(唯一一份)。
  */
-
-interface GoldenEntry {
-  /** fixture 前缀 / worklet 文件基名 */
-  name: string;
-  /** DSP 核模块(src/audio/wdf/ 下) */
-  module: string;
-  /** 引擎导出名(约定:new Engine(sampleRate) + process(inputs, outputs, params)) */
-  engine: string;
-}
-
-const ENTRIES: GoldenEntry[] = [
-  { name: 'champ', module: 'champ.dsp.js', engine: 'WdfChampEngine' },
-  { name: 'bogner', module: 'bogner.dsp.js', engine: 'WdfBognerEngine' },
-  { name: 'twin', module: 'twinStages.dsp.js', engine: 'WdfTwinEngine' },
-  { name: 'ac30', module: 'ac30Core.dsp.js', engine: 'WdfAc30Engine' },
-  { name: 'jc120', module: 'jc120Core.dsp.js', engine: 'WdfJc120Engine' },
-  { name: 'ts808', module: 'diodeClipper.dsp.js', engine: 'WdfTs808Engine' },
-  { name: 'ds1', module: 'ds1Clipper.dsp.js', engine: 'WdfDs1Engine' },
-  { name: 'rat', module: 'ratDistortion.dsp.js', engine: 'WdfRatEngine' },
-  { name: 'bigmuff', module: 'bigmuff.dsp.js', engine: 'WdfBigMuffEngine' },
-  { name: 'fuzzface', module: 'fuzzFaceStage.dsp.js', engine: 'WdfFuzzFaceEngine' },
-  { name: 'crybaby', module: 'crybabyStage.dsp.js', engine: 'WdfCrybabyEngine' },
-  { name: 'klon', module: 'klonCentaur.dsp.js', engine: 'WdfKlonEngine' },
-  { name: 'fet1176', module: 'fetComp.dsp.js', engine: 'WdfFet1176Engine' },
-  { name: 'la2a', module: 'la2aOpto.dsp.js', engine: 'La2aOptoEngine' },
-  { name: 'dynacomp', module: 'dynaComp.dsp.js', engine: 'WdfDynaCompEngine' },
-  { name: 'analogdelay', module: 'analogDelay.dsp.js', engine: 'BbdAnalogDelayEngine' },
-  { name: 'tapedelay', module: 'tapeDelay.dsp.js', engine: 'WdfTapeDelayEngine' },
-  { name: 'pingpong', module: 'pingPongDelay.dsp.js', engine: 'PingPongDelayEngine' },
-  { name: 'springreverb', module: 'springReverb.dsp.js', engine: 'WdfSpringReverbEngine' },
-  { name: 'plate', module: 'plateReverb.dsp.js', engine: 'PlateReverbEngine' },
-  { name: 'shimmer', module: 'shimmerReverb.dsp.js', engine: 'WdfShimmerEngine' },
-];
 
 const FIXTURE_DIR = 'tests/fixtures/wdf';
 
@@ -77,7 +46,7 @@ function manifestParams(name: string): Record<string, number[]> {
 
 type EngineCtor = new (sampleRate: number) => BlockProcessor;
 
-for (const entry of ENTRIES) {
+for (const entry of GOLDEN_ENTRIES) {
   test(`wdf-golden[${entry.name}]: *.dsp.js 引擎输出与黄金样本逐位一致`, async () => {
     const mod = (await import(`../src/audio/wdf/${entry.module}`)) as Record<
       string,

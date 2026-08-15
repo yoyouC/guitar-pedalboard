@@ -1,6 +1,6 @@
 /**
  * BBD 模拟延迟(Boss DM-2 / Memory Man 风格)的 AudioWorklet 处理器
- *(Blob 内联,免构建配置;每通道独立延迟线状态)。
+ *(Blob 加载,免构建配置;每通道独立延迟线状态)。
  *
  * DSP 核见同目录 analogDelay.dsp.js(链路说明也在那里)——经 `?raw` 取源码
  * 字符串,与下方 wrapper(parameterDescriptors / Processor 子类 /

@@ -196,7 +196,8 @@ export class TriodeStage {
  * Koren 级用此稳健变体。plateVp:spice 参考里板极被耦合电容后的分压/栅漏
  * 网络加载(100k∥1M → 每级 −9% 增益,L4 曾实测 WDF 系统性偏热 +12%≈1.0dB);
  * vc 为耦合电容电压(样本内是状态常数),DC 工作点不变(直流下电容开路)。
- * ——TriodeStage 若修正,请同步此处。
+ * 两个三极管实现同住本文件:修 TriodeStage 的求解器时,一眼对照本类评估
+ * 是否同样适用(issue #7 用户故事 13)。
  */
 export class WdfTriodeStage {
   /**
