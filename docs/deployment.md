@@ -15,8 +15,7 @@ emsdk;重编见 `wasm/build-nam-wasm.sh`。
 
 ## 2. 实现机制
 
-- **注册表**:全部模型条目已获授权,`src/audio/namWasm.ts` 与
-  `src/audio/effects/namPedal.ts` 生产与本地一致(历史上的 DEV 门控已随授权
+- **注册表**:全部模型条目已获授权,`src/audio/namWasm.ts` 生产与本地一致(历史上的 DEV 门控已随授权
   到位移除;`models-local/` 仅作未来"真·仅本地"文件的预留目录);
 - **dev 静态服务**:`vite.config.ts` 的 `serveLocalModels` 中间件把
   `/models-local/**` 映射到仓库根的 `models-local/`(仅 dev server;该路径不在

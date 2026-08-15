@@ -34,7 +34,6 @@ import { fet1176Effect } from './fet1176';
 import { dynaCompEffect } from './dynacomp';
 import { volumeEffect } from './volume';
 import { whammyEffect } from './whammy';
-import { NAM_PEDAL_EFFECTS } from './namPedal';
 
 /** 效果器目录,按吉他信号链常见顺序排列 */
 export const EFFECT_REGISTRY: EffectDefinition[] = [
@@ -73,8 +72,6 @@ export const EFFECT_REGISTRY: EffectDefinition[] = [
   plateEffect,
   shimmerEffect,
   volumeEffect,
-  // NAMKnobs 条件化单块(见 namPedal.ts)
-  ...NAM_PEDAL_EFFECTS,
 ];
 
 export function getEffectDef(id: string): EffectDefinition {

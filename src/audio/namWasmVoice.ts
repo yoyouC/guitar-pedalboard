@@ -1,6 +1,6 @@
 /**
  * NAM WASM "voice":一个 AudioWorkletNode 的生命周期与多槽位装载封装,
- * 供 NAM 箱头(namWasm.ts)与 NAM 单块(namPedal.ts)共用。
+ * 由 NAM 箱头(namWasm.ts)使用。
  *
  * 协议(见 namWasmProcessor.js):prepare(wasm 字节)→ stageLoad(每槽一个
  * 模型,加载耗时集中在此)→ stageActive(瞬时切换)。单模型 = 仅槽位 0。
