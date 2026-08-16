@@ -1,30 +1,20 @@
 /**
  * useMidi:Web MIDI 接入层。
  * 请求 MIDI 访问权限(不带 sysex),监听热插拔,给所有输入设备挂消息监听,
- * 解析 → 映射 → 调 App 传入的动作回调。浏览器不支持时优雅降级(supported=false)。
+ * 解析 → 映射(RigAction)→ 统一 dispatch。浏览器不支持时优雅降级(supported=false)。
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { formatMidiBytes, parseMidiMessage, type ParsedMidiMessage } from './midiMessage';
-import { resolveMidiAction, type AmpParamKey } from './midiMapping';
+import { resolveMidiAction, type RigAction } from './midiMapping';
 
-/** App 传入的一组动作回调(每次渲染可换新对象,hook 内部用 ref 持有) */
+/**
+ * App 传入的入口(每次渲染可换新对象,hook 内部用 ref 持有):
+ * 默认映射解析出的 RigAction 一律经 dispatch 执行(统一词汇表,见 ADR-0004)。
+ */
 export interface MidiActions {
-  /** 切换效果链第 index 块单块(0 起) */
-  togglePedal(index: number): void;
-  /** 召回快照 0..3 */
-  recallSnapshot(slot: number): void;
-  toggleBypass(): void;
-  /** Looper 录音开始/结束(由调用方按当前相位分派) */
-  looperRecord(): void;
-  looperTogglePlay(): void;
-  looperClear(): void;
-  setMasterVolume(value: number): void;
-  setAmpParam(key: AmpParamKey, value: number): void;
-  /** 绝对设置效果链第 index 块单块开关(motion_midi 踩钉) */
-  setPedalEnabled(index: number, enabled: boolean): void;
-  /** 表情踏板位置,归一化 0..1;index 0 = 第 1 块(CC11),1 = 第 2 块(CC12) */
-  setExpression(index: number, value: number): void;
+  /** 执行一个 RigAction(生产端 = createRigDispatcher 的产物) */
+  dispatch(action: RigAction): void;
   /**
    * 默认映射前的拦截(MIDI Learn):返回 true 表示消息已被消费,
    * 不再走默认映射。用于学习绑定与用户绑定优先解析(见 midiLearn.ts)。
@@ -78,39 +68,7 @@ export function useMidi(actions: MidiActions): MidiState {
       if (actionsRef.current.beforeDefault?.(parsed, sourceName)) return;
       const action = resolveMidiAction(parsed, sourceName);
       if (!action) return;
-      const a = actionsRef.current;
-      switch (action.type) {
-        case 'toggle-pedal':
-          a.togglePedal(action.index);
-          break;
-        case 'recall-snapshot':
-          a.recallSnapshot(action.slot);
-          break;
-        case 'toggle-bypass':
-          a.toggleBypass();
-          break;
-        case 'looper-record':
-          a.looperRecord();
-          break;
-        case 'looper-toggle-play':
-          a.looperTogglePlay();
-          break;
-        case 'looper-clear':
-          a.looperClear();
-          break;
-        case 'set-master-volume':
-          a.setMasterVolume(action.value);
-          break;
-        case 'set-amp-param':
-          a.setAmpParam(action.key, action.value);
-          break;
-        case 'set-pedal-enabled':
-          a.setPedalEnabled(action.index, action.enabled);
-          break;
-        case 'set-expression':
-          a.setExpression(action.index, action.value);
-          break;
-      }
+      actionsRef.current.dispatch(action);
     };
 
     /** 给所有输入设备挂监听,并刷新显示的设备名(热插拔时复用) */

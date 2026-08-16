@@ -107,9 +107,9 @@ macOS「音频 MIDI 设置」里 IAC Driver 已启用。两端各自独立授权
 ### Phase 1(MVP，本次实现)
 
 1. **`src/midi/midiMessage.ts`** — 纯函数:解析 `MIDIMessageEvent` → `{ type: 'note' | 'cc', channel, number, value }`。
-2. **`src/midi/midiMapping.ts`** — 默认映射表(第 3 节)+ 纯函数 `resolveMidiAction(msg): MidiAction | null`。映射表数据驱动，编号集中可改。
-3. **`src/midi/useMidi.ts`** — React hook:`requestMIDIAccess({ sysex: false })`、监听 `statechange` 热插拔、遍历 inputs 挂 `onmidimessage`,解析 → `resolveMidiAction` → 调回调。hook 入参为 App.tsx 传入的一组 action 回调(`togglePedal`、`recallSnapshot`、`toggleBypass`、`setInputGain`…),返回 `{ supported, enabled, deviceName, lastMessage }`。
-4. **`src/App.tsx`** — 调用 `useMidi`,把现有 `handleToggle`/`recallSnapshot`/`setGlobalBypass`/`handleAmpParam` 等包一层传入；新增 `handleMidiParam` 时复用 `handleParam` 模式(setState + `audioEngine.updateParam`)。
+2. **`src/midi/midiMapping.ts`** — 默认映射表(第 3 节)+ 纯函数 `resolveMidiAction(msg): RigAction | null`(#8 起 MidiAction 改名扩充为 RigAction,见 ADR-0004)。映射表数据驱动,编号集中可改。
+3. **`src/midi/useMidi.ts`** — React hook:`requestMIDIAccess({ sysex: false })`、监听 `statechange` 热插拔、遍历 inputs 挂 `onmidimessage`,解析 → `resolveMidiAction` → `dispatch(action)`(#8 起统一 RigAction 分发,替代原 action 回调组),返回 `{ supported, enabled, deviceName, lastMessage }`。
+4. **`src/App.tsx`** — 调用 `useMidi`(#8 起:所有触发源统一翻译成 RigAction,经 `createRigDispatcher` 落在 rigStore verb 上,见 ADR-0004;此处原为回调束描述,已过时)。
 5. **`src/components/MidiStatus.tsx`** — TopBar 里的小指示:未支持/未连接/已连接(设备名)，点击展开最近一条原始 MIDI 消息(兼任第 1 节要求的调试监视器，核对实际 CC/Note 编号)。
 6. **测试 `tests/midi-mapping.test.ts`** — 对照 `tests/preset-codec.test.ts` 风格：消息解析、映射表命中/未命中、CC 值 0–127 → 参数范围换算。
 7. 验证:`npm run build` + 测试通过；浏览器实测 K25(需要用户授权 MIDI 访问)。

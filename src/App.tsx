@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { audioEngine } from './audio/AudioEngine';
 import { looperPrimaryCommand } from './audio/looperState';
 import type { InputSourceType } from './audio/AudioEngine';
-import { getEffectDef } from './audio/effects';
 import { rigToShareState } from './state/rigStore';
 import { encodeShareState, writeShareToLocation } from './state/share';
 import { rigStore, useRig } from './state/useRig';
 import { useMidi } from './midi/useMidi';
+import { createBindingTranslator, resolveKeyAction } from './midi/rigAction';
+import { createRigDispatcher } from './midi/rigDispatcher';
 import {
   bindingMatches,
   classifySource,
@@ -17,8 +18,6 @@ import {
   type MidiBinding,
   type MidiTarget,
 } from './midi/midiLearn';
-import type { ParsedMidiMessage } from './midi/midiMessage';
-import { AMP_MASTER_RANGE, AMP_TONE_RANGE, type AmpParamKey } from './midi/midiMapping';
 import { TopBar } from './components/TopBar';
 import { Tuner } from './components/Tuner';
 import { ChainView } from './components/ChainView';
@@ -34,13 +33,26 @@ import { Analytics } from '@vercel/analytics/react';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
-/** 表情踏板可驱动的摇杆类踏板(position 语义统一:0=跟位,100=顶位) */
-const EXPRESSION_TREADLE_IDS = new Set(['whammy', 'wahpedal', 'crybabywdf']);
+/**
+ * 统一 RigAction 分发器(ADR-0004):MIDI 默认映射 / MIDI Learn / 键盘
+ * 三路触发源翻译出的 action 都经它落在 rigStore verb 上。模块级创建一次。
+ */
+const dispatchRigAction = createRigDispatcher({
+  store: rigStore,
+  looper: {
+    primary: () => looperPrimaryCommand(audioEngine),
+    togglePlay: () => audioEngine.toggleLoopPlayback(),
+    clear: () => audioEngine.clearLoop(),
+  },
+});
+
+/** Learn 绑定翻译器:持有 per-binding 的 CC 沿检测状态(原 midiEdgeRef 的职责) */
+const translateMidiBinding = createBindingTranslator();
 
 /**
  * App 是 shell:Rig 状态的单一事实源在 rigStore(见 ADR-0002),
  * 组件经 useRig 直接订阅;App 只保留输入源/设备枚举/纯 UI 开关/MIDI Learn 状态,
- * 以及两个投影:URL hash 同步(防抖订阅)与 MIDI 绑定执行(调 rigStore verb)。
+ * 以及两个投影:URL hash 同步(防抖订阅)与 Learn 绑定翻译(翻译 + dispatch)。
  */
 export default function App() {
   const [inputType, setInputType] = useState<InputSourceType | null>(null);
@@ -57,8 +69,6 @@ export default function App() {
   const [midiBindings, setMidiBindings] = useState<MidiBinding[]>(loadMidiBindings);
   const [learnMode, setLearnMode] = useState(false);
   const [armedTarget, setArmedTarget] = useState<MidiTarget | null>(null);
-  /** 开关型绑定从 CC 触发时的上升沿记忆(签名 → 上次值) */
-  const midiEdgeRef = useRef(new Map<string, number>());
 
   useEffect(() => {
     saveMidiBindings(midiBindings);
@@ -207,37 +217,31 @@ export default function App() {
 
   // ---------- 快捷键 ----------
 
-  // 数字键 1~9:按板上显示顺序(前置区 → FX Loop 区,即平铺数组顺序)切换单块开关;空格:全局 Bypass
+  // 数字键 1~9:按板上显示顺序(前置区 → FX Loop 区,即平铺数组顺序)切换单块开关;
+  // Q/W/E/R:快照 A..D;空格:全局 Bypass。翻译 + dispatch,与 MIDI 同一词汇表
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
       // 输入控件聚焦时不触发
       const el = e.target as HTMLElement | null;
-      if (
+      const editing = !!(
         el &&
         (el.tagName === 'INPUT' ||
           el.tagName === 'TEXTAREA' ||
           el.tagName === 'SELECT' ||
           el.isContentEditable)
-      )
-        return;
-      if (e.code === 'Space') {
-        e.preventDefault(); // 阻止页面滚动与焦点按钮的空格激活
-        rigStore.setGlobalBypass(!rigStore.getState().globalBypass);
-        return;
-      }
-      // Q/W/E/R → 恢复快照 A/B/C/D
-      const slotKeys = ['KeyQ', 'KeyW', 'KeyE', 'KeyR'];
-      const slotIdx = slotKeys.indexOf(e.code);
-      if (slotIdx >= 0) {
-        rigStore.recallSnapshot(slotIdx);
-        return;
-      }
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= 9) {
-        const item = rigStore.getState().chain[n - 1];
-        if (item) rigStore.togglePedal(item.uid);
-      }
+      );
+      const action = resolveKeyAction({
+        code: e.code,
+        key: e.key,
+        repeat: e.repeat,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        altKey: e.altKey,
+        editing,
+      });
+      if (!action) return;
+      if (e.code === 'Space') e.preventDefault(); // 阻止页面滚动与焦点按钮的空格激活
+      dispatchRigAction(action);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -245,70 +249,10 @@ export default function App() {
 
   // ---------- MIDI(Synido TempoKEY K25,映射表见 src/midi/midiMapping.ts) ----------
 
-  /** 执行一条用户绑定(midiLearn):开关型用上升沿,连续型按 0..127 线性映射;rig 修改走 rigStore verb */
-  const executeMidiBinding = (b: MidiBinding, msg: ParsedMidiMessage): void => {
-    const t = b.target;
-    const sig = `${b.source}:${b.msgType}:${b.number}`;
-    const edge = midiEdgeRef.current;
-    const toggleFire = (): boolean => {
-      if (msg.type === 'note') return msg.on;
-      const last = edge.get(sig) ?? 0;
-      edge.set(sig, msg.value);
-      return msg.value > 63 && last <= 63;
-    };
-    const v01 = Math.max(0, Math.min(127, msg.value)) / 127;
-    const { chain } = rigStore.getState();
-    switch (t.kind) {
-      case 'pedal-toggle': {
-        if (!toggleFire()) return;
-        const item = chain[t.index];
-        if (item) rigStore.togglePedal(item.uid);
-        return;
-      }
-      case 'snapshot':
-        if (toggleFire()) rigStore.recallSnapshot(t.slot);
-        return;
-      case 'bypass':
-        if (toggleFire()) rigStore.setGlobalBypass(!rigStore.getState().globalBypass);
-        return;
-      case 'looper-record':
-        if (!toggleFire()) return;
-        // 与 UI 主按钮同一状态机:初录→完成→叠录→完成叠录
-        looperPrimaryCommand(audioEngine);
-        return;
-      case 'looper-play':
-        if (toggleFire()) audioEngine.toggleLoopPlayback();
-        return;
-      case 'looper-clear':
-        if (toggleFire()) audioEngine.clearLoop();
-        return;
-      case 'master-volume':
-        rigStore.setMasterVolume(v01);
-        return;
-      case 'amp-param': {
-        const range = t.key === 'master' ? AMP_MASTER_RANGE : AMP_TONE_RANGE;
-        rigStore.setAmpParam(t.key as AmpParamKey, range.min + v01 * (range.max - range.min));
-        return;
-      }
-      case 'pedal-treadle': {
-        const item = chain[t.index];
-        if (item) rigStore.setPedalParam(item.uid, 'position', v01 * 100);
-        return;
-      }
-      case 'pedal-param': {
-        const item = chain[t.index];
-        if (!item) return;
-        const p = getEffectDef(item.effectId).params.find((x) => x.key === t.key);
-        if (!p) return;
-        rigStore.setPedalParam(item.uid, t.key, p.min + v01 * (p.max - p.min));
-        return;
-      }
-    }
-  };
-
   // 回调每次渲染都新建,useMidi 内部用 ref 持有最新版本,MIDI 监听只挂一次
   const midi = useMidi({
-    // MIDI Learn:学习绑定 / 用户绑定优先于默认映射
+    dispatch: dispatchRigAction,
+    // MIDI Learn:学习绑定 / 用户绑定优先于默认映射;命中绑定经翻译层 → RigAction → 统一 dispatch
     beforeDefault: (msg, sourceName) => {
       const src = classifySource(sourceName);
       if (learnMode) {
@@ -327,41 +271,10 @@ export default function App() {
         return true;
       }
       const b = midiBindings.find((x) => bindingMatches(x, msg, src));
-      if (b) {
-        executeMidiBinding(b, msg);
-        return true;
-      }
-      return false;
-    },
-    togglePedal: (index) => {
-      const item = rigStore.getState().chain[index];
-      if (item) rigStore.togglePedal(item.uid);
-    },
-    recallSnapshot: (slot) => rigStore.recallSnapshot(slot),
-    toggleBypass: () => rigStore.setGlobalBypass(!rigStore.getState().globalBypass),
-    looperRecord: () => looperPrimaryCommand(audioEngine),
-    looperTogglePlay: () => {
-      audioEngine.toggleLoopPlayback();
-    },
-    looperClear: () => {
-      audioEngine.clearLoop();
-    },
-    setMasterVolume: (v) => rigStore.setMasterVolume(v),
-    setAmpParam: (key, value) => rigStore.setAmpParam(key, value),
-    // motion_midi 踩钉:按板上顺序绝对设置第 N 块单块开关(Toggle 状态在发送方维护)
-    setPedalEnabled: (index, enabled) => {
-      const item = rigStore.getState().chain[index];
-      if (item) rigStore.setPedalEnabled(item.uid, enabled);
-    },
-    // motion_midi 表情踏板:CC11 → 第 1 块、CC12 → 第 2 块摇杆类踏板
-    // (whammy/wahpedal/crybabywdf 的 position)。不做音量/Master 兜底:
-    // 表情踏板静止=0,兜底到音量类参数会把输出拉到最底(嘴闭=静音)
-    setExpression: (index, t) => {
-      const treadles = rigStore
-        .getState()
-        .chain.filter((item) => EXPRESSION_TREADLE_IDS.has(item.effectId));
-      const target = treadles[index];
-      if (target) rigStore.setPedalParam(target.uid, 'position', t * 100);
+      if (!b) return false;
+      const action = translateMidiBinding(b, msg, rigStore.getState().chain);
+      if (action) dispatchRigAction(action);
+      return true;
     },
   });
 

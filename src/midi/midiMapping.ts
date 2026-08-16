@@ -99,8 +99,15 @@ export const AMP_KNOB_MAP: ReadonlyMap<number, AmpParamKey> = new Map([
 
 // ---------- 动作 ----------
 
-export type MidiAction =
-  /** 切换效果链第 index 块单块(0 起,对齐数字键 1..8) */
+/**
+ * RigAction:统一动作词汇表(issue #8,ADR-0004)——一次"要执行什么"的意图,
+ * 携带映射后的语义值。所有触发源(MIDI 默认映射 / MIDI Learn / 键盘)统一
+ * 翻译成本词汇表,经同一 dispatch 执行(见 rigDispatcher.ts)。
+ * 与 MidiTarget(Learn 绑定的持久化地址,"绑的是哪个控件")是两个概念:
+ * 地址 + 原始值 → 翻译层(rigAction.ts)→ RigAction。
+ */
+export type RigAction =
+  /** 切换效果链第 index 块单块(0 起;Pad Bank A 覆盖 1..8,键盘数字键 1..9) */
   | { type: 'toggle-pedal'; index: number }
   /** 召回快照 slot(0..3 = A..D,对齐 Q/W/E/R) */
   | { type: 'recall-snapshot'; slot: number }
@@ -121,8 +128,13 @@ export type MidiAction =
    * Toggle 状态由发送方维护,这里按值设置而非翻转,保持两端同步)
    */
   | { type: 'set-pedal-enabled'; index: number; enabled: boolean }
-  /** 表情踏板位置,归一化 0..1;index 0 = 第 1 块踏板(CC11),1 = 第 2 块(CC12) */
-  | { type: 'set-expression'; index: number; value: number };
+  /** 表情踏板位置,归一化 0..1;index 0 = 第 1 块踏板(CC11),1 = 第 2 块(CC12)。
+   *  序数语义("第 N 块摇杆踏板"):序数 → 具体单块的解析在 dispatch 层 */
+  | { type: 'set-expression'; index: number; value: number }
+  /** 设置效果链第 index 块单块的参数(链索引语义;value 已按效果定义参数表映射) */
+  | { type: 'set-pedal-param'; index: number; key: string; value: number }
+  /** 设置效果链第 index 块单块的摇杆行程(链索引语义;position 0..100) */
+  | { type: 'set-pedal-treadle'; index: number; value: number };
 
 /** CC 值 0..127 线性映射到 [min, max] */
 export function ccToRange(ccValue: number, min: number, max: number): number {
@@ -142,7 +154,7 @@ export function ccToRange(ccValue: number, min: number, max: number): number {
 export function resolveMidiAction(
   msg: ParsedMidiMessage,
   sourceName?: string | null,
-): MidiAction | null {
+): RigAction | null {
   // motion_midi(IAC 总线):表情踏板 + 4 个踩钉
   if (sourceName && MOTION_INPUT_NAME_PATTERN.test(sourceName)) {
     if (msg.type !== 'cc') return null;

@@ -8,7 +8,9 @@
 import type { ParsedMidiMessage } from './midiMessage';
 import { MOTION_INPUT_NAME_PATTERN } from './midiMapping';
 
-/** 绑定目标(链上位置语义,与默认映射一致:单块按链序索引,0 起) */
+/** 绑定目标(纯地址类型,"绑的是哪个控件";链上位置语义,与默认映射一致:
+ *  单块按链序索引,0 起)。与 RigAction("要执行什么"的意图,携带语义值)
+ *  是两个概念:地址 + 原始值 → 翻译层(rigAction.ts)→ RigAction(ADR-0004)。 */
 export type MidiTarget =
   | { kind: 'pedal-toggle'; index: number }
   | { kind: 'pedal-param'; index: number; key: string }
@@ -46,18 +48,6 @@ export function bindingMatches(
   if (b.number !== msg.number) return false;
   if (msg.type === 'note' && !msg.on) return false;
   return true;
-}
-
-/** 目标是否开关型(note 按下 / CC 上升沿触发一次),否则为连续型(值映射) */
-export function isToggleTarget(t: MidiTarget): boolean {
-  return (
-    t.kind === 'pedal-toggle' ||
-    t.kind === 'snapshot' ||
-    t.kind === 'bypass' ||
-    t.kind === 'looper-record' ||
-    t.kind === 'looper-play' ||
-    t.kind === 'looper-clear'
-  );
 }
 
 /** 消息签名(同消息只允许绑一个目标) */
