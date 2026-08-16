@@ -139,6 +139,8 @@ export interface RigStore {
   // 箱头
   /** 直换箱头 def(参数回默认);型号层面的切换走 setAmpModel */
   setAmp(id: string): void;
+  /** 纯视图切换分类(无记忆型号的分类,如未选模型的 tone3000):不改箱头、不触引擎 */
+  setAmpCategory(categoryId: string): void;
   setAmpEnabled(enabled: boolean): void;
   setAmpParam(key: string, value: number): void;
   /** 切分类/选型号:记住该类型号并应用(NAM 型号自增 namVersion) */
@@ -509,6 +511,11 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     setAmp(id) {
       state = { ...state, ampId: id, ampValues: defaultAmpValues(id) };
       syncStructure();
+      emit();
+    },
+
+    setAmpCategory(categoryId) {
+      state = { ...state, ampCategoryId: categoryId };
       emit();
     },
 

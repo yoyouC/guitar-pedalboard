@@ -20,8 +20,8 @@ export interface AmpModelEntry {
 }
 
 export interface AmpCategory {
-  /** 与皮肤 CSS 类同名(amp-clean / amp-chime / amp-crunch / amp-recto) */
-  id: 'clean' | 'chime' | 'crunch' | 'recto';
+  /** 前四类与皮肤 CSS 类同名(amp-clean/chime/crunch/recto);tone3000 无专属皮肤,UI 侧 fallback */
+  id: 'clean' | 'chime' | 'crunch' | 'recto' | 'tone3000';
   name: string;
   models: AmpModelEntry[];
 }
@@ -99,6 +99,13 @@ export const AMP_CATEGORIES: AmpCategory[] = [
       wasm('5150-blockletter', WASM_NAME.get('5150-blockletter')!),
       wasm('6505-red', WASM_NAME.get('6505-red')!),
     ],
+  },
+  {
+    // TONE3000(ADR-0007):外部 NAM 模型平台,型号经 OAuth Select 流程选择,
+    // 列表为空——UI(AmpPanel 的 tone3000 分支)渲染登录/浏览/当前模型卡片
+    id: 'tone3000',
+    name: 'TONE3000',
+    models: [],
   },
 ];
 

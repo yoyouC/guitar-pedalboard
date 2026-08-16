@@ -649,3 +649,19 @@ test('tone3000 model reference round-trips through preset save/load', () => {
   assert.equal(state.ampModelKeys.tone3000, 'tone3000:79103');
   assert.deepEqual(state.namModel, { source: 'tone3000:79103' });
 });
+
+test('setAmpCategory: 纯视图切换(空分类不扰动当前箱头与引擎)', () => {
+  const { engine, calls } = createStubEngine();
+  const store = createRigStore(engine);
+  const ampBefore = store.getState().ampId;
+  const valuesBefore = store.getState().ampValues;
+  calls.length = 0;
+
+  store.setAmpCategory('tone3000');
+  const state = store.getState();
+  assert.equal(state.ampCategoryId, 'tone3000');
+  assert.equal(state.ampId, ampBefore);
+  assert.equal(state.ampValues, valuesBefore);
+  assert.equal(calls.length, 0); // 引擎未被触碰
+  assert.equal(state.graphVersion, 0);
+});

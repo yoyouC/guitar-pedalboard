@@ -70,6 +70,17 @@ export interface Tone3000Client {
    * → Bearer 下载。未登录抛 not-authenticated;tone 失效抛 tone-unavailable。
    */
   getModelText(toneId: string): Promise<string>;
+  /** 获取 tone 元数据(归属展示:标题/作者/许可/链接,ToS 要求展示) */
+  getTone(toneId: string): Promise<ToneInfo>;
+}
+
+/** tone 元数据(归属展示用) */
+export interface ToneInfo {
+  id: number;
+  title: string;
+  username: string;
+  license: string;
+  url: string;
 }
 
 // ---------- PKCE ----------
@@ -292,11 +303,36 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     return downloadRes.text();
   }
 
+  async function getTone(toneId: string): Promise<ToneInfo> {
+    const res = await apiFetch(`/api/v1/tones/${encodeURIComponent(toneId)}`);
+    if (res.status === 404 || res.status === 403) {
+      throw new Tone3000Error('tone-unavailable', `tone ${toneId} 不可访问(已删除/转私有)`, res.status);
+    }
+    if (!res.ok) {
+      throw new Tone3000Error('http', `tone 获取失败 HTTP ${res.status}`, res.status);
+    }
+    const t = (await res.json()) as {
+      id: number;
+      title?: string;
+      license?: string;
+      url?: string;
+      user?: { username?: string };
+    };
+    return {
+      id: t.id,
+      title: t.title ?? `Tone #${toneId}`,
+      username: t.user?.username ?? '未知作者',
+      license: t.license ?? 't3k',
+      url: t.url ?? `https://www.tone3000.com/tones/${toneId}`,
+    };
+  }
+
   return {
     buildAuthorizeUrl,
     handleCallback,
     isAuthenticated: () => getTokens() !== null,
     logout: clearTokens,
     getModelText,
+    getTone,
   };
 }

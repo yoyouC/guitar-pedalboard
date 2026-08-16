@@ -294,3 +294,44 @@ test('logout: 清除令牌,isAuthenticated 变 false', async () => {
   client.logout();
   assert.equal(client.isAuthenticated(), false);
 });
+
+// ---------- getTone(归属展示元数据) ----------
+
+test('getTone: 返回标题/作者/许可/链接', async () => {
+  const { fetchFn, requests } = mockFetch((req) => {
+    assert.equal(req.url, 'https://www.tone3000.com/api/v1/tones/79103');
+    assert.equal(req.init?.headers?.Authorization, 'Bearer OLD_AT');
+    return {
+      status: 200,
+      body: {
+        id: 79103,
+        title: 'Dual Rectifier Rev G',
+        license: 't3k',
+        url: 'https://www.tone3000.com/tones/mesa-boogie-dual-rectifier-79103',
+        user: { username: 'someone', url: 'https://www.tone3000.com/users/someone' },
+      },
+    };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  const client = makeClient(fetchFn, storage);
+  const tone = await client.getTone('79103');
+  assert.equal(tone.title, 'Dual Rectifier Rev G');
+  assert.equal(tone.username, 'someone');
+  assert.equal(tone.license, 't3k');
+  assert.ok(tone.url.includes('79103'));
+  assert.equal(requests.length, 1);
+});
+
+test('getTone: 404/403 → tone-unavailable', async () => {
+  for (const status of [404, 403]) {
+    const { fetchFn } = mockFetch(() => ({ status }));
+    const storage = memoryStorage();
+    seedTokens(storage, 3600_000);
+    const client = makeClient(fetchFn, storage);
+    await assert.rejects(client.getTone('99999'), (err: unknown) => {
+      assert.equal((err as { reason?: string }).reason, 'tone-unavailable');
+      return true;
+    });
+  }
+});
