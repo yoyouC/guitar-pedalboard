@@ -29,6 +29,6 @@ function serveLocalModels(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   // 相对路径构建:dist 可部署到任意子路径,也可本地直接用静态服务器打开
-  base: './',
+  base: '/',  // 回调子路径(/tone3000/callback)下相对 base 会把 assets 解析到子目录 404(白屏);本应用只挂根路径
   plugins: [react(), serveLocalModels()],
 })
