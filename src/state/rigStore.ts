@@ -19,16 +19,19 @@
 import type { audioEngine } from '../audio/AudioEngine';
 import type { ChainSpec, AmpSpec } from '../audio/AudioEngine';
 import { getEffectDef } from '../audio/effects';
-import { getAmpDef } from '../audio/amps';
+import { getAmpDef, getNamWasmAmpDef } from '../audio/amps';
 import { getCabDef } from '../audio/cabs';
 import {
   BUNDLED_WAVENET_MODELS,
   NAM_SWEEP_PACKS,
-  setNamWasmModelSource,
-  setNamWasmPack,
+  buildTone3000Key,
+  loadModelText,
+  parseTone3000Key,
+  type NamModelSelection,
 } from '../audio/namWasm';
 import type { ShareState } from './share';
 import type { RigPreset, Snapshot, SnapshotAmp, SnapshotCab } from './presetCodec';
+import type { Tone3000ErrorReason } from '../tone3000/client';
 import {
   createChainItem,
   currentRigToPreset,
@@ -86,8 +89,10 @@ export interface RigStoreState {
   cabId: string;
   cabEnabled: boolean;
   cabValues: Record<string, number>;
-  /** NAM 自定义模型名(模型源本身是 namWasm 模块级全局态,本次不收编) */
+  /** NAM 自定义模型名(展示用;模型选择本身在 namModel) */
   namCustomName: string | null;
+  /** NAM 模型选择(ADR-0007):随状态传递,引擎侧不再读 namWasm 模块全局 */
+  namModel: NamModelSelection;
   /** NAM 模型版本:换模型 = 结构变化(引擎箱头实例复用 key 的一部分) */
   namVersion: number;
   inputGain: number;
@@ -99,6 +104,17 @@ export interface RigStoreState {
   presets: RigPreset[];
   /** 图谱重建后自增,供依赖引擎侧节点引用(电平表/背景)的组件重读 */
   graphVersion: number;
+  /**
+   * tone3000 模型降级通知(issue #14):恢复/选择后可用性检查失败时设置,
+   * 箱头已回退目录默认;原 modelKey 引用保留(降级不写入持久化)。
+   */
+  tone3000Notice: Tone3000Notice | null;
+}
+
+/** tone3000 降级通知;reason 契约即客户端的 Tone3000ErrorReason */
+export interface Tone3000Notice {
+  toneId: string;
+  reason: Tone3000ErrorReason;
 }
 
 /**
@@ -138,12 +154,14 @@ export interface RigStore {
   // 箱头
   /** 直换箱头 def(参数回默认);型号层面的切换走 setAmpModel */
   setAmp(id: string): void;
+  /** 纯视图切换分类(无记忆型号的分类,如未选模型的 tone3000):不改箱头、不触引擎 */
+  setAmpCategory(categoryId: string): void;
   setAmpEnabled(enabled: boolean): void;
   setAmpParam(key: string, value: number): void;
   /** 切分类/选型号:记住该类型号并应用(NAM 型号自增 namVersion) */
   setAmpModel(categoryId: string, modelKey: string): void;
-  /** 本地 .nam 文件加载成功后登记为当前类的自定义型号(不重置参数) */
-  setNamCustomModel(displayName: string): void;
+  /** 本地 .nam 文件加载成功后登记为当前类的自定义型号(不重置参数);sourceKey 为 namWasm 缓存键 */
+  setNamCustomModel(displayName: string, sourceKey: string): void;
 
   // 箱体
   setCab(id: string): void;
@@ -204,26 +222,52 @@ function ampIdForModelKey(modelKey: string): string {
 }
 
 /**
- * 应用一个箱头型号(与旧 App.applyAmpModel 语义一致):
- * 解析 ampId/默认参数;NAM 型号设置模块级模型源并要求 namVersion 换代。
+ * 应用一个箱头型号(ADR-0007):
+ * 解析 ampId/默认参数与模型选择(NamModelSelection);NAM 型号要求 namVersion 换代。
+ * namModel 为 null 表示"不适用或保持当前选择"(builtin / nam-wasm:custom / 未知 ref)。
  */
 function resolveAmpModel(modelKey: string): {
   ampId: string;
   ampValues: Record<string, number>;
   namReload: boolean;
+  namModel: NamModelSelection | null;
 } {
   const { kind, ref } = parseModelKey(modelKey);
   if (kind === 'builtin') {
-    return { ampId: ref, ampValues: defaultAmpValues(ref), namReload: false };
+    return { ampId: ref, ampValues: defaultAmpValues(ref), namReload: false, namModel: null };
+  }
+  if (kind === 'tone3000') {
+    // 外部模型引用(ADR-0007):装载经 namWasm 注册的 provider 按用户身份下载
+    return {
+      ampId: 'nam-wasm',
+      ampValues: defaultAmpValues('nam-wasm'),
+      namReload: true,
+      namModel: { source: buildTone3000Key(ref) },
+    };
   }
   if (kind === 'nam-wasm-pack') {
     const pack = NAM_SWEEP_PACKS[ref];
-    if (pack) setNamWasmPack(pack);
+    if (pack) {
+      return {
+        ampId: 'nam-wasm',
+        ampValues: defaultAmpValues('nam-wasm'),
+        namReload: true,
+        namModel: { pack },
+      };
+    }
   } else {
     const m = BUNDLED_WAVENET_MODELS.find((x) => x.id === ref);
-    if (m) setNamWasmModelSource(m.url);
+    if (m) {
+      return {
+        ampId: 'nam-wasm',
+        ampValues: defaultAmpValues('nam-wasm'),
+        namReload: true,
+        namModel: { source: m.url },
+      };
+    }
   }
-  return { ampId: 'nam-wasm', ampValues: defaultAmpValues('nam-wasm'), namReload: true };
+  // nam-wasm:custom 或未知 ref:保持当前选择(自定义模型的已知限制,见 ADR-0006)
+  return { ampId: 'nam-wasm', ampValues: defaultAmpValues('nam-wasm'), namReload: true, namModel: null };
 }
 
 /** 预设 → applyRig 输入(chain 重新生成 uid;箱头走型号机制) */
@@ -343,6 +387,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     cabEnabled: true,
     cabValues: defaultCabValues(RIG_PRESET_CATALOG.defaults.cabId),
     namCustomName: null,
+    namModel: { source: BUNDLED_WAVENET_MODELS[0].url },
     namVersion: 0,
     inputGain: RIG_GLOBAL_DEFAULTS.inputGain,
     masterVolume: RIG_GLOBAL_DEFAULTS.masterVolume,
@@ -351,11 +396,55 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     activeSlot: -1,
     presets: loadPresets(),
     graphVersion: 0,
+    tone3000Notice: null,
   };
 
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const listener of listeners) listener();
+  };
+
+  // ---------- tone3000 非阻断降级(issue #14) ----------
+
+  /**
+   * 箱头回退目录默认(保留 ampCategoryId/ampModelKeys 与原引用——降级不写入
+   * 持久化,重新登录后仍可恢复);检查完成前用户已切走则不降级。
+   */
+  const demoteUnavailableTone = (toneId: string, reason: Tone3000Notice['reason']) => {
+    if (state.ampModelKeys[state.ampCategoryId] !== buildTone3000Key(toneId)) return;
+    // 回退目录默认箱头(复用初始状态已解析的 initialAmpId);引用与参数保留
+    state = { ...state, ampId: initialAmpId, tone3000Notice: { toneId, reason } };
+    syncStructure();
+    emit();
+  };
+
+  /** 清除指定 tone 的通知(重新装载成功 / 用户改选其他型号) */
+  const clearTone3000Notice = (toneId: string) => {
+    if (state.tone3000Notice?.toneId !== toneId) return;
+    state = { ...state, tone3000Notice: null };
+    emit();
+  };
+
+  /**
+   * 乐观应用后的异步可用性检查:与引擎装载共享 loadModelText 缓存
+   * (同一 promise,不重复下载);失败按原因降级,成功清掉对应通知。
+   */
+  const scheduleTone3000Check = (toneId: string) => {
+    loadModelText(buildTone3000Key(toneId))
+      .then(() => clearTone3000Notice(toneId))
+      .catch((e: unknown) => {
+        const reason = (e as { reason?: string } | null)?.reason;
+        demoteUnavailableTone(
+          toneId,
+          reason === 'not-authenticated' || reason === 'tone-unavailable' ? reason : 'http',
+        );
+      });
+  };
+
+  /** resolved.namModel 为 tone3000 源时调度检查(setAmpModel/applyRig 共用) */
+  const checkIfTone3000 = (namModel: NamModelSelection | null) => {
+    const toneId = namModel && 'source' in namModel ? parseTone3000Key(namModel.source) : null;
+    if (toneId !== null) scheduleTone3000Check(toneId);
   };
 
   /** 结构同步:固定四连写引擎(每个 setter 内部 rebuildGraph,重建时回放 spec 携带的参数值)并自增 graphVersion */
@@ -373,7 +462,8 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       ),
     );
     engine.setAmp({
-      def: getAmpDef(state.ampId),
+      // NAM 箱头:def 来自选择感知的 memoized 工厂(同一选择同一实例 → def+key 复用成立)
+      def: state.ampId === 'nam-wasm' ? getNamWasmAmpDef(state.namModel) : getAmpDef(state.ampId),
       enabled: state.ampEnabled,
       values: state.ampValues,
       // def+key 相同则重建复用箱头实例(避免 NAM 模型随单块变动重复加载)
@@ -483,6 +573,11 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       emit();
     },
 
+    setAmpCategory(categoryId) {
+      state = { ...state, ampCategoryId: categoryId };
+      emit();
+    },
+
     setAmpEnabled(enabled) {
       state = { ...state, ampEnabled: enabled };
       syncStructure();
@@ -496,6 +591,10 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     },
 
     setAmpModel(categoryId, modelKey) {
+      // 改选其他型号:旧 tone 的降级通知随之失效
+      if (state.tone3000Notice && modelKey !== buildTone3000Key(state.tone3000Notice.toneId)) {
+        state = { ...state, tone3000Notice: null };
+      }
       const resolved = resolveAmpModel(modelKey);
       state = {
         ...state,
@@ -503,16 +602,19 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         ampModelKeys: { ...state.ampModelKeys, [categoryId]: modelKey },
         ampId: resolved.ampId,
         ampValues: resolved.ampValues,
+        namModel: resolved.namModel ?? state.namModel,
         namVersion: state.namVersion + (resolved.namReload ? 1 : 0),
       };
       syncStructure();
       emit();
+      checkIfTone3000(resolved.namModel);
     },
 
-    setNamCustomModel(displayName) {
+    setNamCustomModel(displayName, sourceKey) {
       state = {
         ...state,
         namCustomName: displayName,
+        namModel: { source: sourceKey },
         ampModelKeys: { ...state.ampModelKeys, [state.ampCategoryId]: 'nam-wasm:custom' },
         namVersion: state.namVersion + 1,
       };
@@ -564,16 +666,26 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
     applyRig(rig) {
       let { namVersion } = state;
-      // 型号机制分支:解析模型源并换代;legacy 分支(旧快照):不动型号簿记与 NAM 全局态
+      // 型号机制分支:解析模型源并换代;legacy 分支(旧快照):不动型号簿记与模型选择
       const ampRef = rig.amp;
       let ampId: string;
+      let namModel = state.namModel;
+      let appliedNamModel: NamModelSelection | null = null;
       let { ampCategoryId, ampModelKeys } = state;
       if ('modelKey' in ampRef) {
+        if (
+          state.tone3000Notice &&
+          ampRef.modelKey !== buildTone3000Key(state.tone3000Notice.toneId)
+        ) {
+          state = { ...state, tone3000Notice: null };
+        }
         const resolved = resolveAmpModel(ampRef.modelKey);
         if (resolved.namReload) namVersion += 1;
         ampId = ampIdForModelKey(ampRef.modelKey);
         ampCategoryId = ampRef.categoryId;
         ampModelKeys = { ...state.ampModelKeys, [ampRef.categoryId]: ampRef.modelKey };
+        namModel = resolved.namModel ?? state.namModel;
+        appliedNamModel = resolved.namModel;
       } else {
         ampId = ampRef.legacyAmpId;
       }
@@ -583,6 +695,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         ampCategoryId,
         ampModelKeys,
         ampId,
+        namModel,
         ampEnabled: rig.amp.enabled,
         ampValues: rig.amp.values,
         cabId: rig.cab.id,
@@ -597,6 +710,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       engine.setInputGain(state.inputGain);
       engine.setMasterVolume(state.masterVolume);
       emit();
+      checkIfTone3000(appliedNamModel);
     },
 
     // ---------- 快照 ----------

@@ -69,12 +69,38 @@ export interface NamWasmMetadata {
 
 const modelTextCache = new Map<string, Promise<string>>();
 const metadataCache = new Map<string, NamWasmMetadata>();
-let currentSource = BUNDLED_WAVENET_MODELS[0].url;
 
-/** 切换当前模型源(URL 或 loadNamWasmModelFromFile 生成的 file: 键);同时退出扫档包模式 */
-export function setNamWasmModelSource(source: string): void {
-  currentSource = source;
-  currentPack = null;
+/** Tone3000 模型 key 编解码(ADR-0007):`${prefix}${toneId}`,全仓唯一字面量来源 */
+export const TONE3000_KEY_PREFIX = 'tone3000:';
+
+export function buildTone3000Key(toneId: string): string {
+  return `${TONE3000_KEY_PREFIX}${toneId}`;
+}
+
+/** 解析 `tone3000:{toneId}` → toneId;非 tone3000 key 返回 null */
+export function parseTone3000Key(key: string): string | null {
+  return key.startsWith(TONE3000_KEY_PREFIX) ? key.slice(TONE3000_KEY_PREFIX.length) : null;
+}
+
+/**
+ * NAM 模型选择(ADR-0007,评审候选 8 最小版):模型源作为数据随
+ * AmpSpec/状态传递,不再经模块级全局态偷读。
+ * - `{ source }`:单模型 URL 或 cache key(`file:` 本地文件、`tone3000:` 外部引用);
+ * - `{ pack }`:增益扫档包。
+ */
+export type NamModelSelection = { source: string } | { pack: NamSweepPack };
+
+/**
+ * TONE3000 模型文本提供者注册点(adapter 注册,非模型选择状态——
+ * 选择状态已在 NamModelSelection 收编;这里注册的只是"如何按用户身份
+ * 下载"的能力,与 createWorkletLoader 的注册语义同类)。
+ * 生产由 tone3000/instance 注册;传 null 注销(测试隔离用)。
+ */
+type Tone3000ModelTextProvider = (toneId: string) => Promise<string>;
+let tone3000Provider: Tone3000ModelTextProvider | null = null;
+
+export function setTone3000ModelTextProvider(provider: Tone3000ModelTextProvider | null): void {
+  tone3000Provider = provider;
 }
 
 // ---------- 增益扫档包(同一箱头多个 gain 档位的 capture 组,GAIN 旋钮切档) ----------
@@ -138,21 +164,31 @@ export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
   },
 };
 
-let currentPack: NamSweepPack | null = null;
-
-/** 进入扫档包模式(传 null 退出) */
-export function setNamWasmPack(pack: NamSweepPack | null): void {
-  currentPack = pack;
-}
-
-function loadModelText(source: string = currentSource): Promise<string> {
+/**
+ * 按 source(URL / file: cache key / tone3000: 外部引用)取模型文本。
+ * 成功结果永久缓存;**失败不缓存**——否则 tone3000: 源在未登录时的失败
+ * 会让登录后的重试永远命中缓存的 rejection(刷新页面才能恢复)。
+ * 导出以便测试 provider 分派(tests/nam-model-source.test.ts)。
+ */
+export function loadModelText(source: string): Promise<string> {
   let p = modelTextCache.get(source);
   if (!p) {
-    p = fetch(source).then((r) => {
-      if (!r.ok) throw new Error(`模型下载失败 HTTP ${r.status}`);
-      return r.text();
-    });
+    const toneId = parseTone3000Key(source);
+    if (toneId !== null) {
+      // 外部模型引用:经注册的 provider(带 OAuth Bearer)按用户身份下载
+      p = tone3000Provider
+        ? tone3000Provider(toneId)
+        : Promise.reject(new Error('TONE3000 模型提供者未注册'));
+    } else {
+      p = fetch(source).then((r) => {
+        if (!r.ok) throw new Error(`模型下载失败 HTTP ${r.status}`);
+        return r.text();
+      });
+    }
     modelTextCache.set(source, p);
+    p.catch(() => {
+      if (modelTextCache.get(source) === p) modelTextCache.delete(source);
+    });
   }
   return p;
 }
@@ -169,15 +205,16 @@ function parseMetadata(json: string): NamWasmMetadata {
   }
 }
 
-/** 从本地 .nam 文件加载(任意 NAM Core 支持的架构),成功后置为当前模型 */
-export async function loadNamWasmModelFromFile(file: File): Promise<NamWasmMetadata> {
+/** 从本地 .nam 文件加载(任意 NAM Core 支持的架构);返回 cache key 与元数据,由调用方收编为模型选择 */
+export async function loadNamWasmModelFromFile(
+  file: File,
+): Promise<NamWasmMetadata & { key: string }> {
   const text = await file.text();
   const meta = parseMetadata(text);
   const key = `file:${file.name}:${file.size}:${Date.now()}`;
   modelTextCache.set(key, Promise.resolve(text));
   metadataCache.set(key, meta);
-  currentSource = key;
-  return meta;
+  return { ...meta, key };
 }
 
 const SMOOTH = 0.03;
@@ -189,7 +226,7 @@ const pctToDb = (v: number, range: number) => ((v - 50) / 50) * range;
  *         → BASS/MID/TREBLE/PRESENCE 音色栈 → masterGain → output
  * 归一化公式与官方插件 Normalized 模式一致(-18LUFS - loudness,钳制 [-12, +36]dB)。
  */
-export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
+export function createNamWasmAmp(ctx: AudioContext, model: NamModelSelection): EffectInstance {
   const input = ctx.createGain();
   const output = ctx.createGain();
   const drive = ctx.createGain();
@@ -217,7 +254,7 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
   masterGain.connect(output);
 
   // ---------- 扫档包模式:GAIN 旋钮在预载档位间瞬时切换 ----------
-  const pack = currentPack;
+  const pack = 'pack' in model ? model.pack : null;
   const stages = pack?.stages ?? [];
   const stageLoudness: (number | null)[] = stages.map(() => null);
   const slotReady = new Set<number>();
@@ -265,7 +302,7 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
     })();
   } else if (voice) {
     reportAmpLoad({ phase: 'loading', done: 0, total: 2, label: '加载模型' });
-    const source = currentSource;
+    const source = 'source' in model ? model.source : BUNDLED_WAVENET_MODELS[0].url;
     loadModelText(source)
       .then((json) => {
         if (disposed) return;

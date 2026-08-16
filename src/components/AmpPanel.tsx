@@ -7,13 +7,14 @@ import { getAmpLoadState, subscribeAmpLoad } from '../audio/loadProgress';
 import { rigStore, useRig } from '../state/useRig';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
+import { Tone3000Panel } from './Tone3000Panel';
 
 interface AmpPanelProps {
   showMeters: boolean;
   engineReady: boolean;
 }
 
-/** 箱头模拟面板:4 个分类 tab(Fender Clean / Vox / Marshall Crunch / High Gain)+ 类内型号选择 */
+/** 箱头模拟面板:分类 tab(4 个皮肤类 + TONE3000)+ 类内型号选择 */
 export function AmpPanel({ showMeters, engineReady }: AmpPanelProps) {
   const loadState = useSyncExternalStore(subscribeAmpLoad, getAmpLoadState);
   const categoryId = useRig((s) => s.ampCategoryId);
@@ -25,24 +26,25 @@ export function AmpPanel({ showMeters, engineReady }: AmpPanelProps) {
   useRig((s) => s.graphVersion);
   const modelKey = modelKeys[categoryId];
   const category = AMP_CATEGORIES.find((c) => c.id === categoryId) ?? AMP_CATEGORIES[0];
+  const isTone3000 = category.id === 'tone3000';
   const model = category.models.find((m) => m.key === modelKey) ?? category.models[0];
-  const def = getAmpDef(
-    model.kind === 'builtin' ? model.ref : 'nam-wasm',
-  );
+  const def = getAmpDef(model?.kind === 'builtin' ? model.ref : 'nam-wasm');
+  // TONE3000 无专属皮肤,fallback 到 crunch(深色 NAM 风格)
+  const skinId = isTone3000 ? 'crunch' : category.id;
   const analyser = engineReady ? audioEngine.ampAnalyser : null;
 
   // NAM:加载本地 .nam 模型(WASM Core 支持全架构),成功后置为当前类的型号
   const handleNamModelFile = async (file: File) => {
     try {
       const model = await loadNamWasmModelFromFile(file);
-      rigStore.setNamCustomModel(model.displayName);
+      rigStore.setNamCustomModel(model.displayName, model.key);
     } catch (e) {
       alert(`加载 .nam 模型失败: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
-  const isNam = model.kind !== 'builtin';
+  const isNam = model?.kind !== 'builtin';
   // 扫档包:由 GAIN 旋钮值推导当前档位标签(g5.5 等)
-  const sweepPack = model.kind === 'nam-wasm-pack' ? NAM_SWEEP_PACKS[model.ref] : null;
+  const sweepPack = model?.kind === 'nam-wasm-pack' ? NAM_SWEEP_PACKS[model.ref] : null;
   const sweepStage = sweepPack
     ? sweepPack.stages[
         Math.min(
@@ -60,45 +62,54 @@ export function AmpPanel({ showMeters, engineReady }: AmpPanelProps) {
           <button
             key={c.id}
             className={`amp-tab ${c.id === categoryId ? 'active' : ''}`}
-            onClick={() => rigStore.setAmpModel(c.id, modelKeys[c.id] ?? c.models[0].key)}
+            onClick={() => {
+              const key = modelKeys[c.id] ?? c.models[0]?.key;
+              // 无记忆型号的分类(如未选模型的 TONE3000):纯视图切换,不扰动当前箱头
+              if (key) rigStore.setAmpModel(c.id, key);
+              else rigStore.setAmpCategory(c.id);
+            }}
           >
             {c.name}
           </button>
         ))}
       </div>
 
-      <div className="nam-model-row">
-        <select
-          className="nam-model-select"
-          value={modelKey}
-          onChange={(e) => rigStore.setAmpModel(categoryId, e.target.value)}
-        >
-          {category.models.map((m) => (
-            <option key={m.key} value={m.key}>
-              {m.name}
-            </option>
-          ))}
-          {isNam && modelKey.endsWith(':custom') && (
-            <option value={modelKey}>{namCustomName ?? '自定义模型'}(自定义)</option>
+      {isTone3000 ? (
+        <Tone3000Panel />
+      ) : (
+        <div className="nam-model-row">
+          <select
+            className="nam-model-select"
+            value={modelKey}
+            onChange={(e) => rigStore.setAmpModel(categoryId, e.target.value)}
+          >
+            {category.models.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.name}
+              </option>
+            ))}
+            {isNam && modelKey.endsWith(':custom') && (
+              <option value={modelKey}>{namCustomName ?? '自定义模型'}(自定义)</option>
+            )}
+          </select>
+          {sweepStage !== null && <span className="nam-stage-label">档位 g{sweepStage}</span>}
+          {model?.kind === 'nam-wasm' && (
+            <label className="nam-load-btn">
+              加载 .nam…
+              <input
+                type="file"
+                accept=".nam,application/json"
+                hidden
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleNamModelFile(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
           )}
-        </select>
-        {sweepStage !== null && <span className="nam-stage-label">档位 g{sweepStage}</span>}
-        {model.kind === 'nam-wasm' && (
-          <label className="nam-load-btn">
-            加载 .nam…
-            <input
-              type="file"
-              accept=".nam,application/json"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void handleNamModelFile(f);
-                e.target.value = '';
-              }}
-            />
-          </label>
-        )}
-      </div>
+        </div>
+      )}
 
       {loadState.phase === 'loading' && (
         <div
@@ -117,9 +128,9 @@ export function AmpPanel({ showMeters, engineReady }: AmpPanelProps) {
         </div>
       )}
 
-      <div className={`amp-head amp-${category.id} ${enabled ? 'amp-on' : 'amp-off'}`}>
+      <div className={`amp-head amp-${skinId} ${enabled ? 'amp-on' : 'amp-off'}`}>
         <div className="amp-top">
-          <span className="amp-brand">{model.name}</span>
+          <span className="amp-brand">{model?.name ?? 'TONE3000 NAM'}</span>
           <span className="amp-top-right">
             {enabled && showMeters && <MiniMeter analyser={analyser} />}
             <span className={`amp-jewel ${enabled ? 'jewel-on' : ''}`} />

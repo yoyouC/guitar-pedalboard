@@ -165,3 +165,22 @@ test('preset import reports malformed and unsupported files', () => {
     /不支持的预设文件格式/,
   );
 });
+
+test('tone3000 model key survives normalize (kind-prefix rule, not static table)', () => {
+  const preset = createRigPreset('T3K', {
+    chain: [],
+    amp: {
+      categoryId: 'tone3000',
+      modelKey: 'tone3000:79103',
+      enabled: true,
+      values: { gain: 999 },
+      customName: null,
+    },
+    cab: { id: 'open1x12', enabled: true, values: { level: 0 } },
+    globals: { inputGain: 1, masterVolume: 0.5, bypass: false },
+  }, catalog);
+  assert.equal(preset.rig.amp.modelKey, 'tone3000:79103');
+  assert.equal(preset.rig.amp.categoryId, 'tone3000');
+  // 参数按 nam-wasm def 钳制(测试目录里 nam-wasm gain max=100)
+  assert.equal(preset.rig.amp.values.gain, 100);
+});
