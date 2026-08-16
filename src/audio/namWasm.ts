@@ -70,6 +70,18 @@ export interface NamWasmMetadata {
 const modelTextCache = new Map<string, Promise<string>>();
 const metadataCache = new Map<string, NamWasmMetadata>();
 
+/** Tone3000 模型 key 编解码(ADR-0007):`${prefix}${toneId}`,全仓唯一字面量来源 */
+export const TONE3000_KEY_PREFIX = 'tone3000:';
+
+export function buildTone3000Key(toneId: string): string {
+  return `${TONE3000_KEY_PREFIX}${toneId}`;
+}
+
+/** 解析 `tone3000:{toneId}` → toneId;非 tone3000 key 返回 null */
+export function parseTone3000Key(key: string): string | null {
+  return key.startsWith(TONE3000_KEY_PREFIX) ? key.slice(TONE3000_KEY_PREFIX.length) : null;
+}
+
 /**
  * NAM 模型选择(ADR-0007,评审候选 8 最小版):模型源作为数据随
  * AmpSpec/状态传递,不再经模块级全局态偷读。
@@ -161,9 +173,9 @@ export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
 export function loadModelText(source: string): Promise<string> {
   let p = modelTextCache.get(source);
   if (!p) {
-    if (source.startsWith('tone3000:')) {
+    const toneId = parseTone3000Key(source);
+    if (toneId !== null) {
       // 外部模型引用:经注册的 provider(带 OAuth Bearer)按用户身份下载
-      const toneId = source.slice('tone3000:'.length);
       p = tone3000Provider
         ? tone3000Provider(toneId)
         : Promise.reject(new Error('TONE3000 模型提供者未注册'));

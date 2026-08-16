@@ -24,6 +24,7 @@ import { getCabDef } from '../audio/cabs';
 import {
   BUNDLED_WAVENET_MODELS,
   NAM_SWEEP_PACKS,
+  buildTone3000Key,
   type NamModelSelection,
 } from '../audio/namWasm';
 import type { ShareState } from './share';
@@ -227,7 +228,7 @@ function resolveAmpModel(modelKey: string): {
       ampId: 'nam-wasm',
       ampValues: defaultAmpValues('nam-wasm'),
       namReload: true,
-      namModel: { source: `tone3000:${ref}` },
+      namModel: { source: buildTone3000Key(ref) },
     };
   }
   if (kind === 'nam-wasm-pack') {

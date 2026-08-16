@@ -1,3 +1,4 @@
+import { TONE3000_KEY_PREFIX } from '../audio/namWasm';
 export const RIG_PRESET_VERSION = 2;
 export const PRESET_EXPORT_FORMAT = 'guitar-pedalboard-presets';
 export const PRESET_EXPORT_VERSION = 1;
@@ -182,7 +183,7 @@ function normalizeAmp(rawAmp: unknown, catalog: RigPresetCatalog): RigPresetStat
   const registered = catalog.ampModels.find((model) => model.key === requestedKey);
   // tone3000: 外部模型引用(ADR-0007)——按 kind 前缀放行,不查静态表;
   // categoryId 固定 'tone3000',参数按 nam-wasm def 钳制
-  if (!registered && requestedKey.startsWith('tone3000:')) {
+  if (!registered && requestedKey.startsWith(TONE3000_KEY_PREFIX)) {
     const namDef = catalog.amps.find((amp) => amp.id === 'nam-wasm');
     if (!namDef) return fallback;
     return {

@@ -53,3 +53,41 @@ export function popReturnRig(storage: KeyValueStorage): string | null {
   if (encoded !== null) storage.removeItem(RETURN_RIG_KEY);
   return encoded;
 }
+
+export interface OAuthBootDeps {
+  client: {
+    handleCallback(callbackUrl: string): Promise<
+      { ok: true; toneId?: string } | { ok: false; error: string }
+    >;
+  };
+  storage: KeyValueStorage;
+  /** 恢复跳转前暂存的 rig(分享编码) */
+  applyShareRig(encoded: string): void;
+  /** 装载选中的 tone(setAmpModel('tone3000', buildTone3000Key(toneId))) */
+  applyTone(toneId: string): void;
+  /** 回调已处理完毕(无论成败):通知登录态订阅者刷新 */
+  onSettled(): void;
+  onError(error: string): void;
+}
+
+/**
+ * OAuth 回调着陆的完整启动编排(ADR-0007):
+ * 判定回调 → 恢复暂存 rig → 装载选中的 tone → 通知登录态。
+ * 返回是否为本流程处理;调用方(main.tsx)负责清回调 URL。
+ */
+export async function handleOAuthCallbackBoot(
+  url: string,
+  deps: OAuthBootDeps,
+): Promise<boolean> {
+  const outcome = await maybeHandleOAuthCallback(url, deps.client);
+  if (!outcome.handled) return false;
+  const stashed = popReturnRig(deps.storage);
+  if (stashed) deps.applyShareRig(stashed);
+  if (outcome.toneId) {
+    deps.applyTone(outcome.toneId);
+  } else if (outcome.error) {
+    deps.onError(outcome.error);
+  }
+  deps.onSettled();
+  return true;
+}

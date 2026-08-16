@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { rigStore, useRig } from '../state/useRig';
 import { rigToShareState } from '../state/rigStore';
+import { parseTone3000Key } from '../audio/namWasm';
 import { encodeShareState } from '../state/share';
 import {
   browseTone3000,
@@ -9,6 +10,7 @@ import {
   subscribeTone3000Auth,
   getTone3000Authenticated,
 } from '../tone3000/instance';
+import { getCachedToneInfo, putCachedToneInfo } from '../tone3000/toneInfoCache';
 import type { ToneInfo } from '../tone3000/client';
 
 /**
@@ -19,19 +21,21 @@ import type { ToneInfo } from '../tone3000/client';
 export function Tone3000Panel() {
   const authed = useSyncExternalStore(subscribeTone3000Auth, getTone3000Authenticated);
   const modelKey = useRig((s) => s.ampModelKeys[s.ampCategoryId]);
-  const toneId = modelKey?.startsWith('tone3000:') ? modelKey.slice('tone3000:'.length) : null;
+  const toneId = modelKey ? parseTone3000Key(modelKey) : null;
   const [tone, setTone] = useState<ToneInfo | null>(null);
   const [toneError, setToneError] = useState<string | null>(null);
 
-  // 当前模型元数据(作者/许可/链接);未登录时提示,恢复路径的友好降级在 #14
+  // 当前模型元数据(作者/许可/链接,ToS 强制展示):登出时回退到本地缓存
+  // (用户自己装载过的模型归属,见 toneInfoCache.ts);恢复路径的友好降级在 #14
   useEffect(() => {
-    setTone(null);
+    setTone(toneId ? getCachedToneInfo(toneId, window.localStorage) : null);
     setToneError(null);
     if (!authed || !toneId) return;
     let cancelled = false;
     tone3000
       .getTone(toneId)
       .then((info) => {
+        putCachedToneInfo(info, window.localStorage);
         if (!cancelled) setTone(info);
       })
       .catch((e: unknown) => {
