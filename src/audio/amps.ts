@@ -333,11 +333,16 @@ export const AMP_REGISTRY: EffectDefinition[] = [
  * 未选模型 = 同一 def = 复用实例不重复加载模型)。
  */
 const namDefCache = new Map<string, EffectDefinition>();
+/** 上限防御(file: 键含时间戳、tone3000: 每 tone 一键,防长期无界增长) */
+const NAM_DEF_CACHE_MAX = 32;
 
 export function getNamWasmAmpDef(model: NamModelSelection): EffectDefinition {
   const cacheKey = 'pack' in model ? `pack:${model.pack.id}` : `src:${model.source}`;
   let def = namDefCache.get(cacheKey);
   if (!def) {
+    if (namDefCache.size >= NAM_DEF_CACHE_MAX) {
+      namDefCache.delete(namDefCache.keys().next().value!);
+    }
     def = {
       id: 'nam-wasm',
       name: 'NAM WaveNet',

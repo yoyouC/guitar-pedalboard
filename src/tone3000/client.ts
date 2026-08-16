@@ -74,20 +74,20 @@ export interface Tone3000Client {
 
 // ---------- PKCE ----------
 
-function randomBase64url(bytes: number): string {
-  const buf = crypto.getRandomValues(new Uint8Array(bytes));
-  return btoa(String.fromCharCode(...buf))
+function base64url(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 }
 
+function randomBase64url(bytes: number): string {
+  return base64url(crypto.getRandomValues(new Uint8Array(bytes)));
+}
+
 async function sha256Base64url(input: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
-  return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  return base64url(new Uint8Array(digest));
 }
 
 const TOKENS_KEY = 't3k_tokens';

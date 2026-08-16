@@ -7,7 +7,7 @@
 import { createTone3000Client } from './client';
 import { setTone3000ModelTextProvider } from '../audio/namWasm';
 
-/** publishable key(官方明确浏览器可公开;申请记录见 .scratch/tone3000-provisioning.env) */
+/** publishable key(官方明确浏览器可公开;于 Tone3000 Settings → API Keys 申请) */
 export const TONE3000_CLIENT_ID = 't3k_pub_lO_hzGrdnS3IJTurOy5GCEcDQkPOajmN';
 
 export const tone3000 = createTone3000Client({
