@@ -1,0 +1,2 @@
+# WDF 黄金样本为 Float32 二进制(含 0x0A 字节,防止 git 误判为文本)
+tests/fixtures/**/*.f32 binary
