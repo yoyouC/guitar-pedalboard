@@ -7,11 +7,13 @@ import {
   createRigPreset,
   exportRigPresetsJson,
   importRigPresetsJson,
+  normalizeSnapshot,
   restoreRigPreset,
   type RigPreset,
   type RigPresetCatalog,
   type RigPresetState,
   type RestoredRigPresetState,
+  type Snapshot,
 } from './presetCodec';
 
 /** 链条中的一个效果器实例(React 状态侧) */
@@ -119,28 +121,30 @@ export function importPresetsJson(text: string): Preset[] {
   return importRigPresetsJson(text, RIG_PRESET_CATALOG);
 }
 
-/** 快照:当前完整状态的轻量快照(A/B 快速对比用) */
-export interface Snapshot {
-  chain: { effectId: string; enabled: boolean; values: Record<string, number>; post: boolean }[];
-  ampId: string;
-  ampEnabled: boolean;
-  ampValues: Record<string, number>;
-  cabId: string;
-  cabEnabled: boolean;
-  cabValues: Record<string, number>;
-}
-
 const SNAPSHOT_KEY = 'guitar-pedalboard-snapshots';
 export const SNAPSHOT_COUNT = 4;
 
+function emptySnapshotSlots(): (Snapshot | null)[] {
+  return Array(SNAPSHOT_COUNT).fill(null);
+}
+
+/**
+ * 读取快照槽位:逐槽位经 normalizeSnapshot 宽容校验(ADR-0006)——
+ * 坏槽位置 null(旧行为是裸奔进 applyRig 才 throw),槽位数截断/补齐到 SNAPSHOT_COUNT。
+ */
 export function loadSnapshots(): (Snapshot | null)[] {
   try {
     const raw = localStorage.getItem(SNAPSHOT_KEY);
-    if (!raw) return Array(SNAPSHOT_COUNT).fill(null);
+    if (!raw) return emptySnapshotSlots();
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : Array(SNAPSHOT_COUNT).fill(null);
+    if (!Array.isArray(parsed)) return emptySnapshotSlots();
+    const slots = parsed
+      .slice(0, SNAPSHOT_COUNT)
+      .map((slot): Snapshot | null => (slot === null ? null : normalizeSnapshot(slot, RIG_PRESET_CATALOG)));
+    while (slots.length < SNAPSHOT_COUNT) slots.push(null);
+    return slots;
   } catch {
-    return Array(SNAPSHOT_COUNT).fill(null);
+    return emptySnapshotSlots();
   }
 }
 

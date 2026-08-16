@@ -451,6 +451,60 @@ test('loadPreset blocks presets requiring a different custom NAM model', () => {
   assert.equal(calls.length, 0); // 引擎未被触碰
 });
 
+test('snapshot recall restores NAM model via model mechanism (modelKey round-trip)', () => {
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  store.setAmpModel('crunch', 'nam-wasm-pack:jcm800-sweep');
+  store.setAmpParam('gain', 64);
+  store.captureSnapshot(0);
+  assert.equal(store.getState().namVersion, 1);
+
+  // 切走:换成别的分类别的箱头
+  store.setAmpModel('clean', 'builtin:clean');
+  assert.equal(store.getState().ampId, 'clean');
+  assert.equal(store.getState().ampCategoryId, 'clean');
+
+  // recall:型号机制恢复 NAM 模型(修复"快照记得箱头忘了模型")
+  store.recallSnapshot(0);
+  const state = store.getState();
+  assert.equal(state.ampCategoryId, 'crunch');
+  assert.equal(state.ampModelKeys.crunch, 'nam-wasm-pack:jcm800-sweep');
+  assert.equal(state.ampId, 'nam-wasm');
+  assert.equal(state.ampValues.gain, 64);
+  assert.equal(state.namVersion, 2); // NAM 型号再次换代
+});
+
+test('legacy snapshot recall bypasses model mechanism (back-compat)', () => {
+  // 旧形状持久化数据(扁平 ampId-only):recall 保持旧行为——
+  // 应用 ampId/参数,但不触碰 ampCategoryId/ampModelKeys/namVersion
+  localStorage.setItem(
+    'guitar-pedalboard-snapshots',
+    JSON.stringify([
+      {
+        chain: [],
+        ampId: 'clean',
+        ampEnabled: true,
+        ampValues: { gain: 70 },
+        cabId: 'gb4x12',
+        cabEnabled: true,
+        cabValues: { level: -13.5 },
+      },
+    ]),
+  );
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  const before = store.getState();
+  assert.equal(before.ampCategoryId, 'crunch');
+
+  store.recallSnapshot(0);
+  const state = store.getState();
+  assert.equal(state.ampId, 'clean'); // ampId 被应用
+  assert.equal(state.ampValues.gain, 70);
+  assert.equal(state.ampCategoryId, before.ampCategoryId); // 型号簿记不动
+  assert.deepEqual(state.ampModelKeys, before.ampModelKeys);
+  assert.equal(state.namVersion, 0); // NAM 全局态不动
+});
+
 test('setNamCustomModel records the custom model without touching amp values', () => {
   const { engine } = createStubEngine();
   const store = createRigStore(engine);
