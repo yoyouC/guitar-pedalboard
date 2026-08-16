@@ -28,6 +28,7 @@ import {
   setNamWasmPack,
 } from '../audio/namWasm';
 import type { ShareState } from './share';
+import type { RigPreset, Snapshot, SnapshotAmp, SnapshotCab } from './presetCodec';
 import {
   createChainItem,
   currentRigToPreset,
@@ -38,9 +39,9 @@ import {
   savePresets,
   loadSnapshots,
   saveSnapshots,
+  RIG_PRESET_CATALOG,
+  defaultAmpModelKeys,
   type ChainItem,
-  type Preset,
-  type Snapshot,
 } from './store';
 
 /** rigStore 需要的引擎面(AudioEngine 的子集;测试用 stub 注入) */
@@ -64,11 +65,14 @@ export interface RigGlobals {
   bypass: boolean;
 }
 
+/** 默认值来自 catalog 单点(ADR-0006) */
 export const RIG_GLOBAL_DEFAULTS: RigGlobals = {
-  inputGain: 1,
-  masterVolume: 0.5,
+  inputGain: RIG_PRESET_CATALOG.defaults.inputGain,
+  masterVolume: RIG_PRESET_CATALOG.defaults.masterVolume,
   bypass: false,
 };
+
+/** 初始型号簿记来自 catalog 单点(store.ts 的 defaultAmpModelKeys) */
 
 /** rigStore 持有的全部 Rig 状态(单一事实源) */
 export interface RigStoreState {
@@ -92,26 +96,21 @@ export interface RigStoreState {
   snapshots: (Snapshot | null)[];
   /** 激活快照槽;-1 = 无 */
   activeSlot: number;
-  presets: Preset[];
+  presets: RigPreset[];
   /** 图谱重建后自增,供依赖引擎侧节点引用(电平表/背景)的组件重读 */
   graphVersion: number;
 }
 
 /**
- * applyRig 的输入:三种恢复来源(预设/快照/分享)规范化后的统一形状。
- * chain 的 uid 由来源规范化时生成;ampModel 为 null 表示不经过型号机制
- * (快照路径:ampId 为权威,不触碰 NAM 全局态与 namVersion)。
+ * applyRig 的输入:canonical Rig 表示 + uid 化 chain(ADR-0006)。
+ * 三种恢复来源(预设/快照/分享)都规范化为这个形状;amp 是快照同款 union:
+ * 型号机制分支(categoryId+modelKey)走型号机制,legacy 分支(legacyAmpId)
+ * 保持旧快照行为——不触碰 NAM 全局态与 namVersion。
  */
 export interface ApplyRigState {
   chain: ChainItem[];
-  ampModel: { categoryId: string; modelKey: string } | null;
-  /** 仅快照路径(ampModel 为 null)需要提供;型号路径的 ampId 由 modelKey 推导 */
-  ampId?: string;
-  ampEnabled: boolean;
-  ampValues: Record<string, number>;
-  cabId: string;
-  cabEnabled: boolean;
-  cabValues: Record<string, number>;
+  amp: SnapshotAmp;
+  cab: SnapshotCab;
   globals: RigGlobals;
 }
 
@@ -228,61 +227,52 @@ function resolveAmpModel(modelKey: string): {
 }
 
 /** 预设 → applyRig 输入(chain 重新生成 uid;箱头走型号机制) */
-export function rigFromPreset(preset: Preset): ApplyRigState {
+export function rigFromPreset(preset: RigPreset): ApplyRigState {
   const rig = presetToRig(preset);
   return {
     chain: rig.chain,
-    ampModel: { categoryId: rig.amp.categoryId, modelKey: rig.amp.modelKey },
-    ampEnabled: rig.amp.enabled,
-    ampValues: rig.amp.values,
-    cabId: rig.cab.id,
-    cabEnabled: rig.cab.enabled,
-    cabValues: rig.cab.values,
-    globals: {
-      inputGain: rig.globals.inputGain,
-      masterVolume: rig.globals.masterVolume,
-      bypass: rig.globals.bypass,
+    amp: {
+      categoryId: rig.amp.categoryId,
+      modelKey: rig.amp.modelKey,
+      enabled: rig.amp.enabled,
+      values: rig.amp.values,
     },
+    cab: rig.cab,
+    globals: rig.globals,
   };
 }
 
-/** 快照 → applyRig 输入(快照不含型号与全局参数:型号机制绕过,全局由当前值回填) */
+/** 快照 → applyRig 输入(薄派生:chain 补 uid;amp 分支原样透传;globals 由当前值回填) */
 export function rigFromSnapshot(
   snap: Snapshot,
   globals: RigGlobals = RIG_GLOBAL_DEFAULTS,
 ): ApplyRigState {
   return {
     chain: snap.chain.map((item) => ({
+      ...item,
       uid: crypto.randomUUID(),
-      effectId: item.effectId,
-      enabled: item.enabled,
       values: { ...item.values },
-      post: item.post,
     })),
-    ampModel: null,
-    ampId: snap.ampId,
-    ampEnabled: snap.ampEnabled,
-    ampValues: { ...snap.ampValues },
-    cabId: snap.cabId,
-    cabEnabled: snap.cabEnabled,
-    cabValues: { ...snap.cabValues },
+    amp: { ...snap.amp, values: { ...snap.amp.values } },
+    cab: { ...snap.cab, values: { ...snap.cab.values } },
     globals,
   };
 }
 
-/** 分享 → applyRig 输入(分享不含全局参数,由当前值回填) */
+/** 分享 → applyRig 输入(薄派生:扁平字段收进 canonical 嵌套形状;globals 由当前值回填) */
 export function rigFromShare(
   share: ShareState,
   globals: RigGlobals = RIG_GLOBAL_DEFAULTS,
 ): ApplyRigState {
   return {
     chain: share.chain,
-    ampModel: { categoryId: share.ampCategoryId, modelKey: share.ampModelKey },
-    ampEnabled: share.ampEnabled,
-    ampValues: share.ampValues,
-    cabId: share.cabId,
-    cabEnabled: share.cabEnabled,
-    cabValues: share.cabValues,
+    amp: {
+      categoryId: share.ampCategoryId,
+      modelKey: share.ampModelKey,
+      enabled: share.ampEnabled,
+      values: share.ampValues,
+    },
+    cab: { id: share.cabId, enabled: share.cabEnabled, values: share.cabValues },
     globals,
   };
 }
@@ -301,8 +291,8 @@ export function rigToShareState(state: RigStoreState): ShareState {
   };
 }
 
-/** 当前状态 → 快照对象(不含全局参数) */
-function captureCurrentSnapshot(state: RigStoreState): Snapshot {
+/** 正向派生:当前状态 → 快照(= rig − globals;箱头记型号机制引用,见 ADR-0006) */
+export function toSnapshot(state: RigStoreState): Snapshot {
   return {
     chain: state.chain.map(({ effectId, enabled, values, post }) => ({
       effectId,
@@ -310,12 +300,17 @@ function captureCurrentSnapshot(state: RigStoreState): Snapshot {
       values: { ...values },
       post,
     })),
-    ampId: state.ampId,
-    ampEnabled: state.ampEnabled,
-    ampValues: { ...state.ampValues },
-    cabId: state.cabId,
-    cabEnabled: state.cabEnabled,
-    cabValues: { ...state.cabValues },
+    amp: {
+      categoryId: state.ampCategoryId,
+      modelKey: state.ampModelKeys[state.ampCategoryId],
+      enabled: state.ampEnabled,
+      values: { ...state.ampValues },
+    },
+    cab: {
+      id: state.cabId,
+      enabled: state.cabEnabled,
+      values: { ...state.cabValues },
+    },
   };
 }
 
@@ -324,7 +319,7 @@ export function isSnapshotDirty(state: RigStoreState, slot: number): boolean {
   if (slot < 0 || slot !== state.activeSlot) return false;
   const snap = state.snapshots[slot];
   if (!snap) return false;
-  return JSON.stringify(captureCurrentSnapshot(state)) !== JSON.stringify(snap);
+  return JSON.stringify(toSnapshot(state)) !== JSON.stringify(snap);
 }
 
 export interface RigStoreInit {
@@ -333,21 +328,20 @@ export interface RigStoreInit {
 }
 
 export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore {
+  // 初始箱头/箱体来自 catalog 默认型号(ADR-0006 单点)
+  const defaultModelKey = RIG_PRESET_CATALOG.defaults.ampModelKey;
+  const defaultModel = RIG_PRESET_CATALOG.ampModels.find((m) => m.key === defaultModelKey);
+  const initialAmpId = ampIdForModelKey(defaultModelKey);
   let state: RigStoreState = {
     chain: defaultChain(),
-    ampCategoryId: 'crunch',
-    ampModelKeys: {
-      clean: 'builtin:clean',
-      chime: 'builtin:chime',
-      crunch: 'builtin:crunch',
-      recto: 'builtin:recto',
-    },
-    ampId: 'crunch',
+    ampCategoryId: defaultModel?.categoryId ?? RIG_PRESET_CATALOG.ampCategoryIds[0],
+    ampModelKeys: defaultAmpModelKeys(),
+    ampId: initialAmpId,
     ampEnabled: true,
-    ampValues: defaultAmpValues('crunch'),
-    cabId: 'gb4x12',
+    ampValues: defaultAmpValues(initialAmpId),
+    cabId: RIG_PRESET_CATALOG.defaults.cabId,
     cabEnabled: true,
-    cabValues: defaultCabValues('gb4x12'),
+    cabValues: defaultCabValues(RIG_PRESET_CATALOG.defaults.cabId),
     namCustomName: null,
     namVersion: 0,
     inputGain: RIG_GLOBAL_DEFAULTS.inputGain,
@@ -570,25 +564,30 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
     applyRig(rig) {
       let { namVersion } = state;
-      if (rig.ampModel) {
-        const resolved = resolveAmpModel(rig.ampModel.modelKey);
+      // 型号机制分支:解析模型源并换代;legacy 分支(旧快照):不动型号簿记与 NAM 全局态
+      const ampRef = rig.amp;
+      let ampId: string;
+      let { ampCategoryId, ampModelKeys } = state;
+      if ('modelKey' in ampRef) {
+        const resolved = resolveAmpModel(ampRef.modelKey);
         if (resolved.namReload) namVersion += 1;
+        ampId = ampIdForModelKey(ampRef.modelKey);
+        ampCategoryId = ampRef.categoryId;
+        ampModelKeys = { ...state.ampModelKeys, [ampRef.categoryId]: ampRef.modelKey };
+      } else {
+        ampId = ampRef.legacyAmpId;
       }
       state = {
         ...state,
         chain: rig.chain,
-        ampCategoryId: rig.ampModel?.categoryId ?? state.ampCategoryId,
-        ampModelKeys: rig.ampModel
-          ? { ...state.ampModelKeys, [rig.ampModel.categoryId]: rig.ampModel.modelKey }
-          : state.ampModelKeys,
-        ampId: rig.ampModel
-          ? ampIdForModelKey(rig.ampModel.modelKey)
-          : (rig.ampId ?? state.ampId),
-        ampEnabled: rig.ampEnabled,
-        ampValues: rig.ampValues,
-        cabId: rig.cabId,
-        cabEnabled: rig.cabEnabled,
-        cabValues: rig.cabValues,
+        ampCategoryId,
+        ampModelKeys,
+        ampId,
+        ampEnabled: rig.amp.enabled,
+        ampValues: rig.amp.values,
+        cabId: rig.cab.id,
+        cabEnabled: rig.cab.enabled,
+        cabValues: rig.cab.values,
         inputGain: rig.globals.inputGain,
         masterVolume: rig.globals.masterVolume,
         globalBypass: rig.globals.bypass,
@@ -604,7 +603,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
     captureSnapshot(slot) {
       const snapshots = [...state.snapshots];
-      snapshots[slot] = captureCurrentSnapshot(state);
+      snapshots[slot] = toSnapshot(state);
       saveSnapshots(snapshots);
       state = { ...state, snapshots, activeSlot: slot };
       emit();

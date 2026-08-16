@@ -6,6 +6,7 @@ import {
   rigFromShare,
   rigFromSnapshot,
   rigToShareState,
+  toSnapshot,
   isSnapshotDirty,
   type RigEngine,
   type RigStoreState,
@@ -99,6 +100,24 @@ test.beforeEach(() => {
 });
 
 // ---------- 参数 verb:状态 + 引擎双写,不触发重建 ----------
+
+test('initial state aligns with catalog defaults (ADR-0006 单点)', () => {
+  const { engine } = createStubEngine();
+  const state = createRigStore(engine).getState();
+  // 全局参数与箱体来自 catalog.defaults
+  assert.equal(state.inputGain, 1);
+  assert.equal(state.masterVolume, 0.5);
+  assert.equal(state.globalBypass, false);
+  assert.equal(state.cabId, 'gb4x12');
+  // 默认型号(builtin:crunch)推导初始箱头分类与 def
+  assert.equal(state.ampCategoryId, 'crunch');
+  assert.equal(state.ampId, 'crunch');
+  // 每个箱头分类记住该类的第一个型号
+  assert.equal(state.ampModelKeys.clean, 'builtin:clean');
+  assert.equal(state.ampModelKeys.chime, 'builtin:chime');
+  assert.equal(state.ampModelKeys.crunch, 'builtin:crunch');
+  assert.equal(state.ampModelKeys.recto, 'builtin:recto');
+});
 
 test('param verbs update state and engine without structure rebuild', () => {
   const { engine, calls } = createStubEngine();
@@ -334,6 +353,44 @@ test('createRigStore applies initialRig at construction (factory default share p
 
 // ---------- 快照:capture/recall/clear + dirty 派生 ----------
 
+test('derivation: toSnapshot/rigToShareState are canonical minus the agreed fields', () => {
+  // 同一状态:savePreset(canonical 全量)与 toSnapshot(− globals)、
+  // rigToShareState(− globals − customName)的 chain/amp/cab 完全一致——
+  // 派生是显式减法,不是各自维护的形状(ADR-0006)
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  store.addPedal('chorus');
+  store.setAmpModel('crunch', 'nam-wasm-pack:jcm800-sweep');
+  store.setAmpParam('gain', 66);
+  store.savePreset('P');
+  const state = store.getState();
+  const preset = state.presets.find((p) => p.name === 'P')!;
+
+  // snapshot = preset.rig − globals(customName 不在快照形状里,型号引用一致)
+  const snap = toSnapshot(state);
+  assert.deepEqual(snap.chain, preset.rig.chain);
+  assert.deepEqual(snap.amp, {
+    categoryId: preset.rig.amp.categoryId,
+    modelKey: preset.rig.amp.modelKey,
+    enabled: preset.rig.amp.enabled,
+    values: preset.rig.amp.values,
+  });
+  assert.deepEqual(snap.cab, preset.rig.cab);
+  assert.equal('globals' in snap, false);
+
+  // share = preset.rig − globals − customName(扁平化是编码层的形状,不是第三套知识)
+  const share = rigToShareState(state);
+  assert.deepEqual(
+    share.chain.map(({ effectId, enabled, values, post }) => ({ effectId, enabled, values, post })),
+    preset.rig.chain,
+  );
+  assert.equal(share.ampCategoryId, preset.rig.amp.categoryId);
+  assert.equal(share.ampModelKey, preset.rig.amp.modelKey);
+  assert.deepEqual(share.ampValues, preset.rig.amp.values);
+  assert.equal(share.cabId, preset.rig.cab.id);
+  assert.deepEqual(share.cabValues, preset.rig.cab.values);
+});
+
 test('snapshot capture/recall/clear with derived dirty flag', () => {
   const { engine, calls } = createStubEngine();
   const store = createRigStore(engine);
@@ -449,6 +506,60 @@ test('loadPreset blocks presets requiring a different custom NAM model', () => {
   assert.match(result.ok ? '' : (result.message ?? ''), /MyCapture/);
   assert.equal(store.getState().chain, before); // 状态未被触碰
   assert.equal(calls.length, 0); // 引擎未被触碰
+});
+
+test('snapshot recall restores NAM model via model mechanism (modelKey round-trip)', () => {
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  store.setAmpModel('crunch', 'nam-wasm-pack:jcm800-sweep');
+  store.setAmpParam('gain', 64);
+  store.captureSnapshot(0);
+  assert.equal(store.getState().namVersion, 1);
+
+  // 切走:换成别的分类别的箱头
+  store.setAmpModel('clean', 'builtin:clean');
+  assert.equal(store.getState().ampId, 'clean');
+  assert.equal(store.getState().ampCategoryId, 'clean');
+
+  // recall:型号机制恢复 NAM 模型(修复"快照记得箱头忘了模型")
+  store.recallSnapshot(0);
+  const state = store.getState();
+  assert.equal(state.ampCategoryId, 'crunch');
+  assert.equal(state.ampModelKeys.crunch, 'nam-wasm-pack:jcm800-sweep');
+  assert.equal(state.ampId, 'nam-wasm');
+  assert.equal(state.ampValues.gain, 64);
+  assert.equal(state.namVersion, 2); // NAM 型号再次换代
+});
+
+test('legacy snapshot recall bypasses model mechanism (back-compat)', () => {
+  // 旧形状持久化数据(扁平 ampId-only):recall 保持旧行为——
+  // 应用 ampId/参数,但不触碰 ampCategoryId/ampModelKeys/namVersion
+  localStorage.setItem(
+    'guitar-pedalboard-snapshots',
+    JSON.stringify([
+      {
+        chain: [],
+        ampId: 'clean',
+        ampEnabled: true,
+        ampValues: { gain: 70 },
+        cabId: 'gb4x12',
+        cabEnabled: true,
+        cabValues: { level: -13.5 },
+      },
+    ]),
+  );
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  const before = store.getState();
+  assert.equal(before.ampCategoryId, 'crunch');
+
+  store.recallSnapshot(0);
+  const state = store.getState();
+  assert.equal(state.ampId, 'clean'); // ampId 被应用
+  assert.equal(state.ampValues.gain, 70);
+  assert.equal(state.ampCategoryId, before.ampCategoryId); // 型号簿记不动
+  assert.deepEqual(state.ampModelKeys, before.ampModelKeys);
+  assert.equal(state.namVersion, 0); // NAM 全局态不动
 });
 
 test('setNamCustomModel records the custom model without touching amp values', () => {

@@ -76,6 +76,35 @@ export interface RestoredRigPresetState extends Omit<RigPresetState, 'chain'> {
   chain: Array<PresetChainItem & { uid: string }>;
 }
 
+/**
+ * 快照的箱头引用(ADR-0006):
+ * - 型号机制分支:categoryId + modelKey,recall 走型号机制(2026-08 起的新形状);
+ * - legacy 分支:旧持久化数据只有扁平 ampId,recall 保持旧行为(绕过型号机制)。
+ */
+export type SnapshotAmpRef =
+  | { categoryId: string; modelKey: string }
+  | { legacyAmpId: string };
+
+/** 快照/恢复共用的箱头状态(引用 + 开关 + 参数) */
+export type SnapshotAmp = SnapshotAmpRef & {
+  enabled: boolean;
+  values: Record<string, number>;
+};
+
+/** 快照/恢复共用的箱体状态 */
+export interface SnapshotCab {
+  id: string;
+  enabled: boolean;
+  values: Record<string, number>;
+}
+
+/** 快照:canonical Rig 表示减去 globals 的派生(ADR-0006) */
+export interface Snapshot {
+  chain: PresetChainItem[];
+  amp: SnapshotAmp;
+  cab: SnapshotCab;
+}
+
 interface PresetExportEnvelope {
   format: typeof PRESET_EXPORT_FORMAT;
   version: typeof PRESET_EXPORT_VERSION;
@@ -198,7 +227,8 @@ function normalizeGlobals(
   };
 }
 
-function normalizeRig(rawRig: unknown, catalog: RigPresetCatalog): RigPresetState {
+/** 用 catalog 规范化任意来源的 rig 输入(预设/分享/快照共用唯一的 normalize 实现) */
+export function normalizeRig(rawRig: unknown, catalog: RigPresetCatalog): RigPresetState {
   const source = isRecord(rawRig) ? rawRig : {};
   return {
     chain: normalizeChain(source.chain, catalog),
@@ -206,6 +236,53 @@ function normalizeRig(rawRig: unknown, catalog: RigPresetCatalog): RigPresetStat
     cab: normalizeCab(source.cab, catalog),
     globals: normalizeGlobals(source.globals, catalog),
   };
+}
+
+/**
+ * 宽容解析任意来源的快照数据(ADR-0006):
+ * - 新形状(amp 为 record 且带 modelKey)→ 经 catalog normalize 的型号机制分支;
+ *   未知型号回退目录默认箱头(槽位存活);
+ * - 旧形状(扁平 ampId)→ legacy 分支;未知 ampId 视为坏槽位(返回 null,
+ *   旧行为是裸奔进 getAmpDef throw);
+ * - 其余(非对象、缺链、无箱头引用)→ null,由加载方置空槽位。
+ */
+export function normalizeSnapshot(value: unknown, catalog: RigPresetCatalog): Snapshot | null {
+  if (!isRecord(value)) return null;
+  if (!Array.isArray(value.chain)) return null;
+  const chain = normalizeChain(value.chain, catalog);
+  const cab = normalizeCab(
+    isRecord(value.cab)
+      ? value.cab
+      : { id: value.cabId, enabled: value.cabEnabled, values: value.cabValues },
+    catalog,
+  );
+  if (isRecord(value.amp) && typeof value.amp.modelKey === 'string') {
+    const amp = normalizeAmp({ ...value.amp, customName: null }, catalog);
+    return {
+      chain,
+      amp: {
+        categoryId: amp.categoryId,
+        modelKey: amp.modelKey,
+        enabled: amp.enabled,
+        values: amp.values,
+      },
+      cab,
+    };
+  }
+  if (typeof value.ampId === 'string') {
+    const definition = catalog.amps.find((amp) => amp.id === value.ampId);
+    if (!definition) return null;
+    return {
+      chain,
+      amp: {
+        legacyAmpId: definition.id,
+        enabled: typeof value.ampEnabled === 'boolean' ? value.ampEnabled : true,
+        values: normalizeValues(definition, value.ampValues),
+      },
+      cab,
+    };
+  }
+  return null;
 }
 
 function migrateLegacyPreset(
