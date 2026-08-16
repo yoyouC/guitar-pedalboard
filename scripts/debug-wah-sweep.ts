@@ -4,7 +4,7 @@
  *
  * 用法: npx tsx scripts/debug-wah-sweep.ts
  */
-import { CrybabyStage } from '../src/audio/wdf/crybabyStage.ts';
+import { CrybabyStage } from '../src/audio/wdf/crybabyStage.dsp.js';
 
 const FS = 48000;
 const SECONDS = 20;
@@ -67,7 +67,7 @@ function runResonator(): void {
 // ---------- 2) WDF Crybaby(直接跑 crybabyStage,4x 过采样内部率) ----------
 function runWdf(): void {
   const OS = 4;
-  const stage = new CrybabyStage({ fs: FS * OS });
+  const stage = new CrybabyStage(FS * OS);
   let nanAt = -1, maxAbs = 0, zeroRun = 0, maxZeroRun = 0;
   let lastLog = 0;
   for (let i = 0; i < N; i++) {
@@ -102,7 +102,7 @@ function runWdf(): void {
 // ---------- 3) WDF 恶劣工况:热信号(类过载后方波 ±2V)+ 位置随机跳变 ----------
 function runWdfHarsh(): void {
   const OS = 4;
-  const stage = new CrybabyStage({ fs: FS * OS });
+  const stage = new CrybabyStage(FS * OS);
   let pos = 0.5;
   let nanAt = -1, maxAbs = 0;
   let constRun = 0, maxConstRun = 0;

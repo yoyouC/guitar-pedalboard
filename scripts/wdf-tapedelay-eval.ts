@@ -9,7 +9,7 @@ import {
   TapeDelayEngine,
   TAPE_WOW_HZ,
   TAPE_FLUTTER_HZ,
-} from '../src/audio/wdf/tapeDelay.ts';
+} from '../src/audio/wdf/tapeDelay.dsp.js';
 
 const FS = 48000;
 const SETTLE = Math.ceil(0.5 * FS); // 建立期样本数(TIME 平滑/延迟线填充)

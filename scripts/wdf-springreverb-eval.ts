@@ -8,7 +8,7 @@
  * - L2 行为:衰减包络指数平滑无突变、无离散回声重复;余音随时间变暗;
  *   DWELL 增大弥散;TONE 控制高频阻尼;MIX 干湿比
  */
-import { SpringReverb } from '../src/audio/wdf/springReverb.ts';
+import { SpringReverb } from '../src/audio/wdf/springReverb.dsp.js';
 
 const FS = 48000;
 

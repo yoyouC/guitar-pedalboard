@@ -23,7 +23,7 @@
 
 - **三极管(12AX7 / 6V6 / EL34 近似)**:Koren 静态模型
   `Ip = E1^Ex / Kg`,`E1 = (Vpk/Kp)·softplus(Kp·(1/mu + Vgk/√(Kvb+Vpk²)))`
-  参数(mu/Ex/Kg/Kp/Kvb)按型号查表(`src/audio/wdf/triode.ts`)
+  参数(mu/Ex/Kg/Kp/Kvb)按型号查表(`src/audio/wdf/triode.dsp.js`)
 - **栅流钳位**:二极管指数模型 `ig = Is·(e^(vgk/nVt) - 1)`,
   **隐式内嵌 Newton**(见 §4.4),源内阻 Rs 分压产生钳位与 sag
 - **二极管钳位(TS808)**:反并联 1N4148 对 `Id = 2·Is·sinh(Vd/(n·Vt))`
@@ -153,18 +153,27 @@ spice 参考电路同样出现,治理用经典疗法:耦合电容 22nF→4.7nF
 
 ## 5. 目录结构
 
+自 issue #7(ADR-0003)起,WDF DSP 单一来源为纯 JS + JSDoc 的 `*.dsp.js`
+(与 worklet 同目录):worklet 经 Vite `?raw` 取源码字符串、由
+`buildProcessorSource`(`src/audio/workletLoader.ts`)剥去 ESM 语法后与
+wrapper 模板(parameterDescriptors / Processor 子类 / registerProcessor)
+拼装进 Blob;eval 脚本与测试直接 import 同一文件——验证的代码 = 发声的代码。
+迁移前后音色零变化由 `tests/wdf-golden.test.ts`(黄金样本逐位断言)保证;
+逐对漂移审计见 `docs/wdf-drift-audit.md`。
+
 ```
 src/audio/wdf/
-├── triode.ts          # 共阴极三极管级(TS 参考实现,Node 可测)
-├── ac30Core.ts        # AC30 核心:EL84 参数 + 稳健三极管级(二分栅流钳位+板极负载)
-│                      #   + 阴极跟随器(栅漏偏置)+ top-boost 音色 + 变压器/临场峰
-├── ac30Worklet.ts     # WDF AC30 处理器(IIFE 内联,音色栈在 worklet 内)
-├── ac30AmpDef.ts      # wdfAc30Def():箱头定义(id 'wdfac30',注册由主代理收口)
-├── diodeClipper.ts    # TS808 运放+二极管对 WDF 级
-├── ratDistortion.ts   # RAT 失真核心(增益级+摆率 LP+二极管硬削波/FILTER 联立 Newton)
-├── tapeDelay.ts       # 磁带延迟核心(EP-3 风格:调制延迟线+环内损耗/软削波,Node 可测)
-├── resample.ts        # 4x 多相升采样 + 48 阶 FIR 降采样
-├── champWorklet.ts    # WDF Champ 处理器(IIFE 内联)
+├── triode.dsp.js      # 共阴极三极管级(标准 TriodeStage + AC30 二分变体 WdfTriodeStage)
+├── resample.dsp.js    # 4x 多相升采样 + 48 抽头 FIR 降采样(共享核)
+├── ac30Core.dsp.js    # AC30 核心:EL84 参数 + 阴极跟随器(栅漏偏置)+ top-boost 音色
+│                      #   + 变压器/临场峰 + WdfAc30Engine
+├── champ.dsp.js / bogner.dsp.js        # Champ/Bogner 链路引擎
+├── twinStages.dsp.js / jc120Core.dsp.js # Twin/JC120 级与链路引擎
+├── diodeClipper.dsp.js # TS808 运放+二极管对 WDF 级 + TsClipperStage + WdfTs808Engine
+├── ratDistortion.dsp.js # RAT 失真核心(增益级+摆率 LP+二极管硬削波/FILTER 联立 Newton)
+├── tapeDelay.dsp.js   # 磁带延迟核心(EP-3 风格:调制延迟线+环内损耗/软削波)
+├── …(每款单块/箱头一个 *.dsp.js;回归由 tests/wdf-golden.test.ts 覆盖)
+├── champWorklet.ts    # WDF Champ 处理器(?raw 装配 + wrapper)
 ├── bognerWorklet.ts   # WDF Bogner 处理器
 ├── ratWorklet.ts      # RAT WDF 处理器
 ├── tapedelayWorklet.ts # 磁带延迟处理器
@@ -176,12 +185,9 @@ scripts/
 ├── wdf-rat-eval.ts    # RAT L0~L3
 ├── wdf-tapedelay-eval.ts # 磁带延迟 L0~L3(时间精度/饱和 THD/wow 解调/高频衰减/自激有界)
 ├── wdf-ac30-eval.ts   # AC30 L0~L3(含清音余量/边缘压缩两区间量化)
-├── wdf-ac30-worklet-parity.ts   # AC30 worklet 内联 vs 核心链样本级一致性
 ├── wdf-ac30-spice-compare.ts    # AC30 L4
 ├── wdf-rat-spice-compare.ts     # RAT L4
+├── wdf-golden-record.ts         # 黄金样本录制(重录基线用)
 ├── wdf-bogner-spice-compare.ts  # Bogner L4 多档
 └── spice/             # ngspice 参考网表(含 ac30.cir:CF 偏置 + 串联 RLC 临场峰)
 ```
-
-worklet 内联 JS 与 `triode.ts`/`resample.ts` 的 TS 参考实现保持逻辑一致——
-**改动必须两边同步**(worklet 无法 import,故内联)。

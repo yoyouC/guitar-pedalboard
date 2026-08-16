@@ -1,7 +1,7 @@
 * Pro Co RAT 参考电路(L4 评测用)
 * ElectroSmash 拓扑:可变增益 LM308(1.5kHz 反馈高通 + 5.3kHz 摆率低通)
 * → R5(1k)+ 1N914 反并联对地硬削波 → FILTER 可变低通 → 输出
-* 与 src/audio/wdf/ratDistortion.ts 逐节点同构:drive=0.5(Rdist=50k),
+* 与 src/audio/wdf/ratDistortion.dsp.js 逐节点同构:drive=0.5(Rdist=50k),
 * filter=35(fc=7338Hz → R6+Rpot=6572Ω)。输入 50mV/1kHz 余弦。
 * 运行: ngspice -b rat.cir
 

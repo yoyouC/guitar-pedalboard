@@ -4,8 +4,8 @@
  * 输出 RMSE / 峰值误差 / 频谱距离。
  */
 import { execFileSync } from 'node:child_process';
-import { TsClipperStage } from '../src/audio/wdf/diodeClipper.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { TsClipperStage } from '../src/audio/wdf/diodeClipper.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -36,7 +36,7 @@ if (spiceOut.length < 4096) {
 const N = Math.min(8192, spiceOut.length);
 
 // ---------- 2) WDF 链(drive=0.5, tone 中性=50 → 高架 0dB 平坦) ----------
-const clipper = new TsClipperStage({ fs: FS });
+const clipper = new TsClipperStage(FS);
 clipper.setDrive(0.5);
 const fir = makeAntiAliasFIR();
 const up = new Upsampler4x(fir);

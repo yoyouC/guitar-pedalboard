@@ -5,8 +5,8 @@
  * 用法: node scripts/wdf-fuzzface-spice-compare.ts
  */
 import { execFileSync } from 'node:child_process';
-import { FuzzFaceStage } from '../src/audio/wdf/fuzzFaceStage.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { FuzzFaceStage } from '../src/audio/wdf/fuzzFaceStage.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -47,7 +47,7 @@ if (spiceOut.length < 4096) {
 const N = Math.min(8192, spiceOut.length);
 
 // ---------- 2) WDF 链(fuzz=0.5,与 pedal 同构:升采样→放大级→降采样) ----------
-const stage = new FuzzFaceStage({ fs: FS });
+const stage = new FuzzFaceStage(FS);
 stage.setFuzz(0.5);
 const fir = makeAntiAliasFIR();
 const up = new Upsampler4x(fir);

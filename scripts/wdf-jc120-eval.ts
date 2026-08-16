@@ -16,13 +16,13 @@ import {
   Jc120Chorus,
   jc120Drive,
   jc120Nonlin,
-} from '../src/audio/wdf/jc120Core.ts';
+} from '../src/audio/wdf/jc120Core.dsp.js';
 import {
   makeAntiAliasFIR,
   Upsampler4x,
   Decimator4x,
   OS_FACTOR,
-} from '../src/audio/wdf/resample.ts';
+} from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;

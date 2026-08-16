@@ -16,8 +16,10 @@
  *      (DAMP=0 各频带 RT60 一致 ±12%;DAMP=100 时 8kHz RT60 < 0.65×1kHz;随 DAMP 单调)
  *    - 立体声 variant 0/1 去相关:归一化互相关 < 0.2
  */
-import { readFileSync } from 'node:fs';
-import { PlateReverb } from '../src/audio/wdf/plateReverb.ts';
+import { fileURLToPath } from 'node:url';
+import { PlateReverb } from '../src/audio/wdf/plateReverb.dsp.js';
+import { buildProcessorSource } from '../src/audio/workletLoader.ts';
+import { extractAssembledProcessor } from '../tests/helpers/wdf-golden.ts';
 
 const FS = 48000;
 
@@ -30,7 +32,7 @@ interface ReverbParams {
 }
 
 function makeReverb(p: ReverbParams, fs: number): PlateReverb {
-  const r = new PlateReverb({ fs, variant: p.variant ?? 0 });
+  const r = new PlateReverb(fs, p.variant ?? 0);
   r.setTime(p.time ?? 2.5);
   r.setDamp(p.damp ?? 0.4);
   r.setPreDelayMs(p.preDelay ?? 0);
@@ -249,20 +251,13 @@ console.log('L0 数值健康');
   }
   console.log(`  · 湿声 IR 参考(TIME=2.5s): peak=${peak.toFixed(3)} energy=${energy.toFixed(2)}`);
 
-  // worklet 内联 JS 与 TS 参考实现逐样本一致(防止两边漂移,见 docs/wdf-whitebox-process.md §5)
+  // worklet ?raw 装配串与 dsp.js 参考逐样本一致(ADR-0003 后两侧同源于
+  // plateReverb.dsp.js,此处验证装配/wrapper 路径无漂移,见 docs/wdf-whitebox-process.md §5)
   {
-    const src = readFileSync(new URL('../src/audio/wdf/plateWorklet.ts', import.meta.url), 'utf8');
-    const body = src.match(/const processorSource = `([\s\S]*?)`;/)?.[1];
-    const registered: Record<string, new () => { process(i: Float32Array[][], o: Float32Array[][], p: Record<string, number[]>): boolean }> = {};
-    class MockAWP {}
-    new Function('sampleRate', 'AudioWorkletProcessor', 'registerProcessor', `${body}`)(
-      FS,
-      MockAWP,
-      (name: string, cls: never) => {
-        registered[name] = cls;
-      },
+    const { ctor: Proc } = extractAssembledProcessor(
+      fileURLToPath(new URL('../src/audio/wdf/plateWorklet.ts', import.meta.url)),
+      buildProcessorSource,
     );
-    const Proc = registered['plate-reverb'];
     const proc = new Proc();
     const ref = makeReverb({ time: 2.5, damp: 0.4, preDelay: 10, mix: 1, variant: 0 }, FS);
     const params = { time: [2.5], damp: [40], preDelay: [10], mix: [100] };
@@ -278,7 +273,7 @@ console.log('L0 数值健康');
         maxDiff = Math.max(maxDiff, Math.abs(out[0][i] - r));
       }
     }
-    check('worklet 内联 JS 与 TS 逐样本一致', maxDiff < 1e-7, `maxDiff=${maxDiff.toExponential(1)}(100 块)`);
+    check('worklet 装配串与 dsp.js 逐样本一致', maxDiff < 1e-7, `maxDiff=${maxDiff.toExponential(1)}(100 块)`);
   }
 }
 

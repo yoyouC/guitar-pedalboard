@@ -6,7 +6,7 @@
  * 每次重复多过一对低通极点(逐级变暗)、轻微本底噪声、慢速调制(重复音 vibrato)。
  * 全部为时域测量(峰值/包络/能量比),不涉及 DFT 泄漏问题。
  */
-import { BbdAnalogDelay } from '../src/audio/wdf/analogDelay.ts';
+import { BbdAnalogDelay } from '../src/audio/wdf/analogDelay.dsp.js';
 
 const BASE = 48000;
 
@@ -18,7 +18,7 @@ function check(name: string, ok: boolean, detail: string) {
 
 /** 构造并按 ≥0.5s 建立期静置(§4.2:TIME 摆率/滤波器状态全部到位) */
 function makeDelay(p: { time?: number; feedback?: number; tone?: number; mod?: number; mix?: number }): BbdAnalogDelay {
-  const d = new BbdAnalogDelay({ fs: BASE });
+  const d = new BbdAnalogDelay(BASE);
   if (p.time !== undefined) d.setTime(p.time);
   if (p.feedback !== undefined) d.setFeedback(p.feedback);
   if (p.tone !== undefined) d.setTone(p.tone);

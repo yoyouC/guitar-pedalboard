@@ -1,5 +1,5 @@
 WDF JC-120 参考电路(L4 评测:全固态清音链,无电子管)
-* 与 src/audio/wdf/jc120Core.ts 同构:30Hz 输入 HP → 运放增益级
+* 与 src/audio/wdf/jc120Core.dsp.js 同构:30Hz 输入 HP → 运放增益级
 * (15V 轨 tanh 软饱和)→ 后级 x2(25V 深度 tanh)→ 扬声器 50Hz HP + 8kHz LP。
 * 首行为标题。tanh 为平滑函数(不用 max() 硬折线,§4.5)。
 * 级间单位增益缓冲隔离,消除集总滤波器负载效应(§4.5)。

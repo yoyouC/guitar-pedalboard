@@ -1,0 +1,183 @@
+{
+  "fs": 48000,
+  "n": 4096,
+  "block": 128,
+  "signals": [
+    "impulse",
+    "sweep",
+    "noise"
+  ],
+  "note": "迁移前从内联 processorSource 录制(scripts/wdf-golden-record.ts);参数为 descriptor 默认值",
+  "effects": {
+    "champ": {
+      "worklet": "src/audio/wdf/champWorklet.ts",
+      "params": {
+        "gain": 50,
+        "master": 0.5
+      }
+    },
+    "bogner": {
+      "worklet": "src/audio/wdf/bognerWorklet.ts",
+      "params": {
+        "gain": 55
+      }
+    },
+    "twin": {
+      "worklet": "src/audio/wdf/twinWorklet.ts",
+      "params": {
+        "gain": 40
+      }
+    },
+    "ac30": {
+      "worklet": "src/audio/wdf/ac30Worklet.ts",
+      "params": {
+        "gain": 30,
+        "bass": 50,
+        "mid": 55,
+        "treble": 60,
+        "presence": 55
+      }
+    },
+    "jc120": {
+      "worklet": "src/audio/wdf/jc120Worklet.ts",
+      "params": {
+        "gain": 40,
+        "chorus": 0
+      }
+    },
+    "ts808": {
+      "worklet": "src/audio/wdf/ts808Worklet.ts",
+      "params": {
+        "drive": 45,
+        "tone": 55,
+        "level": 1
+      }
+    },
+    "ds1": {
+      "worklet": "src/audio/wdf/ds1Worklet.ts",
+      "params": {
+        "dist": 50,
+        "tone": 50,
+        "level": 1
+      }
+    },
+    "rat": {
+      "worklet": "src/audio/wdf/ratWorklet.ts",
+      "params": {
+        "drive": 55,
+        "filter": 35,
+        "level": 1
+      }
+    },
+    "bigmuff": {
+      "worklet": "src/audio/wdf/bigmuffWorklet.ts",
+      "params": {
+        "sustain": 50,
+        "tone": 50,
+        "level": 1
+      }
+    },
+    "fuzzface": {
+      "worklet": "src/audio/wdf/fuzzfaceWorklet.ts",
+      "params": {
+        "fuzz": 70,
+        "level": 1
+      }
+    },
+    "crybaby": {
+      "worklet": "src/audio/wdf/crybabyWorklet.ts",
+      "params": {
+        "position": 50,
+        "level": 1
+      }
+    },
+    "klon": {
+      "worklet": "src/audio/wdf/klonWorklet.ts",
+      "params": {
+        "gain": 30,
+        "treble": 50,
+        "level": 1
+      }
+    },
+    "fet1176": {
+      "worklet": "src/audio/wdf/fet1176Worklet.ts",
+      "params": {
+        "threshold": -20,
+        "ratio": 1,
+        "attack": 200,
+        "release": 250,
+        "level": 1
+      }
+    },
+    "la2a": {
+      "worklet": "src/audio/wdf/la2aWorklet.ts",
+      "params": {
+        "reduction": 30,
+        "gain": 1,
+        "mode": 0
+      }
+    },
+    "dynacomp": {
+      "worklet": "src/audio/wdf/dynacompWorklet.ts",
+      "params": {
+        "sensitivity": 50,
+        "level": 1
+      }
+    },
+    "analogdelay": {
+      "worklet": "src/audio/wdf/analogdelayWorklet.ts",
+      "params": {
+        "time": 300,
+        "feedback": 40,
+        "tone": 55,
+        "mod": 0,
+        "mix": 35
+      }
+    },
+    "tapedelay": {
+      "worklet": "src/audio/wdf/tapedelayWorklet.ts",
+      "params": {
+        "time": 400,
+        "feedback": 40,
+        "wow": 30,
+        "saturation": 40,
+        "mix": 30
+      }
+    },
+    "pingpong": {
+      "worklet": "src/audio/wdf/pingpongWorklet.ts",
+      "params": {
+        "time": 400,
+        "feedback": 40,
+        "mix": 30
+      }
+    },
+    "springreverb": {
+      "worklet": "src/audio/wdf/springreverbWorklet.ts",
+      "params": {
+        "time": 2,
+        "dwell": 50,
+        "tone": 50,
+        "mix": 30
+      }
+    },
+    "plate": {
+      "worklet": "src/audio/wdf/plateWorklet.ts",
+      "params": {
+        "time": 2.5,
+        "damp": 40,
+        "preDelay": 0,
+        "mix": 30
+      }
+    },
+    "shimmer": {
+      "worklet": "src/audio/wdf/shimmerWorklet.ts",
+      "params": {
+        "time": 4.5,
+        "shimmer": 40,
+        "damp": 40,
+        "mix": 35
+      }
+    }
+  }
+}

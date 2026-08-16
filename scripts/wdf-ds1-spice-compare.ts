@@ -4,8 +4,8 @@
  * 报告 RMSE / RMS 差 / 峰值 / THD;目标:相对 RMSE < 25%,RMS 差 < 3dB。
  */
 import { execFileSync } from 'node:child_process';
-import { Ds1ClipperStage } from '../src/audio/wdf/ds1Clipper.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { Ds1ClipperStage } from '../src/audio/wdf/ds1Clipper.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -37,7 +37,7 @@ if (spiceOut.length < N) {
 const spice = spiceOut.slice(0, N);
 
 // ---------- 2) WDF 链(dist=0.5, tone=0.5,与网表同构) ----------
-const stage = new Ds1ClipperStage({ fs: FS });
+const stage = new Ds1ClipperStage(FS);
 stage.setDist(0.5);
 const fir = makeAntiAliasFIR();
 const up = new Upsampler4x(fir);

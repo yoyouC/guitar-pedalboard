@@ -7,14 +7,14 @@
  * 故按 docs/wdf-whitebox-process.md 对时序类的约定不过采样,直接 48kHz。
  * 静态测量一律 ≥0.5s 建立期(本脚本稳态用 1.25s ≈ 5·τ_rel),DFT 窗取整数周期。
  */
-import { DynaCompCore } from '../src/audio/wdf/dynaComp.ts';
+import { DynaCompCore } from '../src/audio/wdf/dynaComp.dsp.js';
 import { levelDbToGain } from '../src/audio/level.ts';
 
 const FS = 48000;
 
 /** 与 worklet 同构的完整链:压缩核心 → LEVEL(线性增益) */
 function makeChain(sens: number, levelDb = 0) {
-  const core = new DynaCompCore({ fs: FS });
+  const core = new DynaCompCore(FS);
   core.setSensitivity(sens);
   const levelGain = levelDbToGain(levelDb);
   return {

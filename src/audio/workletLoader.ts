@@ -13,6 +13,22 @@
  */
 export type WorkletSourceProvider = () => string | Promise<string>;
 
+/**
+ * 拼装 WDF worklet 源码(ADR-0003 双模式消费的 worklet 侧):
+ * dspSources 为 *.dsp.js 经 `?raw` 拿到的 ESM 原文,剥去模块语法
+ * (单行 import 声明、`export ` 前缀)后与 wrapper(AudioWorklet 胶水:
+ * parameterDescriptors、Processor 子类、registerProcessor)一起包进 IIFE。
+ *
+ * *.dsp.js 因此必须遵守约定:只用**单行** import 与**内联** export
+ * (export class/function/const),不用 `export { ... }` 汇总语句。
+ */
+export function buildProcessorSource(dspSources: string[], wrapper: string): string {
+  const bodies = dspSources
+    .map((s) => s.replace(/^import [^\n]*\n/gm, '').replace(/^export /gm, ''))
+    .join('\n');
+  return `(() => {\n${bodies}\n${wrapper}\n})();`;
+}
+
 export function createWorkletLoader(
   source: string | WorkletSourceProvider,
 ): (ctx: AudioContext) => Promise<void> {

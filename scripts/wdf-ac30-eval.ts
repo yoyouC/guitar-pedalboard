@@ -11,13 +11,12 @@
 import {
   Ac30Chain,
   CathodeFollower,
-  WdfTriodeStage,
   AC30,
   KOREN_EL84_APPROX,
   ac30Drive,
-} from '../src/audio/wdf/ac30Core.ts';
-import { korenPlateCurrent } from '../src/audio/wdf/triode.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+} from '../src/audio/wdf/ac30Core.dsp.js';
+import { WdfTriodeStage, korenPlateCurrent } from '../src/audio/wdf/triode.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -130,7 +129,7 @@ console.log('L0 求解器健康');
     `silentMax=${silentMax.toExponential(1)}`);
 
   // CF:缓冲器性格 + 二分迭代统计
-  const cf = new CathodeFollower({ fs: FS, Rk: 100e3, Rs: 69.4e3, Rload: 1.22e6, gridBias: 60 });
+  const cf = new CathodeFollower(FS, { Rk: 100e3, Rs: 69.4e3, Rload: 1.22e6, gridBias: 60 });
   let mn = 0, mx = 0;
   for (let i = 0; i < FS; i++) {
     const y = cf.process(Math.sin((2 * Math.PI * 1000 * i) / FS));
@@ -144,7 +143,7 @@ console.log('L0 求解器健康');
   check('CF 二分残差求值数(平均 <16/样本)', avgResid < 16, `avg=${avgResid.toFixed(1)}`);
 
   // 稳健三极管级:20V 直接灌栅极(远超现实)不得炸
-  const st = new WdfTriodeStage({ fs: FS });
+  const st = new WdfTriodeStage(FS);
   let nan2 = 0, mx2 = 0;
   for (let i = 0; i < FS / 10; i++) {
     const y = st.process(20 * Math.sin((2 * Math.PI * 1000 * i) / FS));

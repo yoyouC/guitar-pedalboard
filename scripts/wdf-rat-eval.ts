@@ -5,8 +5,8 @@
  *    FILTER 反向 475Hz~32kHz / 奇谐波主导 / 频率选择性失真)
  * 测量规范:≥0.5s 建立期;Goertzel 测频一律取采样窗整数周期(频率均整除 48kHz)。
  */
-import { RatStage, filterToFreq } from '../src/audio/wdf/ratDistortion.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { RatStage, filterToFreq } from '../src/audio/wdf/ratDistortion.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -14,7 +14,7 @@ const SETTLE = BASE / 2; // 0.5s 建立期(§4.2)
 
 /** 与 worklet 同构的完整 RAT 链(失真级 + 4x 重采样,level=1) */
 function makeChain(drive: number, filter: number) {
-  const rat = new RatStage({ fs: FS });
+  const rat = new RatStage(FS);
   rat.setDrive(drive);
   rat.setFilter(filter);
   const fir = makeAntiAliasFIR();
@@ -87,7 +87,7 @@ function check(name: string, ok: boolean, detail: string) {
 // ---------- L0 求解器健康 ----------
 console.log('L0 求解器健康');
 {
-  const c = new RatStage({ fs: FS });
+  const c = new RatStage(FS);
   c.setDrive(0.8);
   c.setFilter(35);
   let nan = 0, maxAbs = 0;
@@ -101,7 +101,7 @@ console.log('L0 求解器健康');
   const avgIter = c.iterTotal / Math.max(1, c.iterCount);
   check('Newton 收敛(平均 <10 次)', avgIter < 10, `avg=${avgIter.toFixed(1)}`);
 
-  const c2 = new RatStage({ fs: FS });
+  const c2 = new RatStage(FS);
   let silentMax = 0;
   for (let i = 0; i < FS / 10; i++) silentMax = Math.max(silentMax, Math.abs(c2.process(0)));
   check('静音→静音(无极限环)', silentMax < 1e-9, `silentMax=${silentMax.toExponential(1)}`);
@@ -110,7 +110,7 @@ console.log('L0 求解器健康');
 // ---------- L1 静态传输特性 ----------
 console.log('L1 静态传输特性(4Hz 慢扫,失真级,drive=0.5 filter=0)');
 {
-  const c = new RatStage({ fs: FS });
+  const c = new RatStage(FS);
   c.setDrive(0.5);
   c.setFilter(0);
   // 4Hz 慢扫 ≈ 静态(增益级在此频率 |G|≈3.8,±1V 输入深入削波区);跑两个完整周期测第二个
@@ -138,7 +138,7 @@ console.log('L2 线性区频响(50µV 小信号,drive=0.5,对照 1.5kHz HP / 5.3
   // 在失真级出口直接测(OS 速率):剔除降采样 FIR(17.3kHz 截止)对 16kHz 点的衰减干扰
   const amp = 50e-6; // 峰值增益 ~820 倍 → 削波节点 ~40mV,远低于 Vf,保持线性
   const gainAt = (freq: number, filter: number) => {
-    const c = new RatStage({ fs: FS });
+    const c = new RatStage(FS);
     c.setDrive(0.5);
     c.setFilter(filter);
     const per = FS / freq; // 本组频率均整除 FS

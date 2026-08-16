@@ -5,8 +5,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { TriodeStage, KOREN_EL34_APPROX } from '../src/audio/wdf/triode.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { TriodeStage, KOREN_EL34_APPROX } from '../src/audio/wdf/triode.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const BASE = 48000;
 const FS = BASE * OS_FACTOR;
@@ -59,11 +59,11 @@ function runSpice(amp: number): number[] {
 }
 
 function runWdf(drive: number, n: number): number[] {
-  const st1 = new TriodeStage({ fs: FS, Rk: 2.7e3, Ck: 0.68e-6, Rs: 34e3 });
-  const st2 = new TriodeStage({ fs: FS, Rk: 10e3, Ck: 0, Rs: 100e3 });
-  const st3 = new TriodeStage({ fs: FS, Rk: 820, Ck: 22e-6, Rs: 100e3 });
-  const pw = new TriodeStage({
-    fs: FS, koren: KOREN_EL34_APPROX, Bplus: 350, Rp: 4e3, Rk: 250, Ck: 0,
+  const st1 = new TriodeStage(FS, { Rk: 2.7e3, Ck: 0.68e-6, Rs: 34e3 });
+  const st2 = new TriodeStage(FS, { Rk: 10e3, Ck: 0, Rs: 100e3 });
+  const st3 = new TriodeStage(FS, { Rk: 820, Ck: 22e-6, Rs: 100e3 });
+  const pw = new TriodeStage(FS, {
+    koren: KOREN_EL34_APPROX, Bplus: 350, Rp: 4e3, Rk: 250, Ck: 0,
     Co: 1e-3, Rload: 1e6, Rs: 220e3,
   });
   const hpIn = makeHp(130), xfHp = makeHp(90), xfLp = makeLp(6000);

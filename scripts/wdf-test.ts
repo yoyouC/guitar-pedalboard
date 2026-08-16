@@ -3,8 +3,8 @@
  * 1) 单级:无 NaN、输出有界、大信号不对称削波
  * 2) 全链(级1→级2→6V6→输出变压器):与 worklet 同构,链稳定、有界
  */
-import { TriodeStage, KOREN_6V6_APPROX, KOREN_EL34_APPROX } from '../src/audio/wdf/triode.ts';
-import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.ts';
+import { TriodeStage, KOREN_6V6_APPROX, KOREN_EL34_APPROX } from '../src/audio/wdf/triode.dsp.js';
+import { makeAntiAliasFIR, Upsampler4x, Decimator4x, OS_FACTOR } from '../src/audio/wdf/resample.dsp.js';
 
 const FS = 48000 * 4; // 4x 过采样等效速率
 const T = 1 / FS;
@@ -65,7 +65,7 @@ function stats(label: string, gen: (n: number) => number, total: number): Stats 
 
 console.log('== 1) 单级(12AX7, B+=300V, Rp=100k, Rk=1.5k, Ck=22uF)==');
 for (const [amp, label] of [[0.05, '0.05V'], [0.5, '0.5V'], [2.0, '2.0V']] as const) {
-  const st = new TriodeStage({ fs: FS });
+  const st = new TriodeStage(FS);
   const s = stats(
     `vg=${label}`,
     (n) => st.process(amp * Math.sin((2 * Math.PI * 1000 * n) / FS)),
@@ -76,10 +76,10 @@ for (const [amp, label] of [[0.05, '0.05V'], [0.5, '0.5V'], [2.0, '2.0V']] as co
 
 console.log('== 2) 全链(级1 → 级2 → 6V6 → 变压器),与 worklet 同参数 ==');
 for (const [gain, label] of [[1, 'GAIN=1(最低)'], [15, 'GAIN=15(中)'], [30, 'GAIN=30(满)']] as const) {
-  const st1 = new TriodeStage({ fs: FS, Rk: 820, Ck: 0, Rs: 68e3 });
-  const st2 = new TriodeStage({ fs: FS, Rs: 100e3 });
-  const pw = new TriodeStage({
-    fs: FS, koren: KOREN_6V6_APPROX, Bplus: 285, Rp: 5e3, Rk: 250, Ck: 0,
+  const st1 = new TriodeStage(FS, { Rk: 820, Ck: 0, Rs: 68e3 });
+  const st2 = new TriodeStage(FS, { Rs: 100e3 });
+  const pw = new TriodeStage(FS, {
+    koren: KOREN_6V6_APPROX, Bplus: 285, Rp: 5e3, Rk: 250, Ck: 0,
     Co: 1e-3, Rload: 1e6, Rs: 220e3,
   });
   const xf = makeXformer();
@@ -98,11 +98,11 @@ for (const [gain, label] of [[1, 'GAIN=1(最低)'], [15, 'GAIN=15(中)'], [30, '
 
 console.log('== 3) Bogner 链(级1 部分旁路 → 级2 冷偏置 → 级3 全旁路 → EL34 → 变压器)==');
 for (const [gain, label] of [[1, 'GAIN=1'], [20, 'GAIN=20(中)'], [40, 'GAIN=40(满)']] as const) {
-  const st1 = new TriodeStage({ fs: FS, Rk: 2.7e3, Ck: 0.68e-6, Rs: 34e3 });
-  const st2 = new TriodeStage({ fs: FS, Rk: 10e3, Ck: 0, Rs: 100e3 });
-  const st3 = new TriodeStage({ fs: FS, Rk: 820, Ck: 22e-6, Rs: 100e3 });
-  const pw = new TriodeStage({
-    fs: FS, koren: KOREN_EL34_APPROX, Bplus: 350, Rp: 4e3, Rk: 250, Ck: 0,
+  const st1 = new TriodeStage(FS, { Rk: 2.7e3, Ck: 0.68e-6, Rs: 34e3 });
+  const st2 = new TriodeStage(FS, { Rk: 10e3, Ck: 0, Rs: 100e3 });
+  const st3 = new TriodeStage(FS, { Rk: 820, Ck: 22e-6, Rs: 100e3 });
+  const pw = new TriodeStage(FS, {
+    koren: KOREN_EL34_APPROX, Bplus: 350, Rp: 4e3, Rk: 250, Ck: 0,
     Co: 1e-3, Rload: 1e6, Rs: 220e3,
   });
   const hpIn = makeHp(130);
@@ -133,10 +133,10 @@ console.log('== 4) 混叠对比:线性插值 vs 多相 FIR(Champ 链,GAIN=2,避�
   const FREQ = (BASE * HARM_BIN) / N;
 
   function makeChampOsChain() {
-    const st1 = new TriodeStage({ fs: FS, Rk: 820, Ck: 0, Rs: 68e3 });
-    const st2 = new TriodeStage({ fs: FS, Rs: 100e3 });
-    const pw = new TriodeStage({
-      fs: FS, koren: KOREN_6V6_APPROX, Bplus: 285, Rp: 5e3, Rk: 250, Ck: 0,
+    const st1 = new TriodeStage(FS, { Rk: 820, Ck: 0, Rs: 68e3 });
+    const st2 = new TriodeStage(FS, { Rs: 100e3 });
+    const pw = new TriodeStage(FS, {
+      koren: KOREN_6V6_APPROX, Bplus: 285, Rp: 5e3, Rk: 250, Ck: 0,
       Co: 1e-3, Rload: 1e6, Rs: 220e3,
     });
     const xf = makeXformer();

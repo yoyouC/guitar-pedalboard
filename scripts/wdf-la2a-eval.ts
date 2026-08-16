@@ -4,7 +4,7 @@
  *   软拐点、Compress ≈3:1 / Limit ≈10:1;
  *   T4B 光电池程序相关释放:短瞬态 ~50-70ms 快释放,持续音两段式(先快后慢 ~1-2s)。
  */
-import { La2aOptoComp } from '../src/audio/wdf/la2aOpto.ts';
+import { La2aOptoComp } from '../src/audio/wdf/la2aOpto.dsp.js';
 
 const FS = 48000;
 const FREQ = 1000;
@@ -21,7 +21,7 @@ function check(name: string, ok: boolean, detail: string) {
 
 /** 静态测量:3s 建立期(≫ slow 支路 5τ)后读稳态 grDb 均值,并用输出 RMS 交叉验证 */
 function measureStatic(mode: number, reduction: number, inDb: number): { gr: number; grCross: number } {
-  const c = new La2aOptoComp({ fs: FS });
+  const c = new La2aOptoComp(FS);
   c.setMode(mode);
   c.setReduction(reduction);
   const amp = lin(inDb);
@@ -40,7 +40,7 @@ function measureStatic(mode: number, reduction: number, inDb: number): { gr: num
 
 /** 释放测量:1kHz -6dBFS 持续 durS 后切静音,逐样本读 grDb 的 t37/t50/t10 */
 function releaseTest(durS: number): { G0: number; t37: number; t50: number; t10: number; grEnd: number } {
-  const c = new La2aOptoComp({ fs: FS });
+  const c = new La2aOptoComp(FS);
   c.setReduction(70);
   c.setMode(0);
   const amp = lin(-6);
@@ -65,7 +65,7 @@ function releaseTest(durS: number): { G0: number; t37: number; t50: number; t10:
 // ---------- L0 求解器健康 ----------
 console.log('L0 求解器健康');
 {
-  const c = new La2aOptoComp({ fs: FS });
+  const c = new La2aOptoComp(FS);
   c.setReduction(90);
   let nan = 0, maxAbs = 0;
   for (let i = 0; i < FS; i++) {
@@ -76,13 +76,13 @@ console.log('L0 求解器健康');
   check('无 NaN', nan === 0, `nan=${nan}`);
   check('深压缩输出有界', maxAbs < 1.2, `maxAbs=${maxAbs.toFixed(3)}`);
 
-  const c2 = new La2aOptoComp({ fs: FS });
+  const c2 = new La2aOptoComp(FS);
   let silentMax = 0;
   for (let i = 0; i < FS / 10; i++) silentMax = Math.max(silentMax, Math.abs(c2.process(0)));
   check('静音→静音(无极限环)', silentMax < 1e-9, `silentMax=${silentMax.toExponential(1)}`);
 
   // 参数全程扫掠:reduction 往返扫、mode 切换、makeup 扫、输入电平跳变
-  const c3 = new La2aOptoComp({ fs: FS });
+  const c3 = new La2aOptoComp(FS);
   let nan3 = 0, maxAbs3 = 0;
   const N = FS * 8;
   for (let i = 0; i < N; i++) {
@@ -171,7 +171,7 @@ console.log('L2 动态行为');
   check('光记忆可恢复(6s 后 grDb < 0.5dB)', long.grEnd < 0.5, `grEnd=${long.grEnd.toFixed(3)}dB`);
 
   // GAIN 补偿:无压缩时(reduction=0)输出 = 输入 × makeup
-  const c = new La2aOptoComp({ fs: FS });
+  const c = new La2aOptoComp(FS);
   c.setReduction(0);
   c.setMakeupGain(lin(6));
   const amp = lin(-40);
