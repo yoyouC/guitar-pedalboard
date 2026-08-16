@@ -380,6 +380,27 @@ test('listTones: 解析分页响应为 ToneInfo 列表(含作者/许可/链接)'
   assert.equal(requests.length, 1);
 });
 
+test('listTones: 超出 top-10 截断(免费层有界列表语义)', async () => {
+  const { fetchFn } = mockFetch(() => ({
+    status: 200,
+    body: {
+      data: Array.from({ length: 12 }, (_, i) => ({
+        id: i + 1,
+        title: `Amp ${i + 1}`,
+        license: 't3k',
+        url: 'https://www.tone3000.com/tones/x-' + (i + 1),
+        user: { username: 'u' },
+      })),
+    },
+  }));
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  const client = makeClient(fetchFn, storage);
+  const tones = await client.listTones('trending');
+  assert.equal(tones.length, 10);
+  assert.equal(tones[9].id, 10);
+});
+
 test('listTones: latest 端点;未登录抛 not-authenticated', async () => {
   const { fetchFn, requests } = mockFetch((req) => {
     assert.equal(req.url, 'https://www.tone3000.com/api/v1/tones/latest');

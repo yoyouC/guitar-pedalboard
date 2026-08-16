@@ -356,7 +356,8 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
       throw new Tone3000Error('http', `${feed} 列表获取失败 HTTP ${res.status}`, res.status);
     }
     const page = (await res.json()) as { data?: ApiTone[] };
-    return (page.data ?? []).map(mapTone);
+    // 免费层条款语义是"有界列表"(top-10):客户端截断兜底,不依赖 API 默认分页
+    return (page.data ?? []).slice(0, 10).map(mapTone);
   }
 
   return {

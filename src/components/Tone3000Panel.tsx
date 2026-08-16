@@ -13,7 +13,8 @@ import {
   getTone3000Authenticated,
 } from '../tone3000/instance';
 import { getCachedToneInfo, putCachedToneInfo } from '../tone3000/toneInfoCache';
-import { parseToneUrl, type ToneInfo } from '../tone3000/client';
+import { Tone3000Discover } from './Tone3000Discover';
+import type { ToneInfo } from '../tone3000/client';
 
 /**
  * TONE3000 分类面板(ADR-0007):登录/浏览 Select 流程入口 + 当前模型卡片。
@@ -54,7 +55,7 @@ export function Tone3000Panel() {
   // 浏览(select popup):选中即装载;弹窗被拦截时兜底整页跳转(instance 内处理)
   const startBrowse = async () => {
     const selected = await browseTone3000(encodedRig);
-    if (selected) rigStore.setAmpModel('tone3000', buildTone3000Key(selected));
+    if (selected) loadTone(selected);
   };
 
   // 纯登录(standard popup,不强迫重选):成功后重试当前模型(降级修复闭环)
@@ -66,52 +67,13 @@ export function Tone3000Panel() {
   // 失效修复(load_tone popup):装载(可能不同的)替代 tone
   const startReplace = async (unavailableToneId: string) => {
     const replacement = await replaceTone3000(unavailableToneId, encodedRig);
-    if (replacement) rigStore.setAmpModel('tone3000', buildTone3000Key(replacement));
+    if (replacement) loadTone(replacement);
   };
 
-  // ---------- 发现:trending/latest 列表 + 粘贴链接(issue #15) ----------
-
-  const [feed, setFeed] = useState<'trending' | 'latest'>('trending');
-  const [feedTones, setFeedTones] = useState<ToneInfo[] | null>(null);
-  const [feedError, setFeedError] = useState<string | null>(null);
-  const [pasteValue, setPasteValue] = useState('');
-  const [pasteError, setPasteError] = useState<string | null>(null);
-
-  // 列表(登录态;切换 tab 重新拉取)
-  useEffect(() => {
-    if (!authed) return;
-    let cancelled = false;
-    setFeedTones(null);
-    setFeedError(null);
-    tone3000
-      .listTones(feed)
-      .then((tones) => {
-        if (!cancelled) setFeedTones(tones);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setFeedError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authed, feed]);
-
-  // 统一装载入口:记入型号记忆(与普通选中行为一致),顺手缓存归属元数据
+  // 统一装载入口(issue #15):记入型号记忆(与普通选中行为一致),顺手缓存归属元数据
   const loadTone = (id: string, info?: ToneInfo) => {
     if (info) putCachedToneInfo(info, window.localStorage);
     rigStore.setAmpModel('tone3000', buildTone3000Key(id));
-  };
-
-  // 粘贴链接装载:非法输入明确报错,当前状态不变
-  const submitPaste = () => {
-    const id = parseToneUrl(pasteValue);
-    if (!id) {
-      setPasteError('无法识别的 TONE3000 链接(应为 https://www.tone3000.com/tones/…-数字 id)');
-      return;
-    }
-    setPasteError(null);
-    setPasteValue('');
-    loadTone(id);
   };
 
   return (
@@ -187,65 +149,7 @@ export function Tone3000Panel() {
         </a>
       </div>
 
-      {authed && (
-        <div className="tone3000-discover">
-          <div className="tone3000-paste-row">
-            <input
-              className="tone3000-paste-input"
-              type="text"
-              placeholder="粘贴 TONE3000 模型链接,回车装载…"
-              value={pasteValue}
-              onChange={(e) => {
-                setPasteValue(e.target.value);
-                setPasteError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submitPaste();
-              }}
-            />
-            <button className="nam-load-btn" onClick={submitPaste}>
-              装载
-            </button>
-          </div>
-          {pasteError && <div className="tone3000-paste-error">{pasteError}</div>}
-
-          <div className="tone3000-feed-tabs">
-            <button
-              className={`tone3000-feed-tab ${feed === 'trending' ? 'active' : ''}`}
-              onClick={() => setFeed('trending')}
-            >
-              热门
-            </button>
-            <button
-              className={`tone3000-feed-tab ${feed === 'latest' ? 'active' : ''}`}
-              onClick={() => setFeed('latest')}
-            >
-              最新
-            </button>
-          </div>
-          {feedError && <div className="tone3000-paste-error">{feedError}</div>}
-          {!feedError && feedTones === null && (
-            <div className="tone3000-byline">列表加载中…</div>
-          )}
-          {feedTones && (
-            <ul className="tone3000-feed">
-              {feedTones.map((t) => (
-                <li key={t.id}>
-                  <button
-                    className={`tone3000-feed-item ${toneId === String(t.id) ? 'active' : ''}`}
-                    onClick={() => loadTone(String(t.id), t)}
-                  >
-                    <span className="tone3000-title">{t.title}</span>
-                    <span className="tone3000-byline">
-                      by {t.username} · {t.license.toUpperCase()}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {authed && <Tone3000Discover currentToneId={toneId} onLoad={loadTone} />}
     </div>
   );
 }
