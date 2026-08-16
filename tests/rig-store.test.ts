@@ -576,3 +576,76 @@ test('setNamCustomModel records the custom model without touching amp values', (
   assert.equal(state.namVersion, 2);
   assert.equal(state.ampValues, valuesBefore); // 参数不重置
 });
+
+// ---------- tone3000 型号 kind + 引擎侧模型源收编(issue #12) ----------
+
+test('setAmpModel tone3000: 走 nam-wasm def,选择收编进 state.namModel', () => {
+  const { engine, calls } = createStubEngine();
+  const store = createRigStore(engine);
+  store.setAmpModel('tone3000', 'tone3000:79103');
+  const state = store.getState();
+  assert.equal(state.ampId, 'nam-wasm');
+  assert.equal(state.ampCategoryId, 'tone3000');
+  assert.equal(state.ampModelKeys.tone3000, 'tone3000:79103');
+  assert.equal(state.namVersion, 1);
+  assert.deepEqual(state.namModel, { source: 'tone3000:79103' });
+  // AmpSpec.def 来自选择感知的 memoized 工厂(非注册表静态 def)
+  const ampSpec = calls.find((c) => c.method === 'setAmp')!.args[0] as {
+    def: { id: string };
+    key: string;
+  };
+  assert.equal(ampSpec.def.id, 'nam-wasm');
+});
+
+test('nam def memoization: 同一选择同一 def 实例(复用语义),换选择换 def', () => {
+  const { engine, calls } = createStubEngine();
+  const store = createRigStore(engine);
+  store.setAmpModel('crunch', 'nam-wasm-pack:jcm800-sweep');
+  const defA = (calls.findLast((c) => c.method === 'setAmp')!.args[0] as { def: unknown }).def;
+  assert.ok('pack' in store.getState().namModel);
+  // 无结构参数变化(不动模型)再次触发结构同步 → 同一 def 实例
+  store.addPedal('chorus');
+  const defA2 = (calls.findLast((c) => c.method === 'setAmp')!.args[0] as { def: unknown }).def;
+  assert.equal(defA2, defA);
+  // 换模型 → 不同 def 实例
+  store.setAmpModel('crunch', 'nam-wasm:jcm2000-crunch');
+  const defB = (calls.findLast((c) => c.method === 'setAmp')!.args[0] as { def: unknown }).def;
+  assert.notEqual(defB, defA);
+});
+
+test('sweep pack selection is captured as data, not module global', () => {
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  store.setAmpModel('crunch', 'nam-wasm-pack:jcm800-sweep');
+  const namModel = store.getState().namModel;
+  assert.ok('pack' in namModel);
+  if ('pack' in namModel) assert.equal(namModel.pack.id, 'jcm800-sweep');
+});
+
+test('custom .nam file: setNamCustomModel 收编 file 选择;applyRig custom 保持当前选择', () => {
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  store.setAmpModel('crunch', 'nam-wasm:jcm2000-crunch');
+  store.setNamCustomModel('MyCapture', 'file:mycap.nam:1234:1');
+  assert.deepEqual(store.getState().namModel, { source: 'file:mycap.nam:1234:1' });
+  assert.equal(store.getState().ampModelKeys.crunch, 'nam-wasm:custom');
+  // 快照 recall(nam-wasm:custom)→ 保持当前 file 选择(已知限制:不跨会话恢复)
+  store.captureSnapshot(0);
+  store.setAmpModel('clean', 'builtin:clean');
+  store.recallSnapshot(0);
+  assert.deepEqual(store.getState().namModel, { source: 'file:mycap.nam:1234:1' });
+});
+
+test('tone3000 model reference round-trips through preset save/load', () => {
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  store.setAmpModel('tone3000', 'tone3000:79103');
+  store.savePreset('t3k-preset');
+  store.setAmpModel('clean', 'builtin:clean');
+  const result = store.loadPreset('t3k-preset');
+  assert.equal(result.ok, true);
+  const state = store.getState();
+  assert.equal(state.ampCategoryId, 'tone3000');
+  assert.equal(state.ampModelKeys.tone3000, 'tone3000:79103');
+  assert.deepEqual(state.namModel, { source: 'tone3000:79103' });
+});

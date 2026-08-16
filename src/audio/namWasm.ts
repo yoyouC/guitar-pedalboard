@@ -69,12 +69,21 @@ export interface NamWasmMetadata {
 
 const modelTextCache = new Map<string, Promise<string>>();
 const metadataCache = new Map<string, NamWasmMetadata>();
-let currentSource = BUNDLED_WAVENET_MODELS[0].url;
 
-/** 切换当前模型源(URL 或 loadNamWasmModelFromFile 生成的 file: 键);同时退出扫档包模式 */
-export function setNamWasmModelSource(source: string): void {
-  currentSource = source;
-  currentPack = null;
+/**
+ * NAM 模型选择(ADR-0007,评审候选 8 最小版):模型源作为数据随
+ * AmpSpec/状态传递,不再经模块级全局态偷读。
+ * - `{ source }`:单模型 URL 或 cache key(`file:` 本地文件、`tone3000:` 外部引用);
+ * - `{ pack }`:增益扫档包。
+ */
+export type NamModelSelection = { source: string } | { pack: NamSweepPack };
+
+/** Tone3000 模型文本提供者(生产由 tone3000/instance 注册;未注册时 tone3000: 源装载失败) */
+type Tone3000ModelTextProvider = (toneId: string) => Promise<string>;
+let tone3000Provider: Tone3000ModelTextProvider | null = null;
+
+export function setTone3000ModelTextProvider(provider: Tone3000ModelTextProvider): void {
+  tone3000Provider = provider;
 }
 
 // ---------- 增益扫档包(同一箱头多个 gain 档位的 capture 组,GAIN 旋钮切档) ----------
@@ -138,20 +147,21 @@ export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
   },
 };
 
-let currentPack: NamSweepPack | null = null;
-
-/** 进入扫档包模式(传 null 退出) */
-export function setNamWasmPack(pack: NamSweepPack | null): void {
-  currentPack = pack;
-}
-
-function loadModelText(source: string = currentSource): Promise<string> {
+function loadModelText(source: string): Promise<string> {
   let p = modelTextCache.get(source);
   if (!p) {
-    p = fetch(source).then((r) => {
-      if (!r.ok) throw new Error(`模型下载失败 HTTP ${r.status}`);
-      return r.text();
-    });
+    if (source.startsWith('tone3000:')) {
+      // 外部模型引用:经注册的 provider(带 OAuth Bearer)按用户身份下载
+      const toneId = source.slice('tone3000:'.length);
+      p = tone3000Provider
+        ? tone3000Provider(toneId)
+        : Promise.reject(new Error('Tone3000 模型提供者未注册'));
+    } else {
+      p = fetch(source).then((r) => {
+        if (!r.ok) throw new Error(`模型下载失败 HTTP ${r.status}`);
+        return r.text();
+      });
+    }
     modelTextCache.set(source, p);
   }
   return p;
@@ -169,15 +179,16 @@ function parseMetadata(json: string): NamWasmMetadata {
   }
 }
 
-/** 从本地 .nam 文件加载(任意 NAM Core 支持的架构),成功后置为当前模型 */
-export async function loadNamWasmModelFromFile(file: File): Promise<NamWasmMetadata> {
+/** 从本地 .nam 文件加载(任意 NAM Core 支持的架构);返回 cache key 与元数据,由调用方收编为模型选择 */
+export async function loadNamWasmModelFromFile(
+  file: File,
+): Promise<NamWasmMetadata & { key: string }> {
   const text = await file.text();
   const meta = parseMetadata(text);
   const key = `file:${file.name}:${file.size}:${Date.now()}`;
   modelTextCache.set(key, Promise.resolve(text));
   metadataCache.set(key, meta);
-  currentSource = key;
-  return meta;
+  return { ...meta, key };
 }
 
 const SMOOTH = 0.03;
@@ -189,7 +200,7 @@ const pctToDb = (v: number, range: number) => ((v - 50) / 50) * range;
  *         → BASS/MID/TREBLE/PRESENCE 音色栈 → masterGain → output
  * 归一化公式与官方插件 Normalized 模式一致(-18LUFS - loudness,钳制 [-12, +36]dB)。
  */
-export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
+export function createNamWasmAmp(ctx: AudioContext, model: NamModelSelection): EffectInstance {
   const input = ctx.createGain();
   const output = ctx.createGain();
   const drive = ctx.createGain();
@@ -217,7 +228,8 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
   masterGain.connect(output);
 
   // ---------- 扫档包模式:GAIN 旋钮在预载档位间瞬时切换 ----------
-  const pack = currentPack;
+  const pack = 'pack' in model ? model.pack : null;
+  const singleSource = 'source' in model ? model.source : null;
   const stages = pack?.stages ?? [];
   const stageLoudness: (number | null)[] = stages.map(() => null);
   const slotReady = new Set<number>();
@@ -265,7 +277,7 @@ export function createNamWasmAmp(ctx: AudioContext): EffectInstance {
     })();
   } else if (voice) {
     reportAmpLoad({ phase: 'loading', done: 0, total: 2, label: '加载模型' });
-    const source = currentSource;
+    const source = singleSource ?? BUNDLED_WAVENET_MODELS[0].url;
     loadModelText(source)
       .then((json) => {
         if (disposed) return;

@@ -9,7 +9,7 @@ import { BUNDLED_WAVENET_MODELS, NAM_SWEEP_PACKS } from './namWasm';
  * nam-wasm-pack(NAM_SWEEP_PACKS id);
  * 自定义文件加载用 `${kind}:custom`(源已由 loadNam*FromFile 设置)。
  */
-export type AmpModelKind = 'builtin' | 'nam-wasm' | 'nam-wasm-pack';
+export type AmpModelKind = 'builtin' | 'nam-wasm' | 'nam-wasm-pack' | 'tone3000';
 
 export interface AmpModelEntry {
   key: string;

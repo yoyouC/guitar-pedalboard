@@ -19,13 +19,12 @@
 import type { audioEngine } from '../audio/AudioEngine';
 import type { ChainSpec, AmpSpec } from '../audio/AudioEngine';
 import { getEffectDef } from '../audio/effects';
-import { getAmpDef } from '../audio/amps';
+import { getAmpDef, getNamWasmAmpDef } from '../audio/amps';
 import { getCabDef } from '../audio/cabs';
 import {
   BUNDLED_WAVENET_MODELS,
   NAM_SWEEP_PACKS,
-  setNamWasmModelSource,
-  setNamWasmPack,
+  type NamModelSelection,
 } from '../audio/namWasm';
 import type { ShareState } from './share';
 import type { RigPreset, Snapshot, SnapshotAmp, SnapshotCab } from './presetCodec';
@@ -86,8 +85,10 @@ export interface RigStoreState {
   cabId: string;
   cabEnabled: boolean;
   cabValues: Record<string, number>;
-  /** NAM 自定义模型名(模型源本身是 namWasm 模块级全局态,本次不收编) */
+  /** NAM 自定义模型名(展示用;模型选择本身在 namModel) */
   namCustomName: string | null;
+  /** NAM 模型选择(ADR-0007):随状态传递,引擎侧不再读 namWasm 模块全局 */
+  namModel: NamModelSelection;
   /** NAM 模型版本:换模型 = 结构变化(引擎箱头实例复用 key 的一部分) */
   namVersion: number;
   inputGain: number;
@@ -142,8 +143,8 @@ export interface RigStore {
   setAmpParam(key: string, value: number): void;
   /** 切分类/选型号:记住该类型号并应用(NAM 型号自增 namVersion) */
   setAmpModel(categoryId: string, modelKey: string): void;
-  /** 本地 .nam 文件加载成功后登记为当前类的自定义型号(不重置参数) */
-  setNamCustomModel(displayName: string): void;
+  /** 本地 .nam 文件加载成功后登记为当前类的自定义型号(不重置参数);sourceKey 为 namWasm 缓存键 */
+  setNamCustomModel(displayName: string, sourceKey: string): void;
 
   // 箱体
   setCab(id: string): void;
@@ -204,26 +205,52 @@ function ampIdForModelKey(modelKey: string): string {
 }
 
 /**
- * 应用一个箱头型号(与旧 App.applyAmpModel 语义一致):
- * 解析 ampId/默认参数;NAM 型号设置模块级模型源并要求 namVersion 换代。
+ * 应用一个箱头型号(ADR-0007):
+ * 解析 ampId/默认参数与模型选择(NamModelSelection);NAM 型号要求 namVersion 换代。
+ * namModel 为 null 表示"不适用或保持当前选择"(builtin / nam-wasm:custom / 未知 ref)。
  */
 function resolveAmpModel(modelKey: string): {
   ampId: string;
   ampValues: Record<string, number>;
   namReload: boolean;
+  namModel: NamModelSelection | null;
 } {
   const { kind, ref } = parseModelKey(modelKey);
   if (kind === 'builtin') {
-    return { ampId: ref, ampValues: defaultAmpValues(ref), namReload: false };
+    return { ampId: ref, ampValues: defaultAmpValues(ref), namReload: false, namModel: null };
+  }
+  if (kind === 'tone3000') {
+    // 外部模型引用(ADR-0007):装载经 namWasm 注册的 provider 按用户身份下载
+    return {
+      ampId: 'nam-wasm',
+      ampValues: defaultAmpValues('nam-wasm'),
+      namReload: true,
+      namModel: { source: `tone3000:${ref}` },
+    };
   }
   if (kind === 'nam-wasm-pack') {
     const pack = NAM_SWEEP_PACKS[ref];
-    if (pack) setNamWasmPack(pack);
+    if (pack) {
+      return {
+        ampId: 'nam-wasm',
+        ampValues: defaultAmpValues('nam-wasm'),
+        namReload: true,
+        namModel: { pack },
+      };
+    }
   } else {
     const m = BUNDLED_WAVENET_MODELS.find((x) => x.id === ref);
-    if (m) setNamWasmModelSource(m.url);
+    if (m) {
+      return {
+        ampId: 'nam-wasm',
+        ampValues: defaultAmpValues('nam-wasm'),
+        namReload: true,
+        namModel: { source: m.url },
+      };
+    }
   }
-  return { ampId: 'nam-wasm', ampValues: defaultAmpValues('nam-wasm'), namReload: true };
+  // nam-wasm:custom 或未知 ref:保持当前选择(自定义模型的已知限制,见 ADR-0006)
+  return { ampId: 'nam-wasm', ampValues: defaultAmpValues('nam-wasm'), namReload: true, namModel: null };
 }
 
 /** 预设 → applyRig 输入(chain 重新生成 uid;箱头走型号机制) */
@@ -343,6 +370,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     cabEnabled: true,
     cabValues: defaultCabValues(RIG_PRESET_CATALOG.defaults.cabId),
     namCustomName: null,
+    namModel: { source: BUNDLED_WAVENET_MODELS[0].url },
     namVersion: 0,
     inputGain: RIG_GLOBAL_DEFAULTS.inputGain,
     masterVolume: RIG_GLOBAL_DEFAULTS.masterVolume,
@@ -373,7 +401,8 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       ),
     );
     engine.setAmp({
-      def: getAmpDef(state.ampId),
+      // NAM 箱头:def 来自选择感知的 memoized 工厂(同一选择同一实例 → def+key 复用成立)
+      def: state.ampId === 'nam-wasm' ? getNamWasmAmpDef(state.namModel) : getAmpDef(state.ampId),
       enabled: state.ampEnabled,
       values: state.ampValues,
       // def+key 相同则重建复用箱头实例(避免 NAM 模型随单块变动重复加载)
@@ -503,16 +532,18 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         ampModelKeys: { ...state.ampModelKeys, [categoryId]: modelKey },
         ampId: resolved.ampId,
         ampValues: resolved.ampValues,
+        namModel: resolved.namModel ?? state.namModel,
         namVersion: state.namVersion + (resolved.namReload ? 1 : 0),
       };
       syncStructure();
       emit();
     },
 
-    setNamCustomModel(displayName) {
+    setNamCustomModel(displayName, sourceKey) {
       state = {
         ...state,
         namCustomName: displayName,
+        namModel: { source: sourceKey },
         ampModelKeys: { ...state.ampModelKeys, [state.ampCategoryId]: 'nam-wasm:custom' },
         namVersion: state.namVersion + 1,
       };
@@ -564,9 +595,10 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
     applyRig(rig) {
       let { namVersion } = state;
-      // 型号机制分支:解析模型源并换代;legacy 分支(旧快照):不动型号簿记与 NAM 全局态
+      // 型号机制分支:解析模型源并换代;legacy 分支(旧快照):不动型号簿记与模型选择
       const ampRef = rig.amp;
       let ampId: string;
+      let namModel = state.namModel;
       let { ampCategoryId, ampModelKeys } = state;
       if ('modelKey' in ampRef) {
         const resolved = resolveAmpModel(ampRef.modelKey);
@@ -574,6 +606,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         ampId = ampIdForModelKey(ampRef.modelKey);
         ampCategoryId = ampRef.categoryId;
         ampModelKeys = { ...state.ampModelKeys, [ampRef.categoryId]: ampRef.modelKey };
+        namModel = resolved.namModel ?? state.namModel;
       } else {
         ampId = ampRef.legacyAmpId;
       }
@@ -583,6 +616,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         ampCategoryId,
         ampModelKeys,
         ampId,
+        namModel,
         ampEnabled: rig.amp.enabled,
         ampValues: rig.amp.values,
         cabId: rig.cab.id,

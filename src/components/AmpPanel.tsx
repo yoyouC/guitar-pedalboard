@@ -35,7 +35,7 @@ export function AmpPanel({ showMeters, engineReady }: AmpPanelProps) {
   const handleNamModelFile = async (file: File) => {
     try {
       const model = await loadNamWasmModelFromFile(file);
-      rigStore.setNamCustomModel(model.displayName);
+      rigStore.setNamCustomModel(model.displayName, model.key);
     } catch (e) {
       alert(`加载 .nam 模型失败: ${e instanceof Error ? e.message : String(e)}`);
     }

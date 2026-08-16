@@ -1,5 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
-import { createNamWasmAmp, NAM_AMP_DEFAULTS } from './namWasm';
+import { createNamWasmAmp, NAM_AMP_DEFAULTS, BUNDLED_WAVENET_MODELS, type NamModelSelection } from './namWasm';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from './level';
 import { createToneStack } from './toneStack';
 import { wdfTwinDef } from './wdf/twinAmpDef';
@@ -317,14 +317,38 @@ export const AMP_REGISTRY: EffectDefinition[] = [
   wdfAc30Def(),
   wdfJc120Def(),
   // NAM 箱头(见 namWasm.ts):NAM Core WASM 全架构(WaveNet/LSTM/…)
+  // 注册表条目携带默认模型选择;实际选择经 getNamWasmAmpDef 的 memoized 工厂
   {
     id: 'nam-wasm',
     name: 'NAM WaveNet',
     color: '#2e5a8b',
     params: AMP_PARAMS(NAM_AMP_DEFAULTS),
-    create: createNamWasmAmp,
+    create: (ctx) => createNamWasmAmp(ctx, { source: BUNDLED_WAVENET_MODELS[0].url }),
   },
 ];
+
+/**
+ * 选择感知的 NAM 箱头 def 工厂(ADR-0007):同一模型选择返回同一 def 实例
+ * —— graphBuilder 的 def+key 复用语义因此成立(选模型 = 换 def = 重建,
+ * 未选模型 = 同一 def = 复用实例不重复加载模型)。
+ */
+const namDefCache = new Map<string, EffectDefinition>();
+
+export function getNamWasmAmpDef(model: NamModelSelection): EffectDefinition {
+  const cacheKey = 'pack' in model ? `pack:${model.pack.id}` : `src:${model.source}`;
+  let def = namDefCache.get(cacheKey);
+  if (!def) {
+    def = {
+      id: 'nam-wasm',
+      name: 'NAM WaveNet',
+      color: '#2e5a8b',
+      params: AMP_PARAMS(NAM_AMP_DEFAULTS),
+      create: (ctx) => createNamWasmAmp(ctx, model),
+    };
+    namDefCache.set(cacheKey, def);
+  }
+  return def;
+}
 
 /**
  * WDF Champ(实验):5F1 风格,两级 12AX7 WDF 共阴极级 + 单端后级。
