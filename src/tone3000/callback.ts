@@ -91,3 +91,46 @@ export async function handleOAuthCallbackBoot(
   deps.onSettled();
   return true;
 }
+
+// ---------- popup 流程(issue #14 UAT:全页跳转丢页面,改弹窗授权) ----------
+
+/** popup 回传的消息形状(回调页在弹窗内 postMessage 给 opener) */
+export interface Tone3000OAuthRelay {
+  type: 't3k_oauth_callback';
+  code: string | null;
+  state: string | null;
+  tone_id?: string | null;
+  model_id?: string | null;
+  error?: string | null;
+  canceled?: boolean;
+}
+
+/** 从回调 URL 提取 relay 消息;非回调 URL(或无 code/error)返回 null */
+export function relayFromCallbackUrl(url: string): Tone3000OAuthRelay | null {
+  const u = new URL(url);
+  if (!u.pathname.endsWith(CALLBACK_PATH)) return null;
+  const code = u.searchParams.get('code');
+  const error = u.searchParams.get('error');
+  if (!code && !error) return null;
+  return {
+    type: 't3k_oauth_callback',
+    code,
+    state: u.searchParams.get('state'),
+    tone_id: u.searchParams.get('tone_id'),
+    model_id: u.searchParams.get('model_id'),
+    error,
+    canceled: u.searchParams.get('canceled') === 'true',
+  };
+}
+
+/** 把 popup 回传的消息还原为回调 URL(复用 client.handleCallback 的 state 校验) */
+export function relayToCallbackUrl(relay: Tone3000OAuthRelay, redirectUri: string): string {
+  const params = new URLSearchParams();
+  if (relay.code) params.set('code', relay.code);
+  if (relay.state) params.set('state', relay.state);
+  if (relay.tone_id) params.set('tone_id', relay.tone_id);
+  if (relay.model_id) params.set('model_id', relay.model_id);
+  if (relay.error) params.set('error', relay.error);
+  if (relay.canceled) params.set('canceled', 'true');
+  return `${redirectUri}?${params.toString()}`;
+}

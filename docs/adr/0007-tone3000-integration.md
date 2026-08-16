@@ -38,6 +38,10 @@ NAM 箱头模型来源有限(内置 wavenet、扫档包、本地 .nam 上传),�
 - **浏览/搜索走平台托管 Select 流程**(免费层条款禁止生产环境用
   `/tones/search`);归属(作者/许可/"Powered by TONE3000" + 链接)
   固定展示;UI、降级路径、trending/粘贴分别为后续票 #13/#14/#15。
+- **OAuth 以 popup 流程为主**(#14 UAT 修正:全页跳转 + return-rig
+  stash 的链路太脆,用户报告"页面丢失")——主页面不跳转,回调在弹窗内
+  经 postMessage 回传(同源校验 + state 校验);弹窗被拦截时兜底为
+  全页跳转 + stash。
 
 ## 后果
 

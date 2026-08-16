@@ -136,3 +136,40 @@ test('toneInfoCache: 写入→读取→超限淘汰最旧', async () => {
   assert.equal(getCachedToneInfo('79103', storage), null); // 最旧的已被淘汰
   assert.ok(getCachedToneInfo('1059', storage));
 });
+
+// ---------- popup relay(issue #14) ----------
+
+test('relayFromCallbackUrl: 提取回调参数;非回调/无参数返回 null', async () => {
+  const { relayFromCallbackUrl } = await import('../src/tone3000/callback.ts');
+  const relay = relayFromCallbackUrl(
+    'http://localhost:5173/tone3000/callback?code=C&state=S&tone_id=79103',
+  );
+  assert.deepEqual(relay, {
+    type: 't3k_oauth_callback',
+    code: 'C',
+    state: 'S',
+    tone_id: '79103',
+    model_id: null,
+    error: null,
+    canceled: false,
+  });
+  assert.equal(relayFromCallbackUrl('http://localhost:5173/'), null);
+  assert.equal(relayFromCallbackUrl('http://localhost:5173/tone3000/callback'), null);
+});
+
+test('relayToCallbackUrl: 还原为回调 URL,null 字段省略,与 handleCallback 契约一致', async () => {
+  const { relayFromCallbackUrl, relayToCallbackUrl } = await import('../src/tone3000/callback.ts');
+  const original = 'http://localhost:5173/tone3000/callback?code=C&state=S&tone_id=79103';
+  const relay = relayFromCallbackUrl(original)!;
+  const rebuilt = relayToCallbackUrl(relay, 'http://localhost:5173/tone3000/callback');
+  const u = new URL(rebuilt);
+  assert.equal(u.searchParams.get('code'), 'C');
+  assert.equal(u.searchParams.get('state'), 'S');
+  assert.equal(u.searchParams.get('tone_id'), '79103');
+  assert.equal(u.searchParams.get('error'), null);
+  // error/canceled 路径
+  const errRelay = relayFromCallbackUrl('http://localhost:5173/tone3000/callback?error=access_denied&state=S')!;
+  const errUrl = new URL(relayToCallbackUrl(errRelay, 'http://localhost:5173/tone3000/callback'));
+  assert.equal(errUrl.searchParams.get('error'), 'access_denied');
+  assert.equal(errUrl.searchParams.get('code'), null);
+});

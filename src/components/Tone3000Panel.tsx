@@ -1,10 +1,11 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { rigStore, useRig } from '../state/useRig';
 import { rigToShareState } from '../state/rigStore';
-import { parseTone3000Key } from '../audio/namWasm';
+import { buildTone3000Key, parseTone3000Key } from '../audio/namWasm';
 import { encodeShareState } from '../state/share';
 import {
   browseTone3000,
+  loginTone3000,
   logoutTone3000,
   replaceTone3000,
   tone3000,
@@ -48,14 +49,31 @@ export function Tone3000Panel() {
     };
   }, [authed, toneId]);
 
-  const startBrowse = () =>
-    void browseTone3000(() => encodeShareState(rigToShareState(rigStore.getState())));
+  const encodedRig = () => encodeShareState(rigToShareState(rigStore.getState()));
+
+  // 浏览(select popup):选中即装载;弹窗被拦截时兜底整页跳转(instance 内处理)
+  const startBrowse = async () => {
+    const selected = await browseTone3000(encodedRig);
+    if (selected) rigStore.setAmpModel('tone3000', buildTone3000Key(selected));
+  };
+
+  // 纯登录(standard popup,不强迫重选):成功后重试当前模型(降级修复闭环)
+  const startLogin = async () => {
+    const ok = await loginTone3000(encodedRig);
+    if (ok && modelKey) rigStore.setAmpModel('tone3000', modelKey);
+  };
+
+  // 失效修复(load_tone popup):装载(可能不同的)替代 tone
+  const startReplace = async (unavailableToneId: string) => {
+    const replacement = await replaceTone3000(unavailableToneId, encodedRig);
+    if (replacement) rigStore.setAmpModel('tone3000', buildTone3000Key(replacement));
+  };
 
   return (
     <div className="tone3000-panel">
       {authed ? (
         <>
-          <button className="nam-load-btn" onClick={startBrowse}>
+          <button className="nam-load-btn" onClick={() => void startBrowse()}>
             浏览 TONE3000 选模型…
           </button>
           <button className="tone3000-logout" title="登出 TONE3000" onClick={logoutTone3000}>
@@ -63,7 +81,7 @@ export function Tone3000Panel() {
           </button>
         </>
       ) : (
-        <button className="nam-load-btn" onClick={startBrowse}>
+        <button className="nam-load-btn" onClick={() => void startLogin()}>
           登录 TONE3000 选模型…
         </button>
       )}
@@ -100,19 +118,12 @@ export function Tone3000Panel() {
             {notice.reason === 'http' && <>模型下载失败(网络问题),箱头已回退为默认。</>}
           </span>
           {notice.reason === 'not-authenticated' && (
-            <button className="nam-load-btn" onClick={startBrowse}>
+            <button className="nam-load-btn" onClick={() => void startLogin()}>
               登录 TONE3000
             </button>
           )}
           {notice.reason === 'tone-unavailable' && (
-            <button
-              className="nam-load-btn"
-              onClick={() =>
-                void replaceTone3000(notice.toneId, () =>
-                  encodeShareState(rigToShareState(rigStore.getState())),
-                )
-              }
-            >
+            <button className="nam-load-btn" onClick={() => void startReplace(notice.toneId)}>
               在 TONE3000 选择替代模型…
             </button>
           )}
