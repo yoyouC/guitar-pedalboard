@@ -178,7 +178,7 @@ test('getModelText: 过期令牌自动轮转后用新令牌下载', async () => 
   assert.equal(text, '{"metadata":{"name":"X"}}');
   // 新令牌已持久化
   assert.ok(storage.getItem('t3k_tokens')!.includes('"NEW_RT"'));
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 4); // token + 双架构列表 ×2 + 下载
 });
 
 test('getModelText: 401 强制轮转并重放一次', async () => {
@@ -189,7 +189,8 @@ test('getModelText: 401 强制轮转并重放一次', async () => {
     }
     if (req.url.includes('/api/v1/models?tone_id=')) {
       modelCalls += 1;
-      if (modelCalls === 1) return { status: 401 };
+      // 双架构列表并行:前两次都以旧令牌 401,刷新后各自重放
+      if (modelCalls <= 2) return { status: 401 };
       assert.equal(req.init?.headers?.Authorization, 'Bearer FRESH_AT');
       return {
         status: 200,
@@ -202,7 +203,7 @@ test('getModelText: 401 强制轮转并重放一次', async () => {
   seedTokens(storage, 3600_000); // 未过期
   const client = makeClient(fetchFn, storage);
   await client.getModelText('79103');
-  assert.equal(modelCalls, 2);
+  assert.equal(modelCalls, 4); // 双架构列表 ×2,各自 401 后重放一次
 });
 
 test('getModelText: refresh 失败 → 登出态,抛 not-authenticated', async () => {
@@ -230,21 +231,25 @@ test('getModelText: 未登录直接抛 not-authenticated,不发请求', async ()
 
 // ---------- 模型选取与失效语义 ----------
 
-test('getModelText: 优先 standard 尺寸的 A1 模型,跳过 A2', async () => {
+test('getModelText: 双架构列表合并,优先 standard 尺寸(不分架构)', async () => {
   const { fetchFn } = mockFetch((req) => {
-    if (req.url.includes('/api/v1/models?tone_id=')) {
+    if (req.url.includes('/api/v1/models?tone_id=') && !req.url.includes('architecture=2')) {
       return {
         status: 200,
         body: {
-          data: [
-            { id: 1, model_url: 'https://cdn.example.com/a2.nam', size: 'standard', architecture_version: '2' },
-            { id: 2, model_url: 'https://cdn.example.com/lite.nam', size: 'lite', architecture_version: '1' },
-            { id: 3, model_url: 'https://cdn.example.com/std.nam', size: 'standard', architecture_version: '1' },
-          ],
+          data: [{ id: 2, model_url: 'https://cdn.example.com/lite.nam', size: 'lite', architecture_version: '1' }],
         },
       };
     }
-    assert.equal(req.url, 'https://cdn.example.com/std.nam');
+    if (req.url.includes('architecture=2')) {
+      return {
+        status: 200,
+        body: {
+          data: [{ id: 3, model_url: 'https://cdn.example.com/std-a2.nam', size: 'standard', architecture_version: '2' }],
+        },
+      };
+    }
+    assert.equal(req.url, 'https://cdn.example.com/std-a2.nam');
     return { status: 200, body: '{}' };
   });
   const storage = memoryStorage();
@@ -253,13 +258,30 @@ test('getModelText: 优先 standard 尺寸的 A1 模型,跳过 A2', async () => 
   await client.getModelText('79103');
 });
 
-test('getModelText: 只有 A2 模型 → tone-unavailable', async () => {
+test('getModelText: 只有 A2 模型也可装载(wasm 含 SlimmableWavenet)', async () => {
   const { fetchFn } = mockFetch((req) => {
-    if (req.url.includes('/api/v1/models?tone_id=')) {
+    if (req.url.includes('/api/v1/models?tone_id=') && !req.url.includes('architecture=2')) {
+      return { status: 200, body: { data: [] } };
+    }
+    if (req.url.includes('architecture=2')) {
       return {
         status: 200,
         body: { data: [{ id: 1, model_url: 'https://cdn.example.com/a2.nam', size: 'standard', architecture_version: '2' }] },
       };
+    }
+    assert.equal(req.url, 'https://cdn.example.com/a2.nam');
+    return { status: 200, body: '{"metadata":{"name":"A2"}}' };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  const client = makeClient(fetchFn, storage);
+  assert.equal(await client.getModelText('79103'), '{"metadata":{"name":"A2"}}');
+});
+
+test('getModelText: 两个架构列表都为空 → tone-unavailable', async () => {
+  const { fetchFn } = mockFetch((req) => {
+    if (req.url.includes('/api/v1/models?tone_id=')) {
+      return { status: 200, body: { data: [] } };
     }
     return { status: 200, body: '{}' };
   });

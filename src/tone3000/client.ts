@@ -290,25 +290,39 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     architecture_version: '1' | '2' | 'custom';
   }
 
-  /** 选装载目标:A1/Custom 架构(首版不支持 A2),优先 standard 尺寸 */
+  /** 选装载目标:优先 standard 尺寸,否则列表第一个(A1/Custom/A2 均支持) */
   function pickModel(models: ApiModel[]): ApiModel | null {
-    const compatible = models.filter((m) => m.architecture_version !== '2');
-    if (compatible.length === 0) return null;
-    return compatible.find((m) => m.size === 'standard') ?? compatible[0];
+    if (models.length === 0) return null;
+    return models.find((m) => m.size === 'standard') ?? models[0];
+  }
+
+  /**
+   * 获取 tone 的模型列表:A1+Custom(API 默认)与 A2 各取一次合并。
+   * API 的 architecture 参数默认排除 A2,而平台内容已全面转向 A2
+   * (本仓 wasm 构建含 SlimmableWavenet,A2 在支持范围内)。
+   */
+  async function listModelsForTone(toneId: string): Promise<ApiModel[]> {
+    const query = `tone_id=${encodeURIComponent(toneId)}`;
+    const [a1Res, a2Res] = await Promise.all([
+      apiFetch(`/api/v1/models?${query}`),
+      apiFetch(`/api/v1/models?${query}&architecture=2`),
+    ]);
+    if (a1Res.status === 404 || a1Res.status === 403) {
+      throw new Tone3000Error('tone-unavailable', `tone ${toneId} 不可访问(已删除/转私有)`, a1Res.status);
+    }
+    if (!a1Res.ok) {
+      throw new Tone3000Error('http', `模型列表获取失败 HTTP ${a1Res.status}`, a1Res.status);
+    }
+    const a1 = ((await a1Res.json()) as { data?: ApiModel[] }).data ?? [];
+    const a2 = a2Res.ok ? (((await a2Res.json()) as { data?: ApiModel[] }).data ?? []) : [];
+    return [...a1, ...a2];
   }
 
   async function getModelText(toneId: string): Promise<string> {
-    const listRes = await apiFetch(`/api/v1/models?tone_id=${encodeURIComponent(toneId)}`);
-    if (listRes.status === 404 || listRes.status === 403) {
-      throw new Tone3000Error('tone-unavailable', `tone ${toneId} 不可访问(已删除/转私有)`, listRes.status);
-    }
-    if (!listRes.ok) {
-      throw new Tone3000Error('http', `模型列表获取失败 HTTP ${listRes.status}`, listRes.status);
-    }
-    const list = (await listRes.json()) as { data?: ApiModel[] };
-    const model = pickModel(list.data ?? []);
+    const models = await listModelsForTone(toneId);
+    const model = pickModel(models);
     if (!model) {
-      throw new Tone3000Error('tone-unavailable', `tone ${toneId} 没有兼容的 NAM 模型(A1/Custom)`);
+      throw new Tone3000Error('tone-unavailable', `tone ${toneId} 没有任何 NAM 模型`);
     }
     // model_url 必须带 Bearer 下载(官方约定;可能非同源,直连完整 URL)
     const token = await getAccessToken();
