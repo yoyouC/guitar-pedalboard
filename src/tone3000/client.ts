@@ -72,6 +72,24 @@ export interface Tone3000Client {
   getModelText(toneId: string): Promise<string>;
   /** 获取 tone 元数据(归属展示:标题/作者/许可/链接,ToS 要求展示) */
   getTone(toneId: string): Promise<ToneInfo>;
+  /** trending/latest 有限列表(免费层条款允许的有界端点;需登录态) */
+  listTones(feed: 'trending' | 'latest'): Promise<ToneInfo[]>;
+}
+
+/** 解析 TONE3000 模型页链接(/tones/{slug}-{id})或裸数字 id → toneId;无法识别返回 null */
+export function parseToneUrl(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const u = new URL(withProtocol);
+    if (!/(^|\.)tone3000\.com$/i.test(u.hostname)) return null;
+    const m = u.pathname.match(/\/tones\/(?:[^/]*-)?(\d+)\/?$/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
 }
 
 /** tone 元数据(归属展示用) */
@@ -303,6 +321,24 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     return downloadRes.text();
   }
 
+  interface ApiTone {
+    id: number;
+    title?: string;
+    license?: string;
+    url?: string;
+    user?: { username?: string };
+  }
+
+  function mapTone(t: ApiTone): ToneInfo {
+    return {
+      id: t.id,
+      title: t.title ?? `Tone #${t.id}`,
+      username: t.user?.username ?? '未知作者',
+      license: t.license ?? 't3k',
+      url: t.url ?? `https://www.tone3000.com/tones/${t.id}`,
+    };
+  }
+
   async function getTone(toneId: string): Promise<ToneInfo> {
     const res = await apiFetch(`/api/v1/tones/${encodeURIComponent(toneId)}`);
     if (res.status === 404 || res.status === 403) {
@@ -311,20 +347,16 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     if (!res.ok) {
       throw new Tone3000Error('http', `tone 获取失败 HTTP ${res.status}`, res.status);
     }
-    const t = (await res.json()) as {
-      id: number;
-      title?: string;
-      license?: string;
-      url?: string;
-      user?: { username?: string };
-    };
-    return {
-      id: t.id,
-      title: t.title ?? `Tone #${toneId}`,
-      username: t.user?.username ?? '未知作者',
-      license: t.license ?? 't3k',
-      url: t.url ?? `https://www.tone3000.com/tones/${toneId}`,
-    };
+    return mapTone((await res.json()) as ApiTone);
+  }
+
+  async function listTones(feed: 'trending' | 'latest'): Promise<ToneInfo[]> {
+    const res = await apiFetch(`/api/v1/tones/${feed}`);
+    if (!res.ok) {
+      throw new Tone3000Error('http', `${feed} 列表获取失败 HTTP ${res.status}`, res.status);
+    }
+    const page = (await res.json()) as { data?: ApiTone[] };
+    return (page.data ?? []).map(mapTone);
   }
 
   return {
@@ -334,5 +366,6 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     logout: clearTokens,
     getModelText,
     getTone,
+    listTones,
   };
 }

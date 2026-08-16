@@ -2477,3 +2477,81 @@ body.midi-learn-mode input:disabled {
   background: rgba(232, 178, 78, 0.1);
   font-size: 12px;
 }
+
+/* ---------- TONE3000 发现区(issue #15):粘贴装载 + trending/latest 列表 ---------- */
+.tone3000-discover {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.tone3000-paste-row {
+  display: flex;
+  gap: 8px;
+}
+.tone3000-paste-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.tone3000-paste-input:focus {
+  outline: none;
+  border-color: #7fb3e8;
+}
+.tone3000-paste-error {
+  color: #e8a04a;
+  font-size: 12px;
+}
+.tone3000-feed-tabs {
+  display: flex;
+  gap: 6px;
+}
+.tone3000-feed-tab {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: inherit;
+  font-size: 12px;
+  padding: 2px 10px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.tone3000-feed-tab.active {
+  opacity: 1;
+  border-color: #7fb3e8;
+}
+.tone3000-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.tone3000-feed-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.tone3000-feed-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.tone3000-feed-item.active {
+  border-color: #7fb3e8;
+}

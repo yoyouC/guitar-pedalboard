@@ -335,3 +335,91 @@ test('getTone: 404/403 → tone-unavailable', async () => {
     });
   }
 });
+
+// ---------- listTones(trending/latest 列表,issue #15) ----------
+
+test('listTones: 解析分页响应为 ToneInfo 列表(含作者/许可/链接)', async () => {
+  const { fetchFn, requests } = mockFetch((req) => {
+    assert.equal(req.url, 'https://www.tone3000.com/api/v1/tones/trending');
+    return {
+      status: 200,
+      body: {
+        data: [
+          {
+            id: 1,
+            title: 'Hot Amp',
+            license: 'cc-by',
+            url: 'https://www.tone3000.com/tones/hot-amp-1',
+            user: { username: 'alice' },
+          },
+          {
+            id: 2,
+            title: 'Other Amp',
+            license: 't3k',
+            url: 'https://www.tone3000.com/tones/other-2',
+            user: { username: 'bob' },
+          },
+        ],
+        page: 1,
+        total: 2,
+      },
+    };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  const client = makeClient(fetchFn, storage);
+  const tones = await client.listTones('trending');
+  assert.equal(tones.length, 2);
+  assert.deepEqual(tones[0], {
+    id: 1,
+    title: 'Hot Amp',
+    username: 'alice',
+    license: 'cc-by',
+    url: 'https://www.tone3000.com/tones/hot-amp-1',
+  });
+  assert.equal(requests.length, 1);
+});
+
+test('listTones: latest 端点;未登录抛 not-authenticated', async () => {
+  const { fetchFn, requests } = mockFetch((req) => {
+    assert.equal(req.url, 'https://www.tone3000.com/api/v1/tones/latest');
+    return { status: 200, body: { data: [] } };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  const client = makeClient(fetchFn, storage);
+  assert.deepEqual(await client.listTones('latest'), []);
+  assert.equal(requests.length, 1);
+
+  const anon = makeClient(fetchFn, memoryStorage());
+  await assert.rejects(anon.listTones('trending'), (err: unknown) => {
+    assert.equal((err as { reason?: string }).reason, 'not-authenticated');
+    return true;
+  });
+});
+
+// ---------- parseToneUrl(粘贴链接 → toneId,issue #15) ----------
+
+test('parseToneUrl: 合法各形态解析出 toneId', async () => {
+  const { parseToneUrl } = await import('../src/tone3000/client.ts');
+  // 完整 slug 链接
+  assert.equal(
+    parseToneUrl('https://www.tone3000.com/tones/mesa-boogie-dual-rectifier-revision-g-6l6-community-pack-79103'),
+    '79103',
+  );
+  // 无 slug
+  assert.equal(parseToneUrl('https://www.tone3000.com/tones/79103'), '79103');
+  // 无协议 / 尾斜杠 / 查询参数
+  assert.equal(parseToneUrl('tone3000.com/tones/some-amp-42/?x=1'), '42');
+  // 裸数字 id
+  assert.equal(parseToneUrl('  79103 '), '79103');
+});
+
+test('parseToneUrl: 非法输入返回 null(不改变当前状态的前提)', async () => {
+  const { parseToneUrl } = await import('../src/tone3000/client.ts');
+  assert.equal(parseToneUrl(''), null);
+  assert.equal(parseToneUrl('hello world'), null);
+  assert.equal(parseToneUrl('https://example.com/tones/amp-123'), null); // 非 tone3000 域
+  assert.equal(parseToneUrl('https://www.tone3000.com/tones/'), null);
+  assert.equal(parseToneUrl('https://www.tone3000.com/users/alice'), null);
+});
