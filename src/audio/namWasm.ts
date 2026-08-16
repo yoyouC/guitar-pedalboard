@@ -69,6 +69,7 @@ export interface NamWasmMetadata {
 
 const modelTextCache = new Map<string, Promise<string>>();
 const metadataCache = new Map<string, NamWasmMetadata>();
+const TONE3000_MODEL_TEXT_CACHE_MAX = 8;
 
 /** Tone3000 模型 key 编解码(ADR-0007):`${prefix}${toneId}`,全仓唯一字面量来源 */
 export const TONE3000_KEY_PREFIX = 'tone3000:';
@@ -88,7 +89,7 @@ export function parseTone3000Key(key: string): string | null {
  * - `{ source }`:单模型 URL 或 cache key(`file:` 本地文件、`tone3000:` 外部引用);
  * - `{ pack }`:增益扫档包。
  */
-export type NamModelSelection = { source: string } | { pack: NamSweepPack };
+export type NamModelSelection = { source: string; modelId?: string } | { pack: NamSweepPack };
 
 /**
  * TONE3000 模型文本提供者注册点(adapter 注册,非模型选择状态——
@@ -96,11 +97,25 @@ export type NamModelSelection = { source: string } | { pack: NamSweepPack };
  * 下载"的能力,与 createWorkletLoader 的注册语义同类)。
  * 生产由 tone3000/instance 注册;传 null 注销(测试隔离用)。
  */
-type Tone3000ModelTextProvider = (toneId: string) => Promise<string>;
+type Tone3000ModelTextProvider = (toneId: string, modelId?: string) => Promise<string>;
 let tone3000Provider: Tone3000ModelTextProvider | null = null;
 
 export function setTone3000ModelTextProvider(provider: Tone3000ModelTextProvider | null): void {
   tone3000Provider = provider;
+}
+
+/** 登出/测试隔离：仅清外部 TONE3000 文本，内置与本地模型缓存不受影响。 */
+export function clearTone3000ModelTextCache(): void {
+  for (const key of modelTextCache.keys()) {
+    if (key.startsWith(TONE3000_KEY_PREFIX)) modelTextCache.delete(key);
+  }
+}
+
+function enforceTone3000ModelTextCacheLimit(): void {
+  const external = [...modelTextCache.keys()].filter((key) => key.startsWith(TONE3000_KEY_PREFIX));
+  while (external.length > TONE3000_MODEL_TEXT_CACHE_MAX) {
+    modelTextCache.delete(external.shift()!);
+  }
 }
 
 // ---------- 增益扫档包(同一箱头多个 gain 档位的 capture 组,GAIN 旋钮切档) ----------
@@ -170,14 +185,19 @@ export const NAM_SWEEP_PACKS: Record<string, NamSweepPack> = {
  * 会让登录后的重试永远命中缓存的 rejection(刷新页面才能恢复)。
  * 导出以便测试 provider 分派(tests/nam-model-source.test.ts)。
  */
-export function loadModelText(source: string): Promise<string> {
-  let p = modelTextCache.get(source);
+export function loadModelText(source: string, modelId?: string): Promise<string> {
+  const cacheKey = modelId ? `${source}:model:${modelId}` : source;
+  let p = modelTextCache.get(cacheKey);
+  if (p && cacheKey.startsWith(TONE3000_KEY_PREFIX)) {
+    modelTextCache.delete(cacheKey);
+    modelTextCache.set(cacheKey, p);
+  }
   if (!p) {
     const toneId = parseTone3000Key(source);
     if (toneId !== null) {
       // 外部模型引用:经注册的 provider(带 OAuth Bearer)按用户身份下载
       p = tone3000Provider
-        ? tone3000Provider(toneId)
+        ? tone3000Provider(toneId, modelId)
         : Promise.reject(new Error('TONE3000 模型提供者未注册'));
     } else {
       p = fetch(source).then((r) => {
@@ -185,9 +205,12 @@ export function loadModelText(source: string): Promise<string> {
         return r.text();
       });
     }
-    modelTextCache.set(source, p);
+    modelTextCache.set(cacheKey, p);
+    if (cacheKey.startsWith(TONE3000_KEY_PREFIX)) {
+      p.then(enforceTone3000ModelTextCacheLimit).catch(() => {});
+    }
     p.catch(() => {
-      if (modelTextCache.get(source) === p) modelTextCache.delete(source);
+      if (modelTextCache.get(cacheKey) === p) modelTextCache.delete(cacheKey);
     });
   }
   return p;
@@ -319,12 +342,14 @@ export function createNamWasmAmp(ctx: AudioContext, model: NamModelSelection): E
   } else if (voice) {
     reportAmpLoad({ phase: 'loading', done: 0, total: 2, label: '加载模型' });
     const source = 'source' in model ? model.source : BUNDLED_WAVENET_MODELS[0].url;
-    loadModelText(source)
+    const modelId = 'source' in model ? model.modelId : undefined;
+    loadModelText(source, modelId)
       .then((json) => {
         if (disposed) return;
         reportAmpLoad({ phase: 'loading', done: 1, total: 2, label: '装载模型' });
         voice.sendModel(json);
-        const meta = metadataCache.get(source) ?? parseNamMetadata(json);
+        const metadataKey = modelId ? `${source}:model:${modelId}` : source;
+        const meta = metadataCache.get(metadataKey) ?? parseNamMetadata(json);
         if (meta.loudness !== null) {
           const makeupDb = Math.min(36, Math.max(-12, -18 - meta.loudness));
           normalizeGain.gain.setTargetAtTime(

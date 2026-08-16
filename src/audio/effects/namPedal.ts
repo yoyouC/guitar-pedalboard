@@ -2,6 +2,7 @@ import type { EffectDefinition, EffectInstance } from './types';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
 import { createNamWasmVoice } from '../namWasmVoice';
 import { BASE_URL } from '../baseUrl';
+import { loadModelText } from '../namWasm';
 
 /**
  * NAM 单块(NAMKnobs 条件化 capture):
@@ -14,7 +15,8 @@ import { BASE_URL } from '../baseUrl';
  */
 
 interface NamPedalConfig {
-  modelUrl: string;
+  modelUrl?: string;
+  loadModel?: () => Promise<string>;
   /** 网络条件通道顺序(与模型 metadata.controls 一致) */
   controls: string[];
   labels: Record<string, string>;
@@ -62,7 +64,12 @@ function createNamPedal(ctx: AudioContext, cfg: NamPedalConfig): EffectInstance 
     voice.setConditioning(cond);
     // 直接装载模型(voice.stageLoad 内部会先等 prepare;不得等待 voice.ready——
     // 新协议里 ready 由首个 stage-ready 触发,等它会死锁:模型永远不发,工作于直通)
-    loadPedalModel(cfg.modelUrl)
+    const modelPromise = cfg.loadModel
+      ? cfg.loadModel()
+      : cfg.modelUrl
+        ? loadPedalModel(cfg.modelUrl)
+        : Promise.reject(new Error('NAM 单块缺少模型来源'));
+    modelPromise
       .then((json) => {
         if (disposed) return;
         voice.sendModel(json);
@@ -184,3 +191,35 @@ export const NAM_PEDAL_EFFECTS: EffectDefinition[] = [
     defaults: {},
   }),
 ];
+
+export const TONE3000_PEDAL_EFFECT_ID = 'tone3000Nam';
+
+/** catalog 使用的稳定定义；实际建图由 modelRef 感知工厂解析为具体定义。 */
+export const TONE3000_PEDAL_CATALOG_DEF = makeNamPedalDef(
+  TONE3000_PEDAL_EFFECT_ID,
+  'TONE3000 NAM',
+  '#315f88',
+  { controls: [], labels: {}, defaults: {} },
+);
+
+const tone3000PedalDefs = new Map<string, EffectDefinition>();
+const TONE3000_PEDAL_DEF_CACHE_MAX = 32;
+
+/** 同一外部模型身份返回同一 def，使图谱的 def+key 复用稳定。 */
+export function getTone3000PedalDef(modelRef: string, modelId?: string): EffectDefinition {
+  const key = modelId ? `${modelRef}:model:${modelId}` : modelRef;
+  let def = tone3000PedalDefs.get(key);
+  if (!def) {
+    if (tone3000PedalDefs.size >= TONE3000_PEDAL_DEF_CACHE_MAX) {
+      tone3000PedalDefs.delete(tone3000PedalDefs.keys().next().value!);
+    }
+    def = makeNamPedalDef(TONE3000_PEDAL_EFFECT_ID, 'TONE3000 NAM', '#315f88', {
+      controls: [],
+      labels: {},
+      defaults: {},
+      loadModel: () => loadModelText(modelRef, modelId),
+    });
+    tone3000PedalDefs.set(key, def);
+  }
+  return def;
+}

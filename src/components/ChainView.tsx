@@ -5,6 +5,15 @@ import { audioEngine } from '../audio/AudioEngine';
 import { rigStore, useRig } from '../state/useRig';
 import { PedalCard } from './PedalCard';
 import { AddEffectMenu } from './AddEffectMenu';
+import { TONE3000_PEDAL_EFFECT_ID } from '../audio/effects/namPedal';
+import { Tone3000Selector } from './Tone3000Selector';
+import { tone3000Rig, useTone3000Rig } from '../tone3000/useTone3000Rig';
+import { getCachedToneInfo, putCachedToneInfo } from '../tone3000/toneInfoCache';
+import type { Tone3000Selection } from '../tone3000/instance';
+import { loginTone3000 } from '../tone3000/instance';
+import type { ToneInfo } from '../tone3000/client';
+import { encodeShareState } from '../state/share';
+import { rigToShareState } from '../state/rigStore';
 
 /** 横向 pedalboard:前置(箱头前)与 FX Loop(箱头后、箱体前)分区,拖拽排序/跨区 */
 export function ChainView({ showMeters }: { showMeters: boolean }) {
@@ -14,11 +23,25 @@ export function ChainView({ showMeters }: { showMeters: boolean }) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
   const [overDivider, setOverDivider] = useState(false);
+  const [selector, setSelector] = useState<
+    { kind: 'add' } | { kind: 'replace'; uid: string; repair?: boolean } | null
+  >(null);
+  const toneTargets = useTone3000Rig((state) => state.targets);
 
   const preItems = items.filter((i) => !i.post);
   const postItems = items.filter((i) => i.post);
 
-  const renderSlot = (item: ChainItem, idx: number, isLast: boolean) => (
+  const renderSlot = (item: ChainItem, idx: number, isLast: boolean) => {
+    const runtime = toneTargets[`pedal:${item.uid}`];
+    const cachedInfo = item.modelRef?.startsWith('tone3000:')
+      ? getCachedToneInfo(item.modelRef.slice('tone3000:'.length), window.localStorage)
+      : null;
+    const tone3000State = runtime
+      ? runtime.info || !cachedInfo
+        ? runtime
+        : { ...runtime, info: cachedInfo }
+      : undefined;
+    return (
     <div
       key={item.uid}
       className={`pedal-slot ${overIndex === idx && dragIndex !== idx ? 'drag-over' : ''} ${
@@ -56,10 +79,27 @@ export function ChainView({ showMeters }: { showMeters: boolean }) {
         onRemove={rigStore.removePedal}
         onParam={rigStore.setPedalParam}
         onToggleSlot={rigStore.setPedalPost}
+        tone3000State={tone3000State}
+        onReplaceTone3000={(uid) => setSelector({ kind: 'replace', uid })}
+        onRepairTone3000={(uid) => {
+          const target = tone3000Rig.getState().targets[`pedal:${uid}`];
+          if (target?.reason === 'tone-unavailable') {
+            setSelector({ kind: 'replace', uid, repair: true });
+          } else if (target?.reason === 'not-authenticated') {
+            void loginTone3000(() => encodeShareState(rigToShareState(rigStore.getState()))).then(
+              (ok) => {
+                if (ok) void tone3000Rig.retryAll();
+              },
+            );
+          } else {
+            void tone3000Rig.retryAll();
+          }
+        }}
       />
       {!isLast && <div className="patch-cable" />}
     </div>
-  );
+    );
+  };
 
   return (
     <div className="chain-view">
@@ -94,7 +134,42 @@ export function ChainView({ showMeters }: { showMeters: boolean }) {
       </div>
 
       {postItems.map((item) => renderSlot(item, items.indexOf(item), false))}
-      <AddEffectMenu onAdd={rigStore.addPedal} />
+      <AddEffectMenu
+        onAdd={(effectId) => {
+          if (effectId === TONE3000_PEDAL_EFFECT_ID) setSelector({ kind: 'add' });
+          else rigStore.addPedal(effectId);
+        }}
+      />
+      {selector && (
+        <Tone3000Selector
+          intent={
+            selector.kind === 'add'
+              ? { kind: 'add-pedal', architecture: '2' }
+              : { kind: 'replace-pedal', uid: selector.uid, architecture: '2' }
+          }
+          gear="pedal"
+          currentToneId={
+            selector.kind === 'replace'
+              ? rigStore.getState().chain.find((item) => item.uid === selector.uid)?.modelRef?.slice('tone3000:'.length)
+              : null
+          }
+          loadToneId={
+            selector.kind === 'replace' && selector.repair
+              ? rigStore.getState().chain.find((item) => item.uid === selector.uid)?.modelRef?.slice('tone3000:'.length)
+              : undefined
+          }
+          onClose={() => setSelector(null)}
+          onSelect={async (selection: Tone3000Selection, info?: ToneInfo) => {
+            if (info) putCachedToneInfo(info, window.localStorage);
+            const result =
+              selector.kind === 'add'
+                ? await tone3000Rig.addPedal(selection.toneId, selection.modelId)
+                : await tone3000Rig.replacePedal(selector.uid, selection.toneId, selection.modelId);
+            if (!result.ok) throw new Error(result.message);
+            setSelector(null);
+          }}
+        />
+      )}
     </div>
   );
 }

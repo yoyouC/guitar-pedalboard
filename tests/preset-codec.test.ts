@@ -4,6 +4,8 @@ import {
   createRigPreset,
   exportRigPresetsJson,
   importRigPresetsJson,
+  normalizeRigPreset,
+  normalizeSnapshot,
   restoreRigPreset,
   type RigPresetCatalog,
 } from '../src/state/presetCodec.ts';
@@ -23,6 +25,11 @@ const catalog: RigPresetCatalog = {
       params: [
         { key: 'time', min: 0.05, max: 2, defaultValue: 0.4 },
       ],
+    },
+    {
+      id: 'tone3000Nam',
+      defaultPost: false,
+      params: [{ key: 'level', min: -30, max: 6, defaultValue: 0 }],
     },
   ],
   amps: [
@@ -106,7 +113,7 @@ test('legacy chain-only presets migrate with safe rig defaults', () => {
     }],
   }]), catalog);
 
-  assert.equal(imported[0].version, 2);
+  assert.equal(imported[0].version, 3);
   assert.equal(imported[0].rig.chain[0].post, true);
   assert.equal(imported[0].rig.chain[0].values.time, 2);
   assert.equal(imported[0].rig.amp.modelKey, 'builtin:clean');
@@ -183,4 +190,92 @@ test('tone3000 model key survives normalize (kind-prefix rule, not static table)
   assert.equal(preset.rig.amp.categoryId, 'tone3000');
   // 参数按 nam-wasm def 钳制(测试目录里 nam-wasm gain max=100)
   assert.equal(preset.rig.amp.values.gain, 100);
+});
+
+test('v3 preset keeps Tone3000 Pedal tone and exact model variant through restore', () => {
+  const preset = createRigPreset('Cloud Pedal', {
+    chain: [{
+      effectId: 'tone3000Nam',
+      modelRef: 'tone3000:42',
+      modelId: '9001',
+      enabled: true,
+      values: { level: 99 },
+      post: false,
+    }],
+    amp: {
+      categoryId: 'clean',
+      modelKey: 'builtin:clean',
+      enabled: true,
+      values: {},
+      customName: null,
+    },
+    cab: { id: 'open1x12', enabled: true, values: {} },
+    globals: { inputGain: 1, masterVolume: 0.5, bypass: false },
+  }, catalog);
+
+  assert.equal(preset.version, 3);
+  assert.deepEqual(preset.rig.chain[0], {
+    effectId: 'tone3000Nam',
+    modelRef: 'tone3000:42',
+    modelId: '9001',
+    enabled: true,
+    values: { level: 6 },
+    post: false,
+  });
+  assert.deepEqual(
+    restoreRigPreset(preset, catalog, () => 'cloud-uid').chain[0],
+    { ...preset.rig.chain[0], uid: 'cloud-uid' },
+  );
+});
+
+test('v2 canonical preset migrates to v3 without changing its Rig', () => {
+  const migrated = normalizeRigPreset({
+    version: 2,
+    name: 'Version Two',
+    rig: {
+      chain: [{ effectId: 'drive', enabled: false, values: { gain: 7 }, post: false }],
+      amp: { categoryId: 'clean', modelKey: 'builtin:clean', enabled: true, values: { gain: 30 } },
+      cab: { id: 'open1x12', enabled: true, values: { level: -3 } },
+      globals: { inputGain: 1.2, masterVolume: 0.7, bypass: false },
+    },
+  }, catalog)!;
+
+  assert.equal(migrated.version, 3);
+  assert.equal(migrated.rig.chain[0].effectId, 'drive');
+  assert.equal(migrated.rig.amp.modelKey, 'builtin:clean');
+  assert.equal(migrated.rig.cab.values.level, -3);
+});
+
+test('malformed external ids are rejected before graph projection', () => {
+  const normalized = normalizeRigPreset({
+    version: 3,
+    name: 'Untrusted',
+    rig: {
+      chain: [
+        { effectId: 'tone3000Nam', modelRef: 'tone3000:not-a-number', enabled: true, values: {}, post: false },
+        { effectId: 'tone3000Nam', modelRef: 'other:42', enabled: true, values: {}, post: false },
+      ],
+      amp: { categoryId: 'tone3000', modelKey: 'tone3000:../42', enabled: true, values: {} },
+      cab: { id: 'open1x12', enabled: true, values: {} },
+      globals: {},
+    },
+  }, catalog)!;
+
+  assert.deepEqual(normalized.rig.chain, []);
+  assert.equal(normalized.rig.amp.modelKey, 'builtin:clean');
+});
+
+test('unversioned Snapshot retains exact Tone3000 Amp variant', () => {
+  const snapshot = normalizeSnapshot({
+    chain: [],
+    amp: {
+      categoryId: 'tone3000',
+      modelKey: 'tone3000:77',
+      modelId: '7001',
+      enabled: true,
+      values: {},
+    },
+    cab: { id: 'open1x12', enabled: true, values: {} },
+  }, catalog)!;
+  assert.equal('modelId' in snapshot.amp ? snapshot.amp.modelId : undefined, '7001');
 });

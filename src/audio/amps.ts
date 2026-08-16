@@ -337,7 +337,10 @@ const namDefCache = new Map<string, EffectDefinition>();
 const NAM_DEF_CACHE_MAX = 32;
 
 export function getNamWasmAmpDef(model: NamModelSelection): EffectDefinition {
-  const cacheKey = 'pack' in model ? `pack:${model.pack.id}` : `src:${model.source}`;
+  const cacheKey =
+    'pack' in model
+      ? `pack:${model.pack.id}`
+      : `src:${model.source}${model.modelId ? `:model:${model.modelId}` : ''}`;
   let def = namDefCache.get(cacheKey);
   if (!def) {
     if (namDefCache.size >= NAM_DEF_CACHE_MAX) {

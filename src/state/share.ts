@@ -14,6 +14,7 @@ export interface ShareState {
   chain: ChainItem[];
   ampCategoryId: string;
   ampModelKey: string;
+  ampModelId?: string;
   ampEnabled: boolean;
   ampValues: Record<string, number>;
   cabId: string;
@@ -22,9 +23,9 @@ export interface ShareState {
 }
 
 interface SharePayload {
-  v: 1;
-  c: { id: string; e: 0 | 1; v: Record<string, number>; p?: 0 | 1 }[];
-  a?: { cat: string; key: string; on: 0 | 1; v: Record<string, number> };
+  v: 1 | 2;
+  c: { id: string; e: 0 | 1; v: Record<string, number>; p?: 0 | 1; r?: string; m?: string }[];
+  a?: { cat: string; key: string; on: 0 | 1; v: Record<string, number>; m?: string };
   b?: { id: string; on: 0 | 1; v: Record<string, number> };
 }
 
@@ -46,13 +47,15 @@ function base64urlDecode(s: string): string {
 export function decodeShareState(encoded: string): ShareState | null {
   try {
     const payload = JSON.parse(base64urlDecode(encoded)) as SharePayload;
-    if (payload?.v !== 1 || !Array.isArray(payload.c)) return null;
+    if ((payload?.v !== 1 && payload?.v !== 2) || !Array.isArray(payload.c)) return null;
 
     // payload → canonical 形状的原始输入,交给 presetCodec 统一规范化
     const rig = normalizeRig(
       {
         chain: payload.c.map((item) => ({
           effectId: item?.id,
+          modelRef: payload.v === 2 ? item?.r : undefined,
+          modelId: payload.v === 2 ? item?.m : undefined,
           enabled: typeof item?.e === 'number' ? item.e !== 0 : undefined,
           values: item?.v,
           post: typeof item?.p === 'number' ? item.p === 1 : undefined,
@@ -64,6 +67,7 @@ export function decodeShareState(encoded: string): ShareState | null {
               enabled: payload.a.on !== 0,
               values: payload.a.v,
               customName: null,
+              modelId: payload.v === 2 ? payload.a.m : undefined,
             }
           : undefined,
         cab: payload.b
@@ -78,6 +82,7 @@ export function decodeShareState(encoded: string): ShareState | null {
       chain: rig.chain.map((item) => ({ ...item, uid: crypto.randomUUID() })),
       ampCategoryId: rig.amp.categoryId,
       ampModelKey: rig.amp.modelKey,
+      ...(rig.amp.modelId ? { ampModelId: rig.amp.modelId } : {}),
       ampEnabled: rig.amp.enabled,
       ampValues: rig.amp.values,
       cabId: rig.cab.id,
@@ -91,13 +96,21 @@ export function decodeShareState(encoded: string): ShareState | null {
 
 export function encodeShareState(state: ShareState): string {
   const payload: SharePayload = {
-    v: 1,
-    c: state.chain.map((i) => ({ id: i.effectId, e: i.enabled ? 1 : 0, v: i.values, p: i.post ? 1 : 0 })),
+    v: 2,
+    c: state.chain.map((i) => ({
+      id: i.effectId,
+      e: i.enabled ? 1 : 0,
+      v: i.values,
+      p: i.post ? 1 : 0,
+      ...(i.modelRef ? { r: i.modelRef } : {}),
+      ...(i.modelId ? { m: i.modelId } : {}),
+    })),
     a: {
       cat: state.ampCategoryId,
       key: state.ampModelKey,
       on: state.ampEnabled ? 1 : 0,
       v: state.ampValues,
+      ...(state.ampModelId ? { m: state.ampModelId } : {}),
     },
     b: {
       id: state.cabId,

@@ -3,6 +3,8 @@ import type { EffectDefinition } from '../audio/effects/types';
 import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 import { WahTreadle } from './WahTreadle';
+import type { Tone3000TargetState } from '../tone3000/rigIntegration';
+import { Tone3000ModelAttribution } from './Tone3000Display';
 
 /** 用摇杆(WahTreadle)代替 position 旋钮的效果器 */
 const TREADLE_EFFECT_IDS = new Set(['wahpedal', 'crybabywdf', 'whammy']);
@@ -18,10 +20,13 @@ interface PedalCardProps {
   onRemove: (uid: string) => void;
   onParam: (uid: string, key: string, value: number) => void;
   onToggleSlot: (uid: string) => void;
+  tone3000State?: Tone3000TargetState;
+  onReplaceTone3000?: (uid: string) => void;
+  onRepairTone3000?: (uid: string) => void;
 }
 
 /** 拟物单块效果器:金属外壳 + 旋钮 + 脚踏开关 */
-export function PedalCard({ item, def, index, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot }: PedalCardProps) {
+export function PedalCard({ item, def, index, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot, tone3000State, onReplaceTone3000, onRepairTone3000 }: PedalCardProps) {
   return (
     <div
       className={`pedal skin-${def.id} ${item.enabled ? 'pedal-on' : 'pedal-off'}`}
@@ -77,6 +82,34 @@ export function PedalCard({ item, def, index, analyser, showMeters, onToggle, on
             </span>
           ))}
       </div>
+
+      {item.effectId === 'tone3000Nam' && (
+        <div className="tone3000-pedal-meta">
+          <Tone3000ModelAttribution
+            info={tone3000State?.info}
+            fallback={item.modelRef ?? 'TONE3000 NAM'}
+          />
+          <span className={`tone3000-runtime tone3000-runtime-${tone3000State?.phase ?? 'loading'}`}>
+            {tone3000State?.phase === 'ready'
+              ? '已就绪'
+              : tone3000State?.phase === 'error'
+                ? tone3000State.message ?? '模型不可用，当前直通'
+                : '加载中，当前直通…'}
+          </span>
+          {tone3000State?.phase === 'error' && (
+            <button className="tone3000-pedal-repair" onClick={() => onRepairTone3000?.(item.uid)}>
+              {tone3000State.reason === 'not-authenticated'
+                ? '登录并重试'
+                : tone3000State.reason === 'tone-unavailable'
+                  ? '选择替代模型…'
+                  : '重试'}
+            </button>
+          )}
+          <button className="tone3000-pedal-replace" onClick={() => onReplaceTone3000?.(item.uid)}>
+            换模型…
+          </button>
+        </div>
+      )}
 
       {TREADLE_EFFECT_IDS.has(def.id) && (
         <span data-midi-target={`pedal-treadle:${index}`}>

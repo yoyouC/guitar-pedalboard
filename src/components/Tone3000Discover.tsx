@@ -12,9 +12,16 @@ interface Tone3000DiscoverProps {
   currentToneId: string | null;
   /** 统一装载入口(记入型号记忆;info 用于归属元数据缓存) */
   onLoad(id: string, info?: ToneInfo): void;
+  gear?: 'amp' | 'pedal';
+  showLatest?: boolean;
 }
 
-export function Tone3000Discover({ currentToneId, onLoad }: Tone3000DiscoverProps) {
+export function Tone3000Discover({
+  currentToneId,
+  onLoad,
+  gear,
+  showLatest = true,
+}: Tone3000DiscoverProps) {
   const [feed, setFeed] = useState<'trending' | 'latest'>('trending');
   const [feedTones, setFeedTones] = useState<ToneInfo[] | null>(null);
   const [feedError, setFeedError] = useState<string | null>(null);
@@ -27,7 +34,7 @@ export function Tone3000Discover({ currentToneId, onLoad }: Tone3000DiscoverProp
     setFeedTones(null);
     setFeedError(null);
     tone3000
-      .listTones(feed)
+      .listTones(feed, gear)
       .then((tones) => {
         if (!cancelled) setFeedTones(tones);
       })
@@ -37,7 +44,7 @@ export function Tone3000Discover({ currentToneId, onLoad }: Tone3000DiscoverProp
     return () => {
       cancelled = true;
     };
-  }, [feed]);
+  }, [feed, gear]);
 
   // 粘贴链接装载:非法输入明确报错,当前状态不变
   const submitPaste = () => {
@@ -73,7 +80,7 @@ export function Tone3000Discover({ currentToneId, onLoad }: Tone3000DiscoverProp
       </div>
       {pasteError && <div className="tone3000-paste-error">{pasteError}</div>}
 
-      <div className="tone3000-feed-tabs">
+      {showLatest && <div className="tone3000-feed-tabs">
         <button
           className={`tone3000-feed-tab ${feed === 'trending' ? 'active' : ''}`}
           onClick={() => setFeed('trending')}
@@ -86,7 +93,7 @@ export function Tone3000Discover({ currentToneId, onLoad }: Tone3000DiscoverProp
         >
           最新
         </button>
-      </div>
+      </div>}
       {feedError && <div className="tone3000-paste-error">{feedError}</div>}
       {!feedError && feedTones === null && <div className="tone3000-byline">列表加载中…</div>}
       {feedTones && (
@@ -97,8 +104,10 @@ export function Tone3000Discover({ currentToneId, onLoad }: Tone3000DiscoverProp
                 className={`tone3000-feed-item ${currentToneId === String(t.id) ? 'active' : ''}`}
                 onClick={() => onLoad(String(t.id), t)}
               >
+                {t.imageUrl && <img className="tone3000-thumb" src={t.imageUrl} alt="" />}
                 <span className="tone3000-title">{t.title}</span>
                 <span className="tone3000-byline">
+                  {t.gear ? `${t.gear} · ` : ''}{t.format ? `${t.format.toUpperCase()} · ` : ''}
                   by {t.username} · {t.license.toUpperCase()}
                 </span>
               </button>

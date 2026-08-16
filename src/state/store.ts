@@ -20,6 +20,8 @@ import {
 export interface ChainItem {
   uid: string;
   effectId: string;
+  modelRef?: string;
+  modelId?: string;
   enabled: boolean;
   values: Record<string, number>;
   /** false = 箱头之前(前置);true = 箱头之后、箱体之前(FX Loop) */

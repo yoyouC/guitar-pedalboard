@@ -5,7 +5,7 @@
 ## 信号链(从吉他到耳朵)
 
 - **Rig** —— 一份完整可复现的配置:效果链 + 箱头 + 箱体 + 全局参数(inputGain、masterVolume、globalBypass)。序列化、快照、预设、分享的对象都是 Rig。
-- **效果链(Chain)** —— 有序的单块列表,每项(`ChainItem`)有稳定身份 `uid`、效果 `effectId`、开关 `enabled`、参数 `values`、前后置位 `post`。
+- **效果链(Chain)** —— 有序的单块列表,每项(`ChainItem`)有稳定身份 `uid`、效果 `effectId`、开关 `enabled`、参数 `values`、前后置位 `post`;模型型单块另有外部 `modelRef/modelId`，不把动态模型身份塞进 `effectId`。
 - **单块(Pedal)** —— 效果链上的一级效果器(过载、延迟、混响、哇音……)。注册于 `src/audio/effects/`。
 - **箱头(Amp)** —— 效果链之后的放大器级,有自己的开关与参数;同一箱头可能有多个**模型(model)**(如 NAM 扫档包的档位)。
 - **箱体(Cab)** —— 箱头之后的箱体模拟级。
@@ -34,5 +34,5 @@
 - **MIDI Learn** —— 用户自定义的 MIDI 绑定:进入 Learn 模式、点击控件武装(armed)目标、扭/踩控制器完成绑定。
 - **RigAction(动作词汇表)** —— 一次"要执行什么"的意图(切单块、召回快照、设箱头参数……),携带映射后的语义值。所有触发源(MIDI 默认映射、MIDI Learn、键盘)统一翻译成 RigAction,经同一 dispatch 执行。与 **MidiTarget**(Learn 绑定的持久化**地址**,回答"绑的是哪个控件")是两个概念:地址 + 原始值 → 翻译层 → RigAction。
 - **表情踏板 / 摇杆(Treadle)** —— CC 连续控制源,驱动哇音 position、Whammy 移调等连续参数。
-- **TONE3000** —— 外部 NAM 模型分享平台(tone3000.com),经官方 API v1(OAuth 2.0 + PKCE)接入;浏览/搜索走其托管 Select 流程,模型按用户身份在请求时下载(ADR-0007)。
-- **tone_id** —— TONE3000 模型的稳定数字 id;型号机制中的外部引用(`tone3000:{toneId}` kind),预设/快照/分享存引用、恢复时按 id 重新获取。模型可能被作者删除/转私有,恢复需非阻断降级。
+- **TONE3000** —— 外部 NAM 模型分享平台(tone3000.com),经官方 API v1(OAuth 2.0 + PKCE)接入;托管 Select 可为 Amp 或 Pedal 限定 gear/architecture，模型按用户身份在请求时下载(ADR-0007、ADR-0008)。
+- **tone_id / model_id** —— `tone_id` 是 tone pack 的稳定数字 id，编码为外部引用 `tone3000:{toneId}`；`model_id` 是其中一次托管选择的精确 NAM 变体。Preset、Snapshot、Share 保存引用和可用的精确变体，恢复失败只改变逐目标运行态，不丢用户意图。

@@ -19,6 +19,10 @@
 import type { audioEngine } from '../audio/AudioEngine';
 import type { ChainSpec, AmpSpec } from '../audio/AudioEngine';
 import { getEffectDef } from '../audio/effects';
+import {
+  getTone3000PedalDef,
+  TONE3000_PEDAL_EFFECT_ID,
+} from '../audio/effects/namPedal';
 import { getAmpDef, getNamWasmAmpDef } from '../audio/amps';
 import { getCabDef } from '../audio/cabs';
 import {
@@ -83,6 +87,8 @@ export interface RigStoreState {
   ampCategoryId: string;
   /** 每个箱头分类记住的型号(key = `${kind}:${ref}`,见 ampCategories.ts) */
   ampModelKeys: Record<string, string>;
+  /** TONE3000 托管选择返回的精确箱头模型变体。 */
+  ampTone3000ModelId: string | null;
   ampId: string;
   ampEnabled: boolean;
   ampValues: Record<string, number>;
@@ -142,6 +148,12 @@ export interface RigStore {
 
   // 链
   addPedal(effectId: string): void;
+  /** 新增一个动态 TONE3000 NAM 单块，返回稳定 uid。 */
+  addTone3000Pedal(modelRef: string, modelId?: string): string;
+  /** 原位替换动态模型；目标不存在或类型不符时返回 false。 */
+  replaceTone3000Pedal(uid: string, modelRef: string, modelId?: string): boolean;
+  /** 外部模型重试成功后重建该运行实例；不改变 canonical Chain。 */
+  reloadTone3000Pedal(uid: string): boolean;
   removePedal(uid: string): void;
   movePedal(from: number, to: number): void;
   togglePedal(uid: string): void;
@@ -159,7 +171,7 @@ export interface RigStore {
   setAmpEnabled(enabled: boolean): void;
   setAmpParam(key: string, value: number): void;
   /** 切分类/选型号:记住该类型号并应用(NAM 型号自增 namVersion) */
-  setAmpModel(categoryId: string, modelKey: string): void;
+  setAmpModel(categoryId: string, modelKey: string, modelId?: string): void;
   /** 本地 .nam 文件加载成功后登记为当前类的自定义型号(不重置参数);sourceKey 为 namWasm 缓存键 */
   setNamCustomModel(displayName: string, sourceKey: string): void;
 
@@ -226,7 +238,7 @@ function ampIdForModelKey(modelKey: string): string {
  * 解析 ampId/默认参数与模型选择(NamModelSelection);NAM 型号要求 namVersion 换代。
  * namModel 为 null 表示"不适用或保持当前选择"(builtin / nam-wasm:custom / 未知 ref)。
  */
-function resolveAmpModel(modelKey: string): {
+function resolveAmpModel(modelKey: string, modelId?: string): {
   ampId: string;
   ampValues: Record<string, number>;
   namReload: boolean;
@@ -242,7 +254,7 @@ function resolveAmpModel(modelKey: string): {
       ampId: 'nam-wasm',
       ampValues: defaultAmpValues('nam-wasm'),
       namReload: true,
-      namModel: { source: buildTone3000Key(ref) },
+      namModel: { source: buildTone3000Key(ref), ...(modelId ? { modelId } : {}) },
     };
   }
   if (kind === 'nam-wasm-pack') {
@@ -278,6 +290,7 @@ export function rigFromPreset(preset: RigPreset): ApplyRigState {
     amp: {
       categoryId: rig.amp.categoryId,
       modelKey: rig.amp.modelKey,
+      ...(rig.amp.modelId ? { modelId: rig.amp.modelId } : {}),
       enabled: rig.amp.enabled,
       values: rig.amp.values,
     },
@@ -313,6 +326,7 @@ export function rigFromShare(
     amp: {
       categoryId: share.ampCategoryId,
       modelKey: share.ampModelKey,
+      ...(share.ampModelId ? { modelId: share.ampModelId } : {}),
       enabled: share.ampEnabled,
       values: share.ampValues,
     },
@@ -327,6 +341,7 @@ export function rigToShareState(state: RigStoreState): ShareState {
     chain: state.chain,
     ampCategoryId: state.ampCategoryId,
     ampModelKey: state.ampModelKeys[state.ampCategoryId],
+    ...(state.ampTone3000ModelId ? { ampModelId: state.ampTone3000ModelId } : {}),
     ampEnabled: state.ampEnabled,
     ampValues: state.ampValues,
     cabId: state.cabId,
@@ -338,8 +353,10 @@ export function rigToShareState(state: RigStoreState): ShareState {
 /** 正向派生:当前状态 → 快照(= rig − globals;箱头记型号机制引用,见 ADR-0006) */
 export function toSnapshot(state: RigStoreState): Snapshot {
   return {
-    chain: state.chain.map(({ effectId, enabled, values, post }) => ({
+    chain: state.chain.map(({ effectId, modelRef, modelId, enabled, values, post }) => ({
       effectId,
+      ...(modelRef ? { modelRef } : {}),
+      ...(modelId ? { modelId } : {}),
       enabled,
       values: { ...values },
       post,
@@ -347,6 +364,7 @@ export function toSnapshot(state: RigStoreState): Snapshot {
     amp: {
       categoryId: state.ampCategoryId,
       modelKey: state.ampModelKeys[state.ampCategoryId],
+      ...(state.ampTone3000ModelId ? { modelId: state.ampTone3000ModelId } : {}),
       enabled: state.ampEnabled,
       values: { ...state.ampValues },
     },
@@ -380,6 +398,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     chain: defaultChain(),
     ampCategoryId: defaultModel?.categoryId ?? RIG_PRESET_CATALOG.ampCategoryIds[0],
     ampModelKeys: defaultAmpModelKeys(),
+    ampTone3000ModelId: null,
     ampId: initialAmpId,
     ampEnabled: true,
     ampValues: defaultAmpValues(initialAmpId),
@@ -400,6 +419,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
   };
 
   const listeners = new Set<() => void>();
+  const tone3000PedalGenerations = new Map<string, number>();
   const emit = () => {
     for (const listener of listeners) listener();
   };
@@ -430,7 +450,11 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
    * (同一 promise,不重复下载);失败按原因降级,成功清掉对应通知。
    */
   const scheduleTone3000Check = (toneId: string) => {
-    loadModelText(buildTone3000Key(toneId))
+    const modelId =
+      state.ampModelKeys[state.ampCategoryId] === buildTone3000Key(toneId)
+        ? state.ampTone3000ModelId ?? undefined
+        : undefined;
+    loadModelText(buildTone3000Key(toneId), modelId)
       .then(() => clearTone3000Notice(toneId))
       .catch((e: unknown) => {
         const reason = (e as { reason?: string } | null)?.reason;
@@ -454,7 +478,14 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       state.chain.map(
         (item): ChainSpec => ({
           uid: item.uid,
-          def: getEffectDef(item.effectId),
+          def:
+            item.effectId === TONE3000_PEDAL_EFFECT_ID && item.modelRef
+              ? getTone3000PedalDef(item.modelRef, item.modelId)
+              : getEffectDef(item.effectId),
+          key:
+            item.effectId === TONE3000_PEDAL_EFFECT_ID && item.modelRef
+              ? `${item.modelRef}${item.modelId ? `:model:${item.modelId}` : ''}:runtime:${tone3000PedalGenerations.get(item.uid) ?? 0}`
+              : undefined,
           enabled: item.enabled,
           values: item.values,
           post: item.post,
@@ -507,7 +538,49 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       emit();
     },
 
+    addTone3000Pedal(modelRef, modelId) {
+      const item = createChainItem(getEffectDef(TONE3000_PEDAL_EFFECT_ID));
+      const dynamicItem: ChainItem = { ...item, modelRef, ...(modelId ? { modelId } : {}) };
+      const next = [...state.chain];
+      const boundary = next.findIndex((candidate) => candidate.post);
+      next.splice(boundary < 0 ? next.length : boundary, 0, dynamicItem);
+      state = { ...state, chain: next };
+      syncStructure();
+      emit();
+      return dynamicItem.uid;
+    },
+
+    replaceTone3000Pedal(uid, modelRef, modelId) {
+      const target = state.chain.find(
+        (item) => item.uid === uid && item.effectId === TONE3000_PEDAL_EFFECT_ID,
+      );
+      if (!target) return false;
+      state = {
+        ...state,
+        chain: state.chain.map((item) =>
+          item.uid === uid
+            ? { ...item, modelRef, modelId: modelId || undefined }
+            : item,
+        ),
+      };
+      syncStructure();
+      emit();
+      return true;
+    },
+
+    reloadTone3000Pedal(uid) {
+      const target = state.chain.find(
+        (item) => item.uid === uid && item.effectId === TONE3000_PEDAL_EFFECT_ID,
+      );
+      if (!target) return false;
+      tone3000PedalGenerations.set(uid, (tone3000PedalGenerations.get(uid) ?? 0) + 1);
+      syncStructure();
+      emit();
+      return true;
+    },
+
     removePedal(uid) {
+      tone3000PedalGenerations.delete(uid);
       state = { ...state, chain: state.chain.filter((i) => i.uid !== uid) };
       syncStructure();
       emit();
@@ -590,16 +663,17 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       emit();
     },
 
-    setAmpModel(categoryId, modelKey) {
+    setAmpModel(categoryId, modelKey, modelId) {
       // 改选其他型号:旧 tone 的降级通知随之失效
       if (state.tone3000Notice && modelKey !== buildTone3000Key(state.tone3000Notice.toneId)) {
         state = { ...state, tone3000Notice: null };
       }
-      const resolved = resolveAmpModel(modelKey);
+      const resolved = resolveAmpModel(modelKey, modelId);
       state = {
         ...state,
         ampCategoryId: categoryId,
         ampModelKeys: { ...state.ampModelKeys, [categoryId]: modelKey },
+        ampTone3000ModelId: modelKey.startsWith('tone3000:') ? modelId ?? null : null,
         ampId: resolved.ampId,
         ampValues: resolved.ampValues,
         namModel: resolved.namModel ?? state.namModel,
@@ -672,6 +746,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       let namModel = state.namModel;
       let appliedNamModel: NamModelSelection | null = null;
       let { ampCategoryId, ampModelKeys } = state;
+      let ampTone3000ModelId = state.ampTone3000ModelId;
       if ('modelKey' in ampRef) {
         if (
           state.tone3000Notice &&
@@ -679,11 +754,14 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         ) {
           state = { ...state, tone3000Notice: null };
         }
-        const resolved = resolveAmpModel(ampRef.modelKey);
+        const resolved = resolveAmpModel(ampRef.modelKey, ampRef.modelId);
         if (resolved.namReload) namVersion += 1;
         ampId = ampIdForModelKey(ampRef.modelKey);
         ampCategoryId = ampRef.categoryId;
         ampModelKeys = { ...state.ampModelKeys, [ampRef.categoryId]: ampRef.modelKey };
+        ampTone3000ModelId = ampRef.modelKey.startsWith('tone3000:')
+          ? ampRef.modelId ?? null
+          : null;
         namModel = resolved.namModel ?? state.namModel;
         appliedNamModel = resolved.namModel;
       } else {
@@ -694,6 +772,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         chain: rig.chain,
         ampCategoryId,
         ampModelKeys,
+        ampTone3000ModelId,
         ampId,
         namModel,
         ampEnabled: rig.amp.enabled,
@@ -759,6 +838,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
           enabled: state.ampEnabled,
           values: state.ampValues,
           customName: modelKey === 'nam-wasm:custom' ? state.namCustomName : null,
+          ...(state.ampTone3000ModelId ? { modelId: state.ampTone3000ModelId } : {}),
         },
         cab: {
           id: state.cabId,

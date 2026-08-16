@@ -29,6 +29,8 @@ import type { EffectDefinition, EffectInstance } from './effects/types';
 export interface ChainSpec {
   uid: string;
   def: EffectDefinition;
+  /** 动态模型/配置身份；相同 uid+def 但 key 变化时必须重建实例。 */
+  key?: string;
   enabled: boolean;
   values: Record<string, number>;
   /** false = 箱头之前(前置);true = 箱头之后、箱体之前(FX Loop) */
@@ -58,6 +60,7 @@ export interface GraphSpec {
 /** 存活的单块实例及其身份(post 记录建图时的分区,用于结构比对) */
 export interface PedalEntry {
   def: EffectDefinition;
+  key: string | null;
   post: boolean;
   inst: EffectInstance;
 }
@@ -81,6 +84,7 @@ export interface GraphPrevState {
 export interface PedalPlan {
   uid: string;
   def: EffectDefinition;
+  key: string | null;
   post: boolean;
   inst: EffectInstance | null;
   /** 新建与复用都回放的参数值 */
@@ -172,7 +176,12 @@ function isStructuralMatch(spec: GraphSpec, prev: GraphPrevState): boolean {
   if (ordered.length !== entries.length) return false;
   for (let i = 0; i < ordered.length; i++) {
     const [uid, entry] = entries[i];
-    if (ordered[i].uid !== uid || ordered[i].def !== entry.def || ordered[i].post !== entry.post) {
+    if (
+      ordered[i].uid !== uid ||
+      ordered[i].def !== entry.def ||
+      (ordered[i].key ?? null) !== entry.key ||
+      ordered[i].post !== entry.post
+    ) {
       return false;
     }
   }
@@ -199,7 +208,13 @@ export function planGraph(spec: GraphSpec, prev: GraphPrevState): GraphPlan {
   const kept = new Map<string, PedalEntry>();
   const dispose: EffectInstance[] = [];
   for (const [uid, entry] of prev.instances) {
-    const match = spec.chain.find((s) => s.uid === uid && s.enabled && s.def === entry.def);
+    const match = spec.chain.find(
+      (s) =>
+        s.uid === uid &&
+        s.enabled &&
+        s.def === entry.def &&
+        (s.key ?? null) === entry.key,
+    );
     if (match) {
       kept.set(uid, entry);
     } else {
@@ -222,6 +237,7 @@ export function planGraph(spec: GraphSpec, prev: GraphPrevState): GraphPlan {
     pedals = orderedEnabled(spec.chain).map((s) => ({
       uid: s.uid,
       def: s.def,
+      key: s.key ?? null,
       post: s.post,
       inst: kept.get(s.uid)?.inst ?? null,
       values: s.values,
@@ -242,6 +258,7 @@ export function planGraph(spec: GraphSpec, prev: GraphPrevState): GraphPlan {
     pedals = [...kept.entries()].map(([uid, entry]) => ({
       uid,
       def: entry.def,
+      key: entry.key,
       post: spec.chain.find((s) => s.uid === uid)?.post ?? entry.post,
       inst: entry.inst,
       values: {},
@@ -313,7 +330,7 @@ export function executePlan(
       prev.connect(inst.input);
       prev = inst.output;
       artifacts.moduleAnalysers.set(p.uid, createTap(ctx, inst.output));
-      artifacts.instances.set(p.uid, { def: p.def, post: p.post, inst });
+      artifacts.instances.set(p.uid, { def: p.def, key: p.key, post: p.post, inst });
     };
     // 前置段(post=false):踏板 → 箱头
     for (const p of plan.pedals) {
@@ -349,7 +366,9 @@ export function executePlan(
   } else {
     // bypass:保留复用实例的归属(不接线、不重载,恢复时原样接回)
     for (const p of plan.pedals) {
-      if (p.inst) artifacts.instances.set(p.uid, { def: p.def, post: p.post, inst: p.inst });
+      if (p.inst) {
+        artifacts.instances.set(p.uid, { def: p.def, key: p.key, post: p.post, inst: p.inst });
+      }
     }
     if (plan.amp?.inst) {
       artifacts.ampInstance = plan.amp.inst;

@@ -1,5 +1,4 @@
-import { TONE3000_KEY_PREFIX } from '../audio/namWasm';
-export const RIG_PRESET_VERSION = 2;
+export const RIG_PRESET_VERSION = 3;
 export const PRESET_EXPORT_FORMAT = 'guitar-pedalboard-presets';
 export const PRESET_EXPORT_VERSION = 1;
 
@@ -41,6 +40,10 @@ export interface RigPresetCatalog {
 
 export interface PresetChainItem {
   effectId: string;
+  /** 动态模型引用；首个实现为 `tone3000:{toneId}`。 */
+  modelRef?: string;
+  /** 托管 Select 返回的精确模型变体；缺省时按 tone 选择默认兼容模型。 */
+  modelId?: string;
   enabled: boolean;
   values: Record<string, number>;
   post: boolean;
@@ -54,6 +57,8 @@ export interface RigPresetState {
     enabled: boolean;
     values: Record<string, number>;
     customName: string | null;
+    /** TONE3000 Select/load_tone 返回的精确模型变体。 */
+    modelId?: string;
   };
   cab: {
     id: string;
@@ -83,7 +88,7 @@ export interface RestoredRigPresetState extends Omit<RigPresetState, 'chain'> {
  * - legacy 分支:旧持久化数据只有扁平 ampId,recall 保持旧行为(绕过型号机制)。
  */
 export type SnapshotAmpRef =
-  | { categoryId: string; modelKey: string }
+  | { categoryId: string; modelKey: string; modelId?: string }
   | { legacyAmpId: string };
 
 /** 快照/恢复共用的箱头状态(引用 + 开关 + 参数) */
@@ -149,8 +154,20 @@ function normalizeChain(rawItems: unknown, catalog: RigPresetCatalog): PresetCha
     if (!isRecord(rawItem) || typeof rawItem.effectId !== 'string') continue;
     const definition = catalog.effects.find((effect) => effect.id === rawItem.effectId);
     if (!definition) continue;
+    const isTone3000Pedal = definition.id === 'tone3000Nam';
+    const modelRef =
+      isTone3000Pedal && typeof rawItem.modelRef === 'string' && /^tone3000:\d+$/.test(rawItem.modelRef)
+        ? rawItem.modelRef
+        : undefined;
+    if (isTone3000Pedal && !modelRef) continue;
+    const modelId =
+      modelRef && typeof rawItem.modelId === 'string' && /^\d+$/.test(rawItem.modelId)
+        ? rawItem.modelId
+        : undefined;
     result.push({
       effectId: definition.id,
+      ...(modelRef ? { modelRef } : {}),
+      ...(modelId ? { modelId } : {}),
       enabled: typeof rawItem.enabled === 'boolean' ? rawItem.enabled : true,
       values: normalizeValues(definition, rawItem.values),
       post: typeof rawItem.post === 'boolean' ? rawItem.post : definition.defaultPost,
@@ -183,7 +200,7 @@ function normalizeAmp(rawAmp: unknown, catalog: RigPresetCatalog): RigPresetStat
   const registered = catalog.ampModels.find((model) => model.key === requestedKey);
   // tone3000: 外部模型引用(ADR-0007)——按 kind 前缀放行,不查静态表;
   // categoryId 固定 'tone3000',参数按 nam-wasm def 钳制
-  if (!registered && requestedKey.startsWith(TONE3000_KEY_PREFIX)) {
+  if (!registered && /^tone3000:\d+$/.test(requestedKey)) {
     const namDef = catalog.amps.find((amp) => amp.id === 'nam-wasm');
     if (!namDef) return fallback;
     return {
@@ -192,6 +209,9 @@ function normalizeAmp(rawAmp: unknown, catalog: RigPresetCatalog): RigPresetStat
       enabled: typeof rawAmp.enabled === 'boolean' ? rawAmp.enabled : true,
       values: normalizeValues(namDef, rawAmp.values),
       customName: null,
+      ...(typeof rawAmp.modelId === 'string' && /^\d+$/.test(rawAmp.modelId)
+        ? { modelId: rawAmp.modelId }
+        : {}),
     };
   }
   const custom = requestedKey === 'nam-wasm:custom';
@@ -277,6 +297,7 @@ export function normalizeSnapshot(value: unknown, catalog: RigPresetCatalog): Sn
       amp: {
         categoryId: amp.categoryId,
         modelKey: amp.modelKey,
+        ...(amp.modelId ? { modelId: amp.modelId } : {}),
         enabled: amp.enabled,
         values: amp.values,
       },
@@ -318,12 +339,29 @@ function migrateLegacyPreset(
   };
 }
 
+/** v2 已是 canonical Rig，只缺动态模型字段；经当前 normalize 自然升级。 */
+function migrateV2Preset(
+  source: Record<string, unknown>,
+  catalog: RigPresetCatalog,
+): RigPreset | null {
+  if (source.version !== 2 || typeof source.name !== 'string' || !source.name.trim() || !isRecord(source.rig)) {
+    return null;
+  }
+  return {
+    version: RIG_PRESET_VERSION,
+    name: source.name.trim(),
+    rig: normalizeRig(source.rig, catalog),
+  };
+}
+
 export function normalizeRigPreset(
   value: unknown,
   catalog: RigPresetCatalog,
 ): RigPreset | null {
   if (!isRecord(value)) return null;
-  if (value.version !== RIG_PRESET_VERSION) return migrateLegacyPreset(value, catalog);
+  if (value.version !== RIG_PRESET_VERSION) {
+    return migrateV2Preset(value, catalog) ?? migrateLegacyPreset(value, catalog);
+  }
   if (typeof value.name !== 'string' || !value.name.trim() || !isRecord(value.rig)) {
     return null;
   }

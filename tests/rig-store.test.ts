@@ -226,6 +226,43 @@ test('addPedal inserts pre effects before the FX Loop partition', () => {
   assert.equal(store.getState().chain[3].post, false);
 });
 
+test('Tone3000 Pedal add/replace keeps stable uid and projects exact model identity', () => {
+  const { engine, calls } = createStubEngine();
+  const store = createRigStore(engine);
+  const uid = store.addTone3000Pedal('tone3000:42', '9001');
+  const added = store.getState().chain.find((item) => item.uid === uid)!;
+  assert.deepEqual(
+    { effectId: added.effectId, modelRef: added.modelRef, modelId: added.modelId, post: added.post },
+    { effectId: 'tone3000Nam', modelRef: 'tone3000:42', modelId: '9001', post: false },
+  );
+  const firstSpec = calls.findLast((call) => call.method === 'setChain')!.args[0] as Array<{
+    uid: string;
+    def: { id: string };
+    key?: string;
+  }>;
+  const firstProjected = firstSpec.find((item) => item.uid === uid)!;
+  assert.equal(firstProjected.def.id, 'tone3000Nam');
+  assert.equal(firstProjected.key, 'tone3000:42:model:9001:runtime:0');
+
+  assert.equal(store.reloadTone3000Pedal(uid), true);
+  const reloadedSpec = calls.findLast((call) => call.method === 'setChain')!.args[0] as Array<{
+    uid: string;
+    key?: string;
+  }>;
+  assert.equal(
+    reloadedSpec.find((item) => item.uid === uid)?.key,
+    'tone3000:42:model:9001:runtime:1',
+  );
+  assert.equal(store.getState().chain.find((item) => item.uid === uid)?.modelRef, 'tone3000:42');
+
+  assert.equal(store.replaceTone3000Pedal(uid, 'tone3000:43', '9002'), true);
+  const replaced = store.getState().chain.find((item) => item.uid === uid)!;
+  assert.equal(replaced.uid, uid);
+  assert.equal(replaced.modelRef, 'tone3000:43');
+  assert.equal(replaced.modelId, '9002');
+  assert.equal(store.replaceTone3000Pedal('missing', 'tone3000:44'), false);
+});
+
 test('movePedal across partitions flips post; setPedalPost moves to target partition end', () => {
   const { engine } = createStubEngine();
   const store = createRigStore(engine);
@@ -595,6 +632,17 @@ test('setAmpModel tone3000: 走 nam-wasm def,选择收编进 state.namModel', ()
     key: string;
   };
   assert.equal(ampSpec.def.id, 'nam-wasm');
+});
+
+test('Tone3000 Amp exact modelId survives state, Snapshot and Share projection', () => {
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  store.setAmpModel('tone3000', 'tone3000:79103', '88001');
+  const state = store.getState();
+  assert.equal(state.ampTone3000ModelId, '88001');
+  assert.deepEqual(state.namModel, { source: 'tone3000:79103', modelId: '88001' });
+  assert.equal((toSnapshot(state).amp as { modelId?: string }).modelId, '88001');
+  assert.equal(rigToShareState(state).ampModelId, '88001');
 });
 
 test('nam def memoization: 同一选择同一 def 实例(复用语义),换选择换 def', () => {

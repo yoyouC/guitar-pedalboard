@@ -20,7 +20,7 @@ NAM 箱头模型来源有限(内置 wavenet、扫档包、本地 .nam 上传),�
   `createTone3000Client(config)` 工厂,fetch/storage 构造注入(与
   `createRigStore(engine)` 同构);publishable key 作为静态常量随仓
   (官方明确浏览器可公开);refresh token 存 localStorage;过期前 60s
-  主动轮转 + 401 强制重放一次;NAM 架构限定 A1+Custom。
+  主动轮转 + 401 强制重放一次；当前运行时支持 A1、Custom 与 A2。
 - **型号机制扩展**:`AmpModelKind` 新增 `'tone3000'`,modelKey 形如
   `tone3000:{toneId}`;presetCodec 的 normalize 对该前缀按 kind 规则
   放行(不查静态表),categoryId 固定 `'tone3000'`——预设/快照/分享
@@ -51,5 +51,6 @@ NAM 箱头模型来源有限(内置 wavenet、扫档包、本地 .nam 上传),�
   登录(条款要求;降级 UX 在 #14)。
 - 平台风险集中在客户端一个 adapter:API v1 可能变化、模型可被作者
   删除/转私有(`tone-unavailable` 错误语义 + #14 的 load_tone 流程)。
-- 已知限制:A2 模型被过滤(wasm 核心版本未核对);模型文件仅内存
-  缓存;`namDefCache` 设 32 上限(file:/tone3000: 键长期增长)。
+- 后续扩展：TONE3000 NAM 单块、精确 `model_id`、有界 LRU、逐目标运行态与
+  显式 OAuth 意图见 ADR-0008。模型文件仍仅内存缓存；采样率与 A2 响度等
+  运行时限制另见 `docs/nam-a2-vs-a1.md`。

@@ -2555,3 +2555,177 @@ body.midi-learn-mode input:disabled {
 .tone3000-feed-item.active {
   border-color: #7fb3e8;
 }
+
+.tone3000-thumb,
+.tone3000-model-image {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.tone3000-model-attribution {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tone3000-model-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.tone3000-model-copy a {
+  color: #7fb3e8;
+}
+
+.tone3000-creator {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tone3000-creator img,
+.tone3000-account-user img {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.tone3000-mark {
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: 10px;
+  opacity: 0.65;
+}
+
+.tone3000-account,
+.tone3000-account-user {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.tone3000-account-user {
+  color: inherit;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.tone3000-current {
+  width: 100%;
+  align-items: center;
+}
+
+.tone3000-current .tone3000-model-attribution {
+  flex: 1;
+}
+
+.tone3000-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.tone3000-modal {
+  position: relative;
+  width: min(680px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid rgba(127, 179, 232, 0.45);
+  border-radius: 12px;
+  background: #20242a;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+}
+
+.tone3000-modal h3 {
+  margin: 0 34px 12px 0;
+}
+
+.tone3000-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.tone3000-browser-actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.tone3000-pedal-meta {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.22);
+  color: rgba(255, 255, 255, 0.88);
+  text-shadow: none;
+}
+
+.tone3000-pedal-meta .tone3000-model-attribution {
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.tone3000-pedal-meta .tone3000-model-image {
+  width: 38px;
+  height: 38px;
+}
+
+.tone3000-pedal-meta .tone3000-mark {
+  width: 100%;
+  margin: 2px 0 0;
+  text-align: center;
+}
+
+.tone3000-pedal-meta .tone3000-model-copy {
+  width: 100%;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
+.tone3000-runtime {
+  font-size: 10px;
+}
+
+.tone3000-runtime-ready {
+  color: #80d99b;
+}
+
+.tone3000-runtime-error {
+  color: #ffbd6a;
+}
+
+.tone3000-pedal-repair,
+.tone3000-pedal-replace {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  color: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}

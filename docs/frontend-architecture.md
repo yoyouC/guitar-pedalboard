@@ -8,7 +8,7 @@ Rig 状态全部在 rigStore(`createRigStore(audioEngine)` 的生产单例在 `s
 
 | 状态 | 类型 | 说明 |
 |---|---|---|
-| `chain` | `ChainItem[]` | 效果链,元素:`{ uid, effectId, enabled, values, post }`(`src/state/store.ts`)。`uid` 用 `crypto.randomUUID()` 生成,是 React key 与引擎寻址的双重身份 |
+| `chain` | `ChainItem[]` | 效果链,元素:`{ uid, effectId, enabled, values, post, modelRef?, modelId? }`(`src/state/store.ts`)。`uid` 用 `crypto.randomUUID()` 生成,是 React key 与引擎寻址的双重身份；外部模型身份与稳定 effectId 分离 |
 | `presets` | `Preset[]` | 完整 Rig 预设,镜像 localStorage(`guitar-pedalboard-presets`),写盘在 verb 内完成 |
 | `ampId/ampEnabled/ampValues` + `ampCategoryId/ampModelKeys` | — | 箱头选择、参数与型号簿记(默认 `crunch` 开) |
 | `cabId/cabEnabled/cabValues` | — | 箱体选择与参数(默认 `gb4x12` 开) |
@@ -19,9 +19,9 @@ Rig 状态全部在 rigStore(`createRigStore(audioEngine)` 的生产单例在 `s
 
 留在 `App` 的:`inputType/engineReady`、`micDevices/outputDevices/micId/outputId`(设备枚举)、`showMeters/showTuner/ytBgActive`(纯 UI 开关)、MIDI Learn 状态(`midiBindings/learnMode/armedTarget`)。
 
-`state/store.ts` 是纯函数模块:链条实例与浏览器持久化;`state/presetCodec.ts` 是不依赖 DOM/Web Audio 的纯编解码模块。v2 预设覆盖效果链、箱头、箱体、输入增益、主音量与全局 Bypass,**不存 uid**、加载时重新生成;参数统一按当前目录钳制,并自动把旧版 chain-only 数据迁移到安全的完整 Rig 默认值。PresetBar 还支持版本化 JSON 批量导入导出。
+`state/store.ts` 是纯函数模块:链条实例与浏览器持久化;`state/presetCodec.ts` 是不依赖 DOM/Web Audio 的纯编解码模块。v3 预设覆盖效果链、外部模型引用、箱头、箱体、输入增益、主音量与全局 Bypass,**不存 uid**、加载时重新生成;参数统一按当前目录钳制,并自动把 v2/旧版 chain-only 数据迁移到安全的完整 Rig 默认值。PresetBar 还支持版本化 JSON 批量导入导出。
 
-`state/share.ts` 是 URL 分享编解码(`#p=` + base64url JSON,v1 短字段):覆盖**链条 + 箱头分类/型号/参数 + 箱体**(`ShareState`);解码容错——未知 effectId/型号/箱体跳过并告警,参数一律按 ParamDef 范围钳制。rigStore 单例启动时 `readShareFromLocation` 还原一次(无分享参数则用出厂配置 `DEFAULT_RIG_ENCODED`,经 `applyRig` 应用);配置变化由 App 的防抖订阅投影 400ms `writeShareToLocation`(replaceState,不刷历史);PresetBar 的"分享"按钮调同一函数取 URL 复制(clipboard 失败时退化为 prompt)。
+`state/share.ts` 是 URL 分享编解码(`#p=` + base64url JSON,v2 短字段，兼容读 v1):覆盖**链条 + 外部模型引用 + 箱头分类/型号/参数 + 箱体**(`ShareState`);解码容错——未知 effectId/型号/箱体跳过,参数一律按 ParamDef 范围钳制。rigStore 单例启动时 `readShareFromLocation` 还原一次(无分享参数则用出厂配置 `DEFAULT_RIG_ENCODED`,经 `applyRig` 应用);配置变化由 App 的防抖订阅投影 400ms `writeShareToLocation`(replaceState,不刷历史);PresetBar 的"分享"按钮调同一函数取 URL 复制(clipboard 失败时退化为 prompt)。
 
 ## 2. 核心机制:verb 内的状态 ⇆ 引擎同步
 

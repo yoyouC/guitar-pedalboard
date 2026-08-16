@@ -11,6 +11,7 @@ import { rigStore } from './state/useRig.ts'
 import { rigFromShare } from './state/rigStore.ts'
 import { decodeShareState } from './state/share.ts'
 import { buildTone3000Key } from './audio/namWasm.ts'
+import { tone3000Rig } from './tone3000/useTone3000Rig.ts'
 
 // OAuth 回调着陆(ADR-0007)分两种:
 // 1) popup 流程(默认):回调在弹窗内着陆,把参数 postMessage 回 opener 后关窗,
@@ -28,9 +29,28 @@ if (relay && window.opener) {
       const share = decodeShareState(encoded)
       if (share) rigStore.applyRig(rigFromShare(share))
     },
-    applyTone: (toneId) => rigStore.setAmpModel('tone3000', buildTone3000Key(toneId)),
-    onSettled: () => notifyTone3000AuthChanged(),
-    onError: (error) => console.warn('[tone3000] OAuth 回调失败:', error),
+    applyTone: async (toneId, modelId, intent) => {
+      let result;
+      if (intent?.kind === 'add-pedal') {
+        result = await tone3000Rig.addPedal(toneId, modelId)
+      } else if (intent?.kind === 'replace-pedal') {
+        result = await tone3000Rig.replacePedal(intent.uid, toneId, modelId)
+      } else if (intent?.kind === 'amp') {
+        result = await tone3000Rig.selectAmp(toneId, modelId)
+      } else {
+        // 兼容旧 redirect stash：没有 intent 时仍按原箱头语义恢复。
+        rigStore.setAmpModel('tone3000', buildTone3000Key(toneId), modelId)
+      }
+      if (result && !result.ok) throw new Error(result.message)
+    },
+    onSettled: () => {
+      notifyTone3000AuthChanged()
+      void tone3000Rig.retryAll()
+    },
+    onError: (error) => {
+      console.warn('[tone3000] OAuth 回调失败:', error)
+      window.alert(`TONE3000 操作失败：${error}`)
+    },
   }).then((handled) => {
     if (handled) {
       history.replaceState(null, '', window.location.pathname.replace('/tone3000/callback', '') || '/')

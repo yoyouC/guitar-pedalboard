@@ -89,7 +89,7 @@ function prevWithPedals(
 ): GraphPrevState {
   const instances = new Map<string, PedalEntry>();
   for (const [uid, def, inst, post] of entries) {
-    instances.set(uid, { def, post: post ?? false, inst });
+    instances.set(uid, { def, key: null, post: post ?? false, inst });
   }
   return emptyPrev({ instances, ...overrides });
 }
@@ -133,6 +133,25 @@ test('单块 uid 同但 def 变 → 重建(旧实例 dispose)', () => {
   assert.deepEqual(plan.dispose, [inst]);
   assert.equal(plan.pedals[0].inst, null);
   assert.equal(plan.pedals[0].def, defB);
+});
+
+test('模型单块 uid+def 相同但 key 变化 → 只重建该单块', () => {
+  const def = fakeDef('tone3000Nam');
+  const inst = fakeInst('tone-1');
+  const prev = emptyPrev({
+    instances: new Map([
+      ['u1', { def, key: 'tone3000:10:model:1', post: false, inst } as PedalEntry],
+    ]),
+  });
+  const plan = planGraph(
+    specOf({ chain: [pedal('u1', def, { key: 'tone3000:10:model:2' })] }),
+    prev,
+  );
+
+  assert.equal(plan.empty, false);
+  assert.deepEqual(plan.dispose, [inst]);
+  assert.equal(plan.pedals[0].inst, null);
+  assert.equal(plan.pedals[0].key, 'tone3000:10:model:2');
 });
 
 // ---------- 箱头复用契约:def+key ----------

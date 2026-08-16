@@ -8,10 +8,12 @@
  */
 
 import { createTone3000Client } from './client';
-import { setTone3000ModelTextProvider } from '../audio/namWasm';
+import { clearTone3000ModelTextCache, setTone3000ModelTextProvider } from '../audio/namWasm';
 import {
   relayToCallbackUrl,
+  stashPendingIntent,
   stashReturnRig,
+  type Tone3000PendingIntent,
   type Tone3000OAuthRelay,
 } from './callback';
 
@@ -28,7 +30,7 @@ export const tone3000 = createTone3000Client({
   storage: window.localStorage,
 });
 
-setTone3000ModelTextProvider((toneId) => tone3000.getModelText(toneId));
+setTone3000ModelTextProvider((toneId, modelId) => tone3000.getModelText(toneId, modelId));
 
 // ---------- 登录态的 UI 订阅面(仿 loadProgress 的 pub-sub) ----------
 
@@ -53,7 +55,12 @@ export function notifyTone3000AuthChanged(): void {
 
 // ---------- popup OAuth ----------
 
-type PopupOutcome = { kind: 'blocked' } | { kind: 'done'; toneId: string | null };
+export interface Tone3000Selection {
+  toneId: string;
+  modelId?: string;
+}
+
+type PopupOutcome = { kind: 'blocked' } | { kind: 'done'; selection: Tone3000Selection | null };
 
 /**
  * 弹窗授权:回传经 postMessage(opener 同源校验 + client.handleCallback 的
@@ -81,18 +88,24 @@ function openOAuthPopup(url: string): Promise<PopupOutcome> {
       cleanup();
       void (async () => {
         if (data.canceled || data.error || !data.code) {
-          resolve({ kind: 'done', toneId: null });
+          resolve({ kind: 'done', selection: null });
           return;
         }
         const result = await tone3000.handleCallback(relayToCallbackUrl(data, redirectUri));
         if (result.ok) notifyTone3000AuthChanged();
-        resolve({ kind: 'done', toneId: result.ok ? (result.toneId ?? null) : null });
+        resolve({
+          kind: 'done',
+          selection:
+            result.ok && result.toneId
+              ? { toneId: result.toneId, ...(result.modelId ? { modelId: result.modelId } : {}) }
+              : null,
+        });
       })();
     };
     const timer = window.setInterval(() => {
       if (popup.closed) {
         cleanup();
-        resolve({ kind: 'done', toneId: null });
+        resolve({ kind: 'done', selection: null });
       }
     }, 500);
     window.addEventListener('message', onMessage);
@@ -100,8 +113,13 @@ function openOAuthPopup(url: string): Promise<PopupOutcome> {
 }
 
 /** 弹窗被拦截时的兜底:暂存当前 rig,整页跳转授权(boot 的 redirect 路径恢复) */
-function fallbackToRedirect(encodedRig: string, url: string): void {
+function fallbackToRedirect(
+  encodedRig: string,
+  url: string,
+  intent?: Tone3000PendingIntent,
+): void {
   stashReturnRig(encodedRig, window.localStorage);
+  if (intent) stashPendingIntent(intent, window.localStorage);
   window.location.href = url;
 }
 
@@ -109,14 +127,26 @@ function fallbackToRedirect(encodedRig: string, url: string): void {
  * "浏览 TONE3000"(select 流程):弹窗选模型,返回选中的 toneId
  * (取消/失败返回 null);弹窗被拦截时兜底整页跳转(返回 null,页面随后跳转)。
  */
-export async function browseTone3000(getEncodedRig: () => string): Promise<string | null> {
-  const { url } = await tone3000.buildAuthorizeUrl({ prompt: 'select_tone', format: 'nam' });
+export async function browseTone3000(
+  getEncodedRig: () => string,
+  options: {
+    intent?: Tone3000PendingIntent;
+    gears?: 'amp' | 'pedal';
+    architecture?: '2' | 'legacy';
+  } = {},
+): Promise<Tone3000Selection | null> {
+  const { url } = await tone3000.buildAuthorizeUrl({
+    prompt: 'select_tone',
+    format: 'nam',
+    ...(options.gears ? { gears: options.gears } : {}),
+    ...(options.architecture === '2' ? { architecture: '2' as const } : {}),
+  });
   const outcome = await openOAuthPopup(url);
   if (outcome.kind === 'blocked') {
-    fallbackToRedirect(getEncodedRig(), url);
+    fallbackToRedirect(getEncodedRig(), url, options.intent);
     return null;
   }
-  return outcome.toneId;
+  return outcome.selection;
 }
 
 /**
@@ -140,22 +170,30 @@ export async function loginTone3000(getEncodedRig: () => string): Promise<boolea
 export async function replaceTone3000(
   toneId: string,
   getEncodedRig: () => string,
-): Promise<string | null> {
+  options: {
+    intent?: Tone3000PendingIntent;
+    gears?: 'amp' | 'pedal';
+    architecture?: '2' | 'legacy';
+  } = {},
+): Promise<Tone3000Selection | null> {
   const { url } = await tone3000.buildAuthorizeUrl({
     prompt: 'load_tone',
     toneId,
     format: 'nam',
+    ...(options.gears ? { gears: options.gears } : {}),
+    ...(options.architecture === '2' ? { architecture: '2' as const } : {}),
   });
   const outcome = await openOAuthPopup(url);
   if (outcome.kind === 'blocked') {
-    fallbackToRedirect(getEncodedRig(), url);
+    fallbackToRedirect(getEncodedRig(), url, options.intent);
     return null;
   }
-  return outcome.toneId;
+  return outcome.selection;
 }
 
 /** 登出并通知 UI */
 export function logoutTone3000(): void {
   tone3000.logout();
+  clearTone3000ModelTextCache();
   emitAuth();
 }

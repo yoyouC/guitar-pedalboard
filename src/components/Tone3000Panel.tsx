@@ -1,155 +1,117 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { rigStore, useRig } from '../state/useRig';
 import { rigToShareState } from '../state/rigStore';
-import { buildTone3000Key, parseTone3000Key } from '../audio/namWasm';
+import { parseTone3000Key } from '../audio/namWasm';
 import { encodeShareState } from '../state/share';
 import {
-  browseTone3000,
-  loginTone3000,
-  logoutTone3000,
-  replaceTone3000,
-  tone3000,
-  subscribeTone3000Auth,
   getTone3000Authenticated,
+  loginTone3000,
+  subscribeTone3000Auth,
+  type Tone3000Selection,
 } from '../tone3000/instance';
 import { getCachedToneInfo, putCachedToneInfo } from '../tone3000/toneInfoCache';
-import { Tone3000Discover } from './Tone3000Discover';
+import { tone3000Rig, useTone3000Rig } from '../tone3000/useTone3000Rig';
 import type { ToneInfo } from '../tone3000/client';
+import { Tone3000Selector } from './Tone3000Selector';
+import { Tone3000Account, Tone3000ModelAttribution } from './Tone3000Display';
 
-/**
- * TONE3000 分类面板(ADR-0007):登录/浏览 Select 流程入口 + 当前模型卡片。
- * 归属展示(作者/许可/来源链接 + Powered by TONE3000)是 API 条款的强制项,
- * 不可裁剪或隐藏。
- */
+/** TONE3000 箱头入口；与 NAM 单块共用选择器、精确变体与运行状态。 */
 export function Tone3000Panel() {
-  const authed = useSyncExternalStore(subscribeTone3000Auth, getTone3000Authenticated);
-  const modelKey = useRig((s) => s.ampModelKeys[s.ampCategoryId]);
-  const notice = useRig((s) => s.tone3000Notice);
+  const authenticated = useSyncExternalStore(
+    subscribeTone3000Auth,
+    getTone3000Authenticated,
+  );
+  const modelKey = useRig((state) => state.ampModelKeys[state.ampCategoryId]);
   const toneId = modelKey ? parseTone3000Key(modelKey) : null;
-  const [tone, setTone] = useState<ToneInfo | null>(null);
-  const [toneError, setToneError] = useState<string | null>(null);
-
-  // 当前模型元数据(作者/许可/链接,ToS 强制展示):登出时回退到本地缓存
-  // (用户自己装载过的模型归属,见 toneInfoCache.ts);恢复路径的友好降级在 #14
-  useEffect(() => {
-    setTone(toneId ? getCachedToneInfo(toneId, window.localStorage) : null);
-    setToneError(null);
-    if (!authed || !toneId) return;
-    let cancelled = false;
-    tone3000
-      .getTone(toneId)
-      .then((info) => {
-        putCachedToneInfo(info, window.localStorage);
-        if (!cancelled) setTone(info);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) setToneError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [authed, toneId]);
-
+  const runtime = useTone3000Rig((state) => state.targets.amp);
+  const [selectorMode, setSelectorMode] = useState<'select' | 'repair' | null>(null);
+  const [cachedInfo, setCachedInfo] = useState<ToneInfo | null>(null);
   const encodedRig = () => encodeShareState(rigToShareState(rigStore.getState()));
 
-  // 浏览(select popup):选中即装载;弹窗被拦截时兜底整页跳转(instance 内处理)
-  const startBrowse = async () => {
-    const selected = await browseTone3000(encodedRig);
-    if (selected) loadTone(selected);
-  };
+  useEffect(() => {
+    setCachedInfo(toneId ? getCachedToneInfo(toneId, window.localStorage) : null);
+  }, [toneId]);
 
-  // 纯登录(standard popup,不强迫重选):成功后重试当前模型(降级修复闭环)
-  const startLogin = async () => {
-    const ok = await loginTone3000(encodedRig);
-    if (ok && modelKey) rigStore.setAmpModel('tone3000', modelKey);
-  };
+  useEffect(() => {
+    if (!runtime?.info) return;
+    putCachedToneInfo(runtime.info, window.localStorage);
+    setCachedInfo(runtime.info);
+  }, [runtime?.info]);
 
-  // 失效修复(load_tone popup):装载(可能不同的)替代 tone
-  const startReplace = async (unavailableToneId: string) => {
-    const replacement = await replaceTone3000(unavailableToneId, encodedRig);
-    if (replacement) loadTone(replacement);
-  };
-
-  // 统一装载入口(issue #15):记入型号记忆(与普通选中行为一致),顺手缓存归属元数据
-  const loadTone = (id: string, info?: ToneInfo) => {
-    if (info) putCachedToneInfo(info, window.localStorage);
-    rigStore.setAmpModel('tone3000', buildTone3000Key(id));
+  const loginAndRetry = async () => {
+    if (await loginTone3000(encodedRig)) await tone3000Rig.retryAll();
   };
 
   return (
     <div className="tone3000-panel">
-      {authed ? (
-        <>
-          <button className="nam-load-btn" onClick={() => void startBrowse()}>
-            浏览 TONE3000 选模型…
-          </button>
-          <button className="tone3000-logout" title="登出 TONE3000" onClick={logoutTone3000}>
-            登出
-          </button>
-        </>
-      ) : (
-        <button className="nam-load-btn" onClick={() => void startLogin()}>
-          登录 TONE3000 选模型…
+      <button className="nam-load-btn" onClick={() => setSelectorMode('select')}>
+        {toneId ? '更换 TONE3000 箱头…' : '浏览 TONE3000 箱头…'}
+      </button>
+      {!authenticated && (
+        <button className="tone3000-logout" onClick={() => void loginAndRetry()}>
+          登录
         </button>
       )}
+      <Tone3000Account
+        actions={
+          authenticated ? (
+            <button className="tone3000-logout" onClick={() => tone3000Rig.logout()}>
+              登出
+            </button>
+          ) : null
+        }
+      />
 
       {toneId && (
         <div className="tone3000-current">
-          {tone ? (
-            <>
-              <span className="tone3000-title">{tone.title}</span>
-              <span className="tone3000-byline">
-                by {tone.username} · {tone.license.toUpperCase()}
-              </span>
-              <a href={tone.url} target="_blank" rel="noreferrer">
-                在 TONE3000 查看
-              </a>
-            </>
-          ) : (
-            <span className="tone3000-byline">
-              {toneError ?? (authed ? '模型信息加载中…' : '登录后可查看模型信息')}
-            </span>
-          )}
+          <Tone3000ModelAttribution
+            info={runtime?.info ?? cachedInfo}
+            fallback={`TONE3000 tone #${toneId}`}
+          />
+          <span className={`tone3000-runtime tone3000-runtime-${runtime?.phase ?? 'loading'}`}>
+            {runtime?.phase === 'ready'
+              ? '已就绪'
+              : runtime?.phase === 'error'
+                ? runtime.message ?? '模型不可用'
+                : '加载中…'}
+          </span>
         </div>
       )}
 
-      {notice && (
+      {runtime?.phase === 'error' && (
         <div className="tone3000-notice" role="alert">
-          <span className="tone3000-notice-text">
-            {notice.reason === 'not-authenticated' && (
-              <>该模型需要登录 TONE3000,箱头已回退为默认。</>
-            )}
-            {notice.reason === 'tone-unavailable' && (
-              <>原模型已失效(可能已被作者删除或转私有),箱头已回退为默认。</>
-            )}
-            {notice.reason === 'http' && <>模型下载失败(网络问题),箱头已回退为默认。</>}
-          </span>
-          {notice.reason === 'not-authenticated' && (
-            <button className="nam-load-btn" onClick={() => void startLogin()}>
-              登录 TONE3000
+          <span>{runtime.message}</span>
+          {runtime.reason === 'not-authenticated' ? (
+            <button className="nam-load-btn" onClick={() => void loginAndRetry()}>
+              登录并重试
             </button>
-          )}
-          {notice.reason === 'tone-unavailable' && (
-            <button className="nam-load-btn" onClick={() => void startReplace(notice.toneId)}>
-              在 TONE3000 选择替代模型…
+          ) : runtime.reason === 'tone-unavailable' ? (
+            <button className="nam-load-btn" onClick={() => setSelectorMode('repair')}>
+              选择替代模型…
             </button>
-          )}
-          {notice.reason === 'http' && modelKey && (
-            <button className="nam-load-btn" onClick={() => rigStore.setAmpModel('tone3000', modelKey)}>
+          ) : (
+            <button className="nam-load-btn" onClick={() => void tone3000Rig.retryAll()}>
               重试
             </button>
           )}
         </div>
       )}
 
-      <div className="tone3000-powered">
-        Powered by{' '}
-        <a href="https://www.tone3000.com" target="_blank" rel="noreferrer">
-          TONE3000
-        </a>
-      </div>
-
-      {authed && <Tone3000Discover currentToneId={toneId} onLoad={loadTone} />}
+      {selectorMode && (
+        <Tone3000Selector
+          intent={{ kind: 'amp', architecture: '2' }}
+          gear="amp"
+          currentToneId={toneId}
+          loadToneId={selectorMode === 'repair' ? toneId ?? undefined : undefined}
+          onClose={() => setSelectorMode(null)}
+          onSelect={async (selection: Tone3000Selection, info?: ToneInfo) => {
+            if (info) putCachedToneInfo(info, window.localStorage);
+            const result = await tone3000Rig.selectAmp(selection.toneId, selection.modelId);
+            if (!result.ok) throw new Error(result.message);
+            setSelectorMode(null);
+          }}
+        />
+      )}
     </div>
   );
 }

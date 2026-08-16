@@ -86,6 +86,35 @@ test('buildAuthorizeUrl: load_tone 携带 tone_id', async () => {
   assert.equal(u.searchParams.get('tone_id'), '79103');
 });
 
+test('buildAuthorizeUrl: gear 与 A2 architecture 锁定托管目录', async () => {
+  const { fetchFn } = mockFetch(() => ({ status: 500 }));
+  const client = makeClient(fetchFn);
+  const { url } = await client.buildAuthorizeUrl({
+    prompt: 'select_tone',
+    format: 'nam',
+    gears: 'pedal',
+    architecture: '2',
+  });
+  const params = new URL(url).searchParams;
+  assert.equal(params.get('gears'), 'pedal');
+  assert.equal(params.get('architecture'), '2');
+});
+
+test('buildAuthorizeUrl: Amp load_tone 可限定 gear，legacy 目录省略 architecture', async () => {
+  const { fetchFn } = mockFetch(() => ({ status: 500 }));
+  const client = makeClient(fetchFn);
+  const { url } = await client.buildAuthorizeUrl({
+    prompt: 'load_tone',
+    toneId: '77',
+    format: 'nam',
+    gears: 'amp',
+  });
+  const params = new URL(url).searchParams;
+  assert.equal(params.get('gears'), 'amp');
+  assert.equal(params.get('format'), 'nam');
+  assert.equal(params.get('architecture'), null);
+});
+
 // ---------- 回调处理 ----------
 
 function callbackUrl(params: Record<string, string>): string {
@@ -93,7 +122,7 @@ function callbackUrl(params: Record<string, string>): string {
   return `${REDIRECT_URI}?${qs}`;
 }
 
-test('handleCallback: 成功交换 code → 令牌入库,返回选中的 toneId', async () => {
+test('handleCallback: 成功交换 code → 令牌入库,返回选中的 toneId/modelId', async () => {
   const { fetchFn, requests } = mockFetch((req) => {
     assert.equal(req.url, 'https://www.tone3000.com/api/v1/oauth/token');
     const body = req.init?.body as URLSearchParams;
@@ -111,11 +140,14 @@ test('handleCallback: 成功交换 code → 令牌入库,返回选中的 toneId'
   const client = makeClient(fetchFn, storage);
   const { state } = await client.buildAuthorizeUrl({ prompt: 'select_tone' });
 
-  const result = await client.handleCallback(callbackUrl({ code: 'CODE123', state, tone_id: '79103' }));
+  const result = await client.handleCallback(callbackUrl({
+    code: 'CODE123', state, tone_id: '79103', model_id: '88001',
+  }));
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.tokens.access_token, 'AT');
     assert.equal(result.toneId, '79103');
+    assert.equal(result.modelId, '88001');
   }
   assert.ok(storage.getItem('t3k_tokens')?.includes('"AT"'));
   // PKCE 临时值已清除
@@ -258,6 +290,57 @@ test('getModelText: 双架构列表合并,优先 standard 尺寸(不分架构)',
   await client.getModelText('79103');
 });
 
+test('getModelText: modelId 存在时精确下载该变体而不重新挑选', async () => {
+  const { fetchFn, requests } = mockFetch((req) => {
+    if (req.url === 'https://www.tone3000.com/api/v1/models/9001') {
+      return {
+        status: 200,
+        body: {
+          id: 9001,
+          tone_id: 42,
+          model_url: 'https://cdn.example.com/exact.nam',
+          size: 'lite',
+          architecture_version: '2',
+          format: 'nam',
+        },
+      };
+    }
+    assert.equal(req.url, 'https://cdn.example.com/exact.nam');
+    return { status: 200, body: '{"metadata":{"name":"Exact"}}' };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  const client = makeClient(fetchFn, storage);
+
+  assert.equal(
+    await client.getModelText('42', '9001'),
+    '{"metadata":{"name":"Exact"}}',
+  );
+  assert.equal(requests.length, 2, '精确变体不走 tone 模型列表');
+});
+
+test('getModelText: exact model 必须属于所存 tone 且为 NAM', async () => {
+  const { fetchFn } = mockFetch((req) => {
+    assert.equal(req.url, 'https://www.tone3000.com/api/v1/models/9002');
+    return {
+      status: 200,
+      body: {
+        id: 9002,
+        tone_id: 99,
+        format: 'ir',
+        architecture_version: '2',
+        model_url: 'https://cdn.example.com/wrong.nam',
+      },
+    };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  await assert.rejects(makeClient(fetchFn, storage).getModelText('42', '9002'), (error: unknown) => {
+    assert.equal((error as { reason?: string }).reason, 'tone-unavailable');
+    return true;
+  });
+});
+
 test('getModelText: 只有 A2 模型也可装载(wasm 含 SlimmableWavenet)', async () => {
   const { fetchFn } = mockFetch((req) => {
     if (req.url.includes('/api/v1/models?tone_id=') && !req.url.includes('architecture=2')) {
@@ -317,6 +400,31 @@ test('logout: 清除令牌,isAuthenticated 变 false', async () => {
   assert.equal(client.isAuthenticated(), false);
 });
 
+test('getCurrentUser: 展示当前登录账号的用户名、头像与主页', async () => {
+  const { fetchFn } = mockFetch((req) => {
+    assert.equal(req.url, 'https://www.tone3000.com/api/v1/user');
+    assert.equal(req.init?.headers?.Authorization, 'Bearer OLD_AT');
+    return {
+      status: 200,
+      body: {
+        id: 7,
+        username: 'signed-in-user',
+        avatar_url: 'https://img.example.com/me.jpg',
+        url: 'https://www.tone3000.com/users/signed-in-user',
+      },
+    };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+
+  assert.deepEqual(await makeClient(fetchFn, storage).getCurrentUser(), {
+    id: 7,
+    username: 'signed-in-user',
+    avatarUrl: 'https://img.example.com/me.jpg',
+    url: 'https://www.tone3000.com/users/signed-in-user',
+  });
+});
+
 // ---------- getTone(归属展示元数据) ----------
 
 test('getTone: 返回标题/作者/许可/链接', async () => {
@@ -328,9 +436,16 @@ test('getTone: 返回标题/作者/许可/链接', async () => {
       body: {
         id: 79103,
         title: 'Dual Rectifier Rev G',
+        gear: 'amp',
+        format: 'nam',
+        image_url: 'https://img.example.com/tone.jpg',
         license: 't3k',
         url: 'https://www.tone3000.com/tones/mesa-boogie-dual-rectifier-79103',
-        user: { username: 'someone', url: 'https://www.tone3000.com/users/someone' },
+        user: {
+          username: 'someone',
+          avatar_url: 'https://img.example.com/avatar.jpg',
+          url: 'https://www.tone3000.com/users/someone',
+        },
       },
     };
   });
@@ -338,6 +453,10 @@ test('getTone: 返回标题/作者/许可/链接', async () => {
   seedTokens(storage, 3600_000);
   const client = makeClient(fetchFn, storage);
   const tone = await client.getTone('79103');
+  assert.equal(tone.gear, 'amp');
+  assert.equal(tone.format, 'nam');
+  assert.equal(tone.imageUrl, 'https://img.example.com/tone.jpg');
+  assert.equal(tone.avatarUrl, 'https://img.example.com/avatar.jpg');
   assert.equal(tone.title, 'Dual Rectifier Rev G');
   assert.equal(tone.username, 'someone');
   assert.equal(tone.license, 't3k');
@@ -400,6 +519,16 @@ test('listTones: 解析分页响应为 ToneInfo 列表(含作者/许可/链接)'
     url: 'https://www.tone3000.com/tones/hot-amp-1',
   });
   assert.equal(requests.length, 1);
+});
+
+test('listTones: trending 可限定 pedal gear', async () => {
+  const { fetchFn } = mockFetch((req) => {
+    assert.equal(req.url, 'https://www.tone3000.com/api/v1/tones/trending?gear=pedal');
+    return { status: 200, body: { data: [] } };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  await makeClient(fetchFn, storage).listTones('trending', 'pedal');
 });
 
 test('listTones: 超出 top-10 截断(免费层有界列表语义)', async () => {

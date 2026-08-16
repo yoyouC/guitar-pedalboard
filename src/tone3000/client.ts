@@ -61,19 +61,29 @@ export interface Tone3000Client {
     toneId?: string;
     format?: 'nam';
     gears?: string;
+    architecture?: '1' | '2' | 'custom';
   }): Promise<{ url: string; state: string }>;
   handleCallback(callbackUrl: string): Promise<OAuthCallbackResult>;
   isAuthenticated(): boolean;
   logout(): void;
+  /** 当前 OAuth 账号；用于让登录状态在共享选择器中可辨认。 */
+  getCurrentUser(): Promise<Tone3000UserInfo>;
   /**
    * 获取 tone 的 NAM 模型文本:listModels(tone_id)→ 选 A1/Custom 架构模型
    * → Bearer 下载。未登录抛 not-authenticated;tone 失效抛 tone-unavailable。
    */
-  getModelText(toneId: string): Promise<string>;
+  getModelText(toneId: string, modelId?: string): Promise<string>;
   /** 获取 tone 元数据(归属展示:标题/作者/许可/链接,ToS 要求展示) */
   getTone(toneId: string): Promise<ToneInfo>;
   /** trending/latest 有限列表(免费层条款允许的有界端点;需登录态) */
-  listTones(feed: 'trending' | 'latest'): Promise<ToneInfo[]>;
+  listTones(feed: 'trending' | 'latest', gear?: string): Promise<ToneInfo[]>;
+}
+
+export interface Tone3000UserInfo {
+  id: number;
+  username: string;
+  avatarUrl?: string;
+  url: string;
 }
 
 /** 解析 TONE3000 模型页链接(/tones/{slug}-{id})或裸数字 id → toneId;无法识别返回 null */
@@ -99,6 +109,10 @@ export interface ToneInfo {
   username: string;
   license: string;
   url: string;
+  gear?: string;
+  format?: string;
+  imageUrl?: string;
+  avatarUrl?: string;
 }
 
 // ---------- PKCE ----------
@@ -213,7 +227,13 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
   // ---------- OAuth ----------
 
   async function buildAuthorizeUrl(
-    options: { prompt?: OAuthPrompt; toneId?: string; format?: 'nam'; gears?: string } = {},
+    options: {
+      prompt?: OAuthPrompt;
+      toneId?: string;
+      format?: 'nam';
+      gears?: string;
+      architecture?: '1' | '2' | 'custom';
+    } = {},
   ): Promise<{ url: string; state: string }> {
     const codeVerifier = randomBase64url(32);
     const [codeChallenge, state] = await Promise.all([
@@ -234,6 +254,7 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     if (options.toneId) url.searchParams.set('tone_id', options.toneId);
     if (options.format) url.searchParams.set('format', options.format);
     if (options.gears) url.searchParams.set('gears', options.gears);
+    if (options.architecture) url.searchParams.set('architecture', options.architecture);
     return { url: url.toString(), state };
   }
 
@@ -285,9 +306,11 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
 
   interface ApiModel {
     id: number;
+    tone_id?: number;
     model_url: string;
     size: string;
     architecture_version: '1' | '2' | 'custom';
+    format?: string;
   }
 
   /** 选装载目标:优先 standard 尺寸,否则列表第一个(A1/Custom/A2 均支持) */
@@ -318,9 +341,29 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     return [...a1, ...a2];
   }
 
-  async function getModelText(toneId: string): Promise<string> {
-    const models = await listModelsForTone(toneId);
-    const model = pickModel(models);
+  async function getExactModel(toneId: string, modelId: string): Promise<ApiModel> {
+    const res = await apiFetch(`/api/v1/models/${encodeURIComponent(modelId)}`);
+    if (res.status === 404 || res.status === 403) {
+      throw new Tone3000Error('tone-unavailable', `model ${modelId} 不可访问`, res.status);
+    }
+    if (!res.ok) throw new Tone3000Error('http', `模型获取失败 HTTP ${res.status}`, res.status);
+    const model = (await res.json()) as ApiModel;
+    const supportedArchitecture = ['1', '2', 'custom'].includes(model.architecture_version);
+    if (
+      String(model.tone_id ?? toneId) !== toneId ||
+      (model.format !== undefined && model.format !== 'nam') ||
+      !supportedArchitecture ||
+      !model.model_url
+    ) {
+      throw new Tone3000Error('tone-unavailable', `model ${modelId} 与 tone ${toneId} 不兼容`);
+    }
+    return model;
+  }
+
+  async function getModelText(toneId: string, modelId?: string): Promise<string> {
+    const model = modelId
+      ? await getExactModel(toneId, modelId)
+      : pickModel(await listModelsForTone(toneId));
     if (!model) {
       throw new Tone3000Error('tone-unavailable', `tone ${toneId} 没有任何 NAM 模型`);
     }
@@ -340,16 +383,28 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     title?: string;
     license?: string;
     url?: string;
-    user?: { username?: string };
+    gear?: string | { slug?: string; name?: string };
+    format?: string | { slug?: string; name?: string };
+    image_url?: string;
+    image?: { url?: string };
+    user?: { username?: string; avatar_url?: string; avatar?: string };
   }
 
   function mapTone(t: ApiTone): ToneInfo {
+    const gear = typeof t.gear === 'string' ? t.gear : t.gear?.slug ?? t.gear?.name;
+    const format = typeof t.format === 'string' ? t.format : t.format?.slug ?? t.format?.name;
+    const imageUrl = t.image_url ?? t.image?.url;
+    const avatarUrl = t.user?.avatar_url ?? t.user?.avatar;
     return {
       id: t.id,
       title: t.title ?? `Tone #${t.id}`,
       username: t.user?.username ?? '未知作者',
       license: t.license ?? 't3k',
       url: t.url ?? `https://www.tone3000.com/tones/${t.id}`,
+      ...(gear ? { gear } : {}),
+      ...(format ? { format } : {}),
+      ...(imageUrl ? { imageUrl } : {}),
+      ...(avatarUrl ? { avatarUrl } : {}),
     };
   }
 
@@ -364,8 +419,28 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     return mapTone((await res.json()) as ApiTone);
   }
 
-  async function listTones(feed: 'trending' | 'latest'): Promise<ToneInfo[]> {
-    const res = await apiFetch(`/api/v1/tones/${feed}`);
+  async function getCurrentUser(): Promise<Tone3000UserInfo> {
+    const res = await apiFetch('/api/v1/user');
+    if (!res.ok) {
+      throw new Tone3000Error('http', `账号信息获取失败 HTTP ${res.status}`, res.status);
+    }
+    const user = (await res.json()) as {
+      id: number;
+      username: string;
+      avatar_url?: string | null;
+      url?: string;
+    };
+    return {
+      id: user.id,
+      username: user.username,
+      ...(user.avatar_url ? { avatarUrl: user.avatar_url } : {}),
+      url: user.url ?? `https://www.tone3000.com/users/${encodeURIComponent(user.username)}`,
+    };
+  }
+
+  async function listTones(feed: 'trending' | 'latest', gear?: string): Promise<ToneInfo[]> {
+    const query = feed === 'trending' && gear ? `?gear=${encodeURIComponent(gear)}` : '';
+    const res = await apiFetch(`/api/v1/tones/${feed}${query}`);
     if (!res.ok) {
       throw new Tone3000Error('http', `${feed} 列表获取失败 HTTP ${res.status}`, res.status);
     }
@@ -379,6 +454,7 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     handleCallback,
     isAuthenticated: () => getTokens() !== null,
     logout: clearTokens,
+    getCurrentUser,
     getModelText,
     getTone,
     listTones,

@@ -1497,6 +1497,22 @@ const SNAPSHOT = [
         "unit": "dB"
       }
     ]
+  },
+  {
+    "id": "tone3000Nam",
+    "name": "TONE3000 NAM",
+    "color": "#315f88",
+    "params": [
+      {
+        "key": "level",
+        "label": "LEVEL",
+        "min": -30,
+        "max": 6,
+        "step": 0.5,
+        "defaultValue": 0,
+        "unit": "dB"
+      }
+    ]
   }
 ];
 

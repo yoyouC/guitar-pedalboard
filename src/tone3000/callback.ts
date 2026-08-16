@@ -8,11 +8,18 @@
 export interface OAuthCallbackOutcome {
   handled: boolean;
   toneId?: string;
+  modelId?: string;
   error?: string;
 }
 
 const CALLBACK_PATH = '/tone3000/callback';
 const RETURN_RIG_KEY = 't3k_return_rig';
+const PENDING_INTENT_KEY = 't3k_pending_intent';
+
+export type Tone3000PendingIntent =
+  | { kind: 'amp'; architecture: '2' | 'legacy' }
+  | { kind: 'add-pedal'; architecture: '2' | 'legacy' }
+  | { kind: 'replace-pedal'; uid: string; architecture: '2' | 'legacy' };
 
 /**
  * 若是 OAuth 回调着陆(路径匹配且带 code/error 参数),交给客户端处理;
@@ -22,7 +29,7 @@ export async function maybeHandleOAuthCallback(
   url: string,
   client: {
     handleCallback(callbackUrl: string): Promise<
-      { ok: true; toneId?: string } | { ok: false; error: string }
+      { ok: true; toneId?: string; modelId?: string } | { ok: false; error: string }
     >;
   },
 ): Promise<OAuthCallbackOutcome> {
@@ -32,7 +39,13 @@ export async function maybeHandleOAuthCallback(
     return { handled: false };
   }
   const result = await client.handleCallback(url);
-  if (result.ok) return { handled: true, toneId: result.toneId };
+  if (result.ok) {
+    return {
+      handled: true,
+      ...(result.toneId ? { toneId: result.toneId } : {}),
+      ...(result.modelId ? { modelId: result.modelId } : {}),
+    };
+  }
   return { handled: true, error: result.error };
 }
 
@@ -54,17 +67,48 @@ export function popReturnRig(storage: KeyValueStorage): string | null {
   return encoded;
 }
 
+export function stashPendingIntent(
+  intent: Tone3000PendingIntent,
+  storage: KeyValueStorage,
+): void {
+  storage.setItem(PENDING_INTENT_KEY, JSON.stringify(intent));
+}
+
+export function popPendingIntent(storage: KeyValueStorage): Tone3000PendingIntent | null {
+  const raw = storage.getItem(PENDING_INTENT_KEY);
+  if (raw !== null) storage.removeItem(PENDING_INTENT_KEY);
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<Tone3000PendingIntent>;
+    const architecture = value.architecture;
+    if (architecture !== '2' && architecture !== 'legacy') return null;
+    if (value.kind === 'amp' || value.kind === 'add-pedal') {
+      return { kind: value.kind, architecture };
+    }
+    if (value.kind === 'replace-pedal' && typeof value.uid === 'string' && value.uid) {
+      return { kind: value.kind, uid: value.uid, architecture };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export interface OAuthBootDeps {
   client: {
     handleCallback(callbackUrl: string): Promise<
-      { ok: true; toneId?: string } | { ok: false; error: string }
+      { ok: true; toneId?: string; modelId?: string } | { ok: false; error: string }
     >;
   };
   storage: KeyValueStorage;
   /** 恢复跳转前暂存的 rig(分享编码) */
   applyShareRig(encoded: string): void;
   /** 装载选中的 tone(setAmpModel('tone3000', buildTone3000Key(toneId))) */
-  applyTone(toneId: string): void;
+  applyTone(
+    toneId: string,
+    modelId: string | undefined,
+    intent: Tone3000PendingIntent | null,
+  ): void | Promise<void>;
   /** 回调已处理完毕(无论成败):通知登录态订阅者刷新 */
   onSettled(): void;
   onError(error: string): void;
@@ -82,13 +126,19 @@ export async function handleOAuthCallbackBoot(
   const outcome = await maybeHandleOAuthCallback(url, deps.client);
   if (!outcome.handled) return false;
   const stashed = popReturnRig(deps.storage);
-  if (stashed) deps.applyShareRig(stashed);
-  if (outcome.toneId) {
-    deps.applyTone(outcome.toneId);
-  } else if (outcome.error) {
-    deps.onError(outcome.error);
+  const intent = popPendingIntent(deps.storage);
+  try {
+    if (stashed) deps.applyShareRig(stashed);
+    if (outcome.toneId) {
+      await deps.applyTone(outcome.toneId, outcome.modelId, intent);
+    } else if (outcome.error) {
+      deps.onError(outcome.error);
+    }
+  } catch (error) {
+    deps.onError(error instanceof Error ? error.message : String(error));
+  } finally {
+    deps.onSettled();
   }
-  deps.onSettled();
   return true;
 }
 

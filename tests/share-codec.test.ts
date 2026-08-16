@@ -121,3 +121,32 @@ test('encode/decode round-trip 保持链、型号与参数', () => {
   assert.equal(roundTripped.ampCategoryId, original.ampCategoryId);
   assert.equal(roundTripped.cabEnabled, original.cabEnabled);
 });
+
+test('v2 share round-trip keeps Tone3000 Pedal and Amp exact model variants', () => {
+  const encoded = encodeShareState({
+    chain: [{
+      uid: 'cloud-pedal',
+      effectId: 'tone3000Nam',
+      modelRef: 'tone3000:42',
+      modelId: '9001',
+      enabled: true,
+      values: { level: -3 },
+      post: false,
+    }],
+    ampCategoryId: 'tone3000',
+    ampModelKey: 'tone3000:77',
+    ampModelId: '7007',
+    ampEnabled: true,
+    ampValues: { gain: 50 },
+    cabId: 'gb4x12',
+    cabEnabled: true,
+    cabValues: { level: -6 },
+  });
+  const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+  assert.equal(payload.v, 2);
+
+  const restored = decodeShareState(encoded)!;
+  assert.equal(restored.chain[0].modelRef, 'tone3000:42');
+  assert.equal(restored.chain[0].modelId, '9001');
+  assert.equal(restored.ampModelId, '7007');
+});
