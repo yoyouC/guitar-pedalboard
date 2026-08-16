@@ -193,13 +193,29 @@ export function loadModelText(source: string): Promise<string> {
   return p;
 }
 
-function parseMetadata(json: string): NamWasmMetadata {
+/**
+ * .nam 元数据解析(导出供测试)。
+ * A2 SlimmableContainer 形态顶层可以没有 metadata——loudness/name 挂在
+ * config.submodels[] 的子模型上,默认激活的是最后一个(全尺寸)子模型
+ * (见 docs/nam-a2-vs-a1.md);缺失时回退它,否则响度归一化会静默跳过。
+ */
+export function parseNamMetadata(json: string): NamWasmMetadata {
   try {
     const j = JSON.parse(json);
-    return {
-      displayName: j?.metadata?.name || '未命名模型',
-      loudness: typeof j?.metadata?.loudness === 'number' ? j.metadata.loudness : null,
-    };
+    const top = j?.metadata;
+    const submodels = j?.config?.submodels;
+    const fallbackSub =
+      Array.isArray(submodels) && submodels.length > 0
+        ? submodels[submodels.length - 1]?.metadata
+        : undefined;
+    const name = top?.name || fallbackSub?.name;
+    const loudness =
+      typeof top?.loudness === 'number'
+        ? top.loudness
+        : typeof fallbackSub?.loudness === 'number'
+          ? fallbackSub.loudness
+          : null;
+    return { displayName: name || '未命名模型', loudness };
   } catch {
     return { displayName: '未命名模型', loudness: null };
   }
@@ -210,7 +226,7 @@ export async function loadNamWasmModelFromFile(
   file: File,
 ): Promise<NamWasmMetadata & { key: string }> {
   const text = await file.text();
-  const meta = parseMetadata(text);
+  const meta = parseNamMetadata(text);
   const key = `file:${file.name}:${file.size}:${Date.now()}`;
   modelTextCache.set(key, Promise.resolve(text));
   metadataCache.set(key, meta);
@@ -281,7 +297,7 @@ export function createNamWasmAmp(ctx: AudioContext, model: NamModelSelection): E
         try {
           const json = await loadModelText(stages[i].url);
           if (disposed) return;
-          stageLoudness[i] = parseMetadata(json).loudness;
+          stageLoudness[i] = parseNamMetadata(json).loudness;
           const waiter = voice.stageReady(i);
           voice.stageLoad(i, json, false);
           await waiter;
@@ -308,7 +324,7 @@ export function createNamWasmAmp(ctx: AudioContext, model: NamModelSelection): E
         if (disposed) return;
         reportAmpLoad({ phase: 'loading', done: 1, total: 2, label: '装载模型' });
         voice.sendModel(json);
-        const meta = metadataCache.get(source) ?? parseMetadata(json);
+        const meta = metadataCache.get(source) ?? parseNamMetadata(json);
         if (meta.loudness !== null) {
           const makeupDb = Math.min(36, Math.max(-12, -18 - meta.loudness));
           normalizeGain.gain.setTargetAtTime(
