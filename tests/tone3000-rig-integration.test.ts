@@ -421,6 +421,41 @@ test('applySelection owns redirect replace remapping after Share regenerated the
   assert.equal(rig.getState().chain.find((item) => item.uid === uid)?.modelRef, 'tone3000:11');
 });
 
+test('login is a high-level intent that retries every failed target', async () => {
+  let authenticated = false;
+  let loginCalls = 0;
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: `Tone ${toneId}`, username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`,
+      gear: toneId === '99' ? 'amp' : 'pedal', format: 'nam',
+    }),
+    loadModelText: async () => {
+      if (!authenticated) {
+        throw Object.assign(new Error('login required'), { reason: 'not-authenticated' });
+      }
+      return '{}';
+    },
+    login: async () => {
+      loginCalls += 1;
+      authenticated = true;
+      return true;
+    },
+  };
+  const rig = createRigStore(stubEngine());
+  const uid = rig.addTone3000Pedal('tone3000:21');
+  rig.setAmpModel('tone3000', 'tone3000:99');
+  const integration = createTone3000RigIntegration({ rig, port });
+  await integration.restoreAll();
+  assert.equal(integration.getState().targets[`pedal:${uid}`]?.phase, 'error');
+  assert.equal(integration.getState().targets.amp?.phase, 'error');
+
+  assert.equal(await integration.login(), true);
+  assert.equal(loginCalls, 1);
+  assert.equal(integration.getState().targets[`pedal:${uid}`]?.phase, 'ready');
+  assert.equal(integration.getState().targets.amp?.phase, 'ready');
+});
+
 test('logout clears credentials/cache without discarding current Rig target', async () => {
   let loggedOut = 0;
   let cacheCleared = 0;

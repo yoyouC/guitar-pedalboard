@@ -6,10 +6,9 @@ import { rigToShareState } from '../state/rigStore';
 import { encodeShareState } from '../state/share';
 import {
   browseTone3000,
-  getTone3000Authenticated,
+  loginTone3000,
   logoutTone3000,
   replaceTone3000,
-  subscribeTone3000Auth,
   tone3000,
 } from './instance';
 import { putCachedToneInfo } from './toneInfoCache';
@@ -34,18 +33,14 @@ export const tone3000Rig = createTone3000RigIntegration({
         ? replaceTone3000(loadToneId, encodedRig, options)
         : browseTone3000(encodedRig, options);
     },
+    login: () =>
+      loginTone3000(() => encodeShareState(rigToShareState(rigStore.getState()))),
     logout: logoutTone3000,
   },
 });
 
 // rigStore 的初始 Share Rig 在模块求值前已应用；由统一编排恢复所有外部目标。
 void tone3000Rig.restoreAll();
-
-// popup 的 Select/load_tone/纯登录都会通知同一认证通道；一次成功登录
-// 统一重试整个 Rig 中的所有失效目标，不只修复当前点击的那一块。
-subscribeTone3000Auth(() => {
-  if (getTone3000Authenticated()) void tone3000Rig.retryAll();
-});
 
 // Preset/Snapshot/Share 可在任意 UI 路径一次替换整个 Rig。只在外部模型身份变化且
 // 编排器尚未持有对应目标时恢复，避免普通旋钮更新触发网络请求。

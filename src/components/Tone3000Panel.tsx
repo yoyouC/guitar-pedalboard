@@ -1,11 +1,8 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { rigStore, useRig } from '../state/useRig';
-import { rigToShareState } from '../state/rigStore';
+import { useRig } from '../state/useRig';
 import { parseTone3000Key } from '../audio/namWasm';
-import { encodeShareState } from '../state/share';
 import {
   getTone3000Authenticated,
-  loginTone3000,
   subscribeTone3000Auth,
   type Tone3000Selection,
 } from '../tone3000/instance';
@@ -26,7 +23,6 @@ export function Tone3000Panel() {
   const runtime = useTone3000Rig((state) => state.targets.amp);
   const [selectorMode, setSelectorMode] = useState<'select' | 'repair' | null>(null);
   const [cachedInfo, setCachedInfo] = useState<ToneInfo | null>(null);
-  const encodedRig = () => encodeShareState(rigToShareState(rigStore.getState()));
 
   useEffect(() => {
     setCachedInfo(toneId ? getCachedToneInfo(toneId, window.localStorage) : null);
@@ -39,7 +35,7 @@ export function Tone3000Panel() {
   }, [runtime?.info]);
 
   const loginAndRetry = async () => {
-    await loginTone3000(encodedRig);
+    await tone3000Rig.login();
   };
 
   return (

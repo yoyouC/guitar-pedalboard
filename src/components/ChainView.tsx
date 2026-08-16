@@ -10,10 +10,7 @@ import { Tone3000Selector } from './Tone3000Selector';
 import { tone3000Rig, useTone3000Rig } from '../tone3000/useTone3000Rig';
 import { getCachedToneInfo, putCachedToneInfo } from '../tone3000/toneInfoCache';
 import type { Tone3000Selection } from '../tone3000/instance';
-import { loginTone3000 } from '../tone3000/instance';
 import type { ToneInfo } from '../tone3000/client';
-import { encodeShareState } from '../state/share';
-import { rigToShareState } from '../state/rigStore';
 
 /** 横向 pedalboard:前置(箱头前)与 FX Loop(箱头后、箱体前)分区,拖拽排序/跨区 */
 export function ChainView({ showMeters }: { showMeters: boolean }) {
@@ -86,7 +83,7 @@ export function ChainView({ showMeters }: { showMeters: boolean }) {
           if (target?.reason === 'tone-unavailable') {
             setSelector({ kind: 'replace', uid, repair: true });
           } else if (target?.reason === 'not-authenticated') {
-            void loginTone3000(() => encodeShareState(rigToShareState(rigStore.getState())));
+            void tone3000Rig.login();
           } else {
             void tone3000Rig.retryAll();
           }

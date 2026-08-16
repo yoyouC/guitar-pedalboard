@@ -34,7 +34,6 @@ import {
 } from '../audio/namWasm';
 import type { ShareState } from './share';
 import type { RigPreset, Snapshot, SnapshotAmp, SnapshotCab } from './presetCodec';
-import type { Tone3000ErrorReason } from '../tone3000/client';
 import {
   createChainItem,
   currentRigToPreset,
@@ -163,7 +162,7 @@ export interface RigStore {
   /** 已预取的外部模型恢复运行实例，不重置箱头参数。 */
   reloadTone3000Amp(modelRef: string, modelId?: string): boolean;
   /** 外部箱头恢复失败时仅降级运行实例，保留 canonical 引用与参数。 */
-  demoteTone3000Amp(modelRef: string, reason: Tone3000ErrorReason): boolean;
+  demoteTone3000Amp(modelRef: string): boolean;
   /** 本地 .nam 文件加载成功后登记为当前类的自定义型号(不重置参数);sourceKey 为 namWasm 缓存键 */
   setNamCustomModel(displayName: string, sourceKey: string): void;
 
@@ -675,7 +674,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       return true;
     },
 
-    demoteTone3000Amp(modelRef, _reason) {
+    demoteTone3000Amp(modelRef) {
       const toneId = parseTone3000Key(modelRef);
       if (!isTone3000Identity(modelRef) || toneId === null) return false;
       if (state.ampCategoryId !== 'tone3000' || state.ampModelKeys.tone3000 !== modelRef) {

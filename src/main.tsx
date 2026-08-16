@@ -37,7 +37,6 @@ if (relay && window.opener) {
     },
     onSettled: () => {
       notifyTone3000AuthChanged()
-      void tone3000Rig.retryAll()
     },
     onError: (error) => {
       console.warn('[tone3000] OAuth 回调失败:', error)

@@ -25,6 +25,7 @@ export interface Tone3000RigPort {
   selectTone?(
     request: Tone3000HostedSelectionRequest,
   ): Promise<{ toneId: string; modelId?: string } | null>;
+  login?(): Promise<boolean>;
   logout?(): void;
   clearModelCache?(): void;
 }
@@ -64,6 +65,7 @@ export interface Tone3000RigIntegration {
     modelId: string | undefined,
     intent: Tone3000PendingIntent | null,
   ): Promise<Tone3000RigResult>;
+  login(): Promise<boolean>;
   restoreAll(): Promise<void>;
   retryAll(): Promise<void>;
   logout(): void;
@@ -182,7 +184,7 @@ export function createTone3000RigIntegration({
     } catch (error) {
       if (!isLatestRequest(key, generation) || !isCurrentTarget(key, modelRef, modelId)) return;
       const failed = failure(error);
-      if (key === 'amp') rig.demoteTone3000Amp(modelRef, failed.reason);
+      if (key === 'amp') rig.demoteTone3000Amp(modelRef);
       setTarget(key, {
         phase: 'error',
         toneId,
@@ -192,18 +194,23 @@ export function createTone3000RigIntegration({
     }
   };
 
-  const loadAllCurrentTargets = async () => {
+  const loadAllCurrentTargets = async (errorsOnly = false) => {
     const current = rig.getState();
     const tasks: Array<() => Promise<void>> = [];
     for (const item of current.chain) {
       const toneId = item.modelRef ? parseTone3000Key(item.modelRef) : null;
-      if (toneId !== null && item.modelRef) {
-        tasks.push(() => loadCurrentTarget(`pedal:${item.uid}`, toneId, item.modelRef!, item.modelId));
+      const key = `pedal:${item.uid}`;
+      if (
+        toneId !== null &&
+        item.modelRef &&
+        (!errorsOnly || state.targets[key]?.phase === 'error')
+      ) {
+        tasks.push(() => loadCurrentTarget(key, toneId, item.modelRef!, item.modelId));
       }
     }
     const ampRef = current.ampModelKeys[current.ampCategoryId];
     const ampToneId = ampRef ? parseTone3000Key(ampRef) : null;
-    if (ampToneId !== null) {
+    if (ampToneId !== null && (!errorsOnly || state.targets.amp?.phase === 'error')) {
       tasks.push(() =>
         loadCurrentTarget(
           'amp',
@@ -399,26 +406,36 @@ export function createTone3000RigIntegration({
           architecture,
           ...(loadToneId ? { loadToneId } : {}),
         });
-        return selection
-          ? integration.applySelection(selection.toneId, selection.modelId, intent)
-          : null;
+        if (!selection) return null;
+        return integration.applySelection(selection.toneId, selection.modelId, intent);
       } catch (error) {
         return { ok: false, ...failure(error) };
       }
     },
     async applySelection(toneId, modelId, intent) {
-      if (intent?.kind === 'add-pedal') return integration.addPedal(toneId, modelId);
-      if (intent?.kind === 'replace-pedal') {
+      let result: Tone3000RigResult;
+      if (intent?.kind === 'add-pedal') {
+        result = await integration.addPedal(toneId, modelId);
+      } else if (intent?.kind === 'replace-pedal') {
         const uid = resolvePendingReplaceUid(intent, rig.getState().chain);
-        return uid
-          ? integration.replacePedal(uid, toneId, modelId)
+        result = uid
+          ? await integration.replacePedal(uid, toneId, modelId)
           : { ok: false, reason: 'tone-unavailable', message: '目标单块已不存在' };
+      } else {
+        // 无 intent 是旧 redirect stash，保留原箱头语义。
+        result = await integration.selectAmp(toneId, modelId);
       }
-      // 无 intent 是旧 redirect stash，保留原箱头语义。
-      return integration.selectAmp(toneId, modelId);
+      if (result.ok) await integration.retryAll();
+      return result;
+    },
+    async login() {
+      if (!port.login) return false;
+      const authenticated = await port.login();
+      if (authenticated) await integration.retryAll();
+      return authenticated;
     },
     restoreAll: loadAllCurrentTargets,
-    retryAll: loadAllCurrentTargets,
+    retryAll: () => loadAllCurrentTargets(true),
     logout() {
       port.logout?.();
       port.clearModelCache?.();
