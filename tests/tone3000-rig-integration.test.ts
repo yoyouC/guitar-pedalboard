@@ -104,6 +104,23 @@ test('addPedal rejects non-pedal or non-NAM metadata without mutating the Rig', 
   assert.equal(rig.getState().chain.length, before);
 });
 
+test('public intents reject malformed tone/model identities before calling the adapter', async () => {
+  let metadataCalls = 0;
+  const port: Tone3000RigPort = {
+    getTone: async () => {
+      metadataCalls += 1;
+      throw new Error('must not be reached');
+    },
+    loadModelText: async () => '{}',
+  };
+  const rig = createRigStore(stubEngine());
+  const integration = createTone3000RigIntegration({ rig, port });
+  assert.equal((await integration.addPedal('../42')).ok, false);
+  assert.equal((await integration.addPedal('42', 'not-numeric')).ok, false);
+  assert.equal((await integration.selectAmp('42', '')).ok, false);
+  assert.equal(metadataCalls, 0);
+});
+
 test('validated add remains a repairable placeholder when download fails', async () => {
   const port: Tone3000RigPort = {
     getTone: async (toneId) => ({
@@ -163,6 +180,33 @@ test('replacePedal is transactional: failed candidate keeps old model and succes
   assert.equal(item.values.level, -4);
 });
 
+test('concurrent replace: 较早的异步结果不能覆盖后发选择', async () => {
+  const downloads = new Map<string, ReturnType<typeof deferred<string>>>();
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: `Pedal ${toneId}`, username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'pedal', format: 'nam',
+    }),
+    loadModelText: async (modelRef) => {
+      const request = deferred<string>();
+      downloads.set(modelRef, request);
+      return request.promise;
+    },
+  };
+  const rig = createRigStore(stubEngine());
+  const uid = rig.addTone3000Pedal('tone3000:10');
+  const integration = createTone3000RigIntegration({ rig, port });
+  const older = integration.replacePedal(uid, '11');
+  const newer = integration.replacePedal(uid, '12');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  downloads.get('tone3000:12')!.resolve('{}');
+  assert.equal((await newer).ok, true);
+  downloads.get('tone3000:11')!.resolve('{}');
+  assert.equal((await older).ok, false);
+  assert.equal(rig.getState().chain.find((item) => item.uid === uid)?.modelRef, 'tone3000:12');
+  assert.equal(integration.getState().targets[`pedal:${uid}`]?.toneId, '12');
+});
+
 test('restoreAll isolates failures and retryAll recovers every current Tone3000 target', async () => {
   let authenticated = false;
   const port: Tone3000RigPort = {
@@ -186,6 +230,7 @@ test('restoreAll isolates failures and retryAll recovers every current Tone3000 
   const first = rig.addTone3000Pedal('tone3000:21');
   const second = rig.addTone3000Pedal('tone3000:22', '220');
   rig.setAmpModel('tone3000', 'tone3000:99', '990');
+  rig.setAmpParam('gain', 33);
   const integration = createTone3000RigIntegration({ rig, port });
 
   await integration.restoreAll();
@@ -198,6 +243,8 @@ test('restoreAll isolates failures and retryAll recovers every current Tone3000 
   assert.equal(integration.getState().targets[`pedal:${first}`]?.phase, 'ready');
   assert.equal(integration.getState().targets[`pedal:${second}`]?.phase, 'ready');
   assert.equal(integration.getState().targets.amp?.phase, 'ready');
+  assert.equal(rig.getState().ampId, 'nam-wasm');
+  assert.equal(rig.getState().ampValues.gain, 33);
 });
 
 test('restoreAll limits concurrent model downloads to two', async () => {

@@ -9,14 +9,16 @@ import {
   type Tone3000Selection,
   replaceTone3000,
 } from '../tone3000/instance';
-import type { Tone3000PendingIntent } from '../tone3000/callback';
+import {
+  tone3000GearForIntent,
+  type Tone3000PendingIntent,
+} from '../tone3000/callback';
 import type { ToneInfo } from '../tone3000/client';
 import { Tone3000Discover } from './Tone3000Discover';
 import { Tone3000Account } from './Tone3000Display';
 
 interface Tone3000SelectorProps {
   intent: Tone3000PendingIntent;
-  gear: 'amp' | 'pedal';
   currentToneId?: string | null;
   /** 失效修复时走 load_tone；普通“换模型”仍走完整 Select。 */
   loadToneId?: string;
@@ -27,12 +29,12 @@ interface Tone3000SelectorProps {
 /** Amp/Pedal 共用的托管选择、粘贴和 Trending 入口。 */
 export function Tone3000Selector({
   intent,
-  gear,
   currentToneId = null,
   loadToneId,
   onSelect,
   onClose,
 }: Tone3000SelectorProps) {
+  const gear = tone3000GearForIntent(intent);
   const authed = useSyncExternalStore(subscribeTone3000Auth, getTone3000Authenticated);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +44,22 @@ export function Tone3000Selector({
     setBusy(true);
     setError(null);
     try {
+      const pendingIntent: Tone3000PendingIntent =
+        intent.kind === 'replace-pedal'
+          ? (() => {
+              const chain = rigStore.getState().chain;
+              const returnIndex = chain.findIndex((item) => item.uid === intent.uid);
+              const returnModelRef = returnIndex >= 0 ? chain[returnIndex].modelRef : undefined;
+              return {
+                ...intent,
+                architecture,
+                ...(returnIndex >= 0 ? { returnIndex } : {}),
+                ...(returnModelRef ? { returnModelRef } : {}),
+              };
+            })()
+          : { ...intent, architecture };
       const options = {
-        intent: { ...intent, architecture },
+        intent: pendingIntent,
         gears: gear,
         architecture,
       } as const;

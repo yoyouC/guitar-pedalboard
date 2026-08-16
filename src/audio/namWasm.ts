@@ -99,6 +99,42 @@ export type NamModelSelection = { source: string; modelId?: string } | { pack: N
  */
 type Tone3000ModelTextProvider = (toneId: string, modelId?: string) => Promise<string>;
 let tone3000Provider: Tone3000ModelTextProvider | null = null;
+let tone3000DownloadsActive = 0;
+const tone3000DownloadQueue: Array<{
+  run: Tone3000ModelTextProvider;
+  toneId: string;
+  modelId?: string;
+  resolve(text: string): void;
+  reject(error: unknown): void;
+}> = [];
+
+function pumpTone3000Downloads(): void {
+  while (tone3000DownloadsActive < 2 && tone3000DownloadQueue.length > 0) {
+    const request = tone3000DownloadQueue.shift()!;
+    tone3000DownloadsActive += 1;
+    void request
+      .run(request.toneId, request.modelId)
+      .then(request.resolve, request.reject)
+      .finally(() => {
+        tone3000DownloadsActive -= 1;
+        pumpTone3000Downloads();
+      });
+  }
+}
+
+function scheduleTone3000Download(toneId: string, modelId?: string): Promise<string> {
+  if (!tone3000Provider) return Promise.reject(new Error('TONE3000 模型提供者未注册'));
+  return new Promise((resolve, reject) => {
+    tone3000DownloadQueue.push({
+      run: tone3000Provider!,
+      toneId,
+      ...(modelId ? { modelId } : {}),
+      resolve,
+      reject,
+    });
+    pumpTone3000Downloads();
+  });
+}
 
 export function setTone3000ModelTextProvider(provider: Tone3000ModelTextProvider | null): void {
   tone3000Provider = provider;
@@ -196,9 +232,7 @@ export function loadModelText(source: string, modelId?: string): Promise<string>
     const toneId = parseTone3000Key(source);
     if (toneId !== null) {
       // 外部模型引用:经注册的 provider(带 OAuth Bearer)按用户身份下载
-      p = tone3000Provider
-        ? tone3000Provider(toneId, modelId)
-        : Promise.reject(new Error('TONE3000 模型提供者未注册'));
+      p = scheduleTone3000Download(toneId, modelId);
     } else {
       p = fetch(source).then((r) => {
         if (!r.ok) throw new Error(`模型下载失败 HTTP ${r.status}`);

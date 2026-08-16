@@ -6,6 +6,8 @@ import {
   popReturnRig,
   stashPendingIntent,
   popPendingIntent,
+  resolvePendingReplaceUid,
+  tone3000GearForIntent,
 } from '../src/tone3000/callback.ts';
 
 /** OAuth 回调启动处理:URL 判定、客户端分派、return-rig stash。 */
@@ -65,10 +67,47 @@ test('return-rig stash:写入→取出→取出后清除', () => {
 
 test('pending intent stash preserves add/replace target and consumes once', () => {
   const storage = memoryStorage();
-  const intent = { kind: 'replace-pedal' as const, uid: 'pedal-7', architecture: '2' as const };
+  const intent = {
+    kind: 'replace-pedal' as const,
+    uid: 'pedal-7',
+    architecture: '2' as const,
+    returnIndex: 3,
+    returnModelRef: 'tone3000:42',
+  };
   stashPendingIntent(intent, storage);
   assert.deepEqual(popPendingIntent(storage), intent);
   assert.equal(popPendingIntent(storage), null);
+});
+
+test('redirect replace: Share 恢复重建 uid 后仅用位置+原模型安全重映射', () => {
+  const intent = {
+    kind: 'replace-pedal' as const,
+    uid: 'old-uid',
+    architecture: '2' as const,
+    returnIndex: 1,
+    returnModelRef: 'tone3000:42',
+  };
+  const restored = [
+    { uid: 'new-0', effectId: 'overdrive' },
+    { uid: 'new-1', effectId: 'tone3000Nam', modelRef: 'tone3000:42' },
+  ];
+  assert.equal(resolvePendingReplaceUid(intent, restored), 'new-1');
+  assert.equal(
+    resolvePendingReplaceUid(intent, [
+      restored[0],
+      { uid: 'new-1', effectId: 'tone3000Nam', modelRef: 'tone3000:99' },
+    ]),
+    null,
+  );
+});
+
+test('OAuth gear 只由高层意图派生', () => {
+  assert.equal(tone3000GearForIntent({ kind: 'amp', architecture: '2' }), 'amp');
+  assert.equal(tone3000GearForIntent({ kind: 'add-pedal', architecture: 'legacy' }), 'pedal');
+  assert.equal(
+    tone3000GearForIntent({ kind: 'replace-pedal', uid: 'p1', architecture: '2' }),
+    'pedal',
+  );
 });
 
 // ---------- boot 编排与元数据缓存 ----------

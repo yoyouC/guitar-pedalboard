@@ -24,6 +24,8 @@ ADR-0007 只把 TONE3000 NAM 接入箱头位。效果链若把动态 tone id 塞
 - `Tone3000RigIntegration` 是新增、事务式换型、恢复、逐目标状态、错误分类、批量
   重试和下载调度的公共边界。目标按 `amp` 或 `pedal:{uid}` 标识；下载共享容量为
   8 的模型文本 LRU，并经并发度 2 的队列调度，失败不缓存且不取消其他目标。
+  `namWasm` provider 边界也对所有实际下载执行相同的全局上限，因此音频图直接装载
+  不会绕过资源预算。每个目标以请求代次拒绝迟到结果覆盖新选择。
 - 新增先校验 `gear=pedal` 与 `format=nam`，然后在前置区末尾提交 ChainItem。
   下载中或失败时单块直通且引用保留。换型在 metadata 与模型预取都成功后才提交，
   因而保留 uid、顺序、前后置、开关、LEVEL 与旧声音。
@@ -33,7 +35,8 @@ ADR-0007 只把 TONE3000 NAM 接入箱头位。效果链若把动态 tone id 塞
   pedal Select/Trending 使用 `gear=pedal`，不展示无法按 gear 过滤的 Latest。
   箱头新选择使用 `gear=amp`；历史引用恢复时不追溯拒绝。
 - popup 被阻挡时同时暂存 canonical return Rig 与显式意图（箱头、新增单块、替换
-  指定 uid）。回调先恢复 Rig 再应用 tone/model；过期 uid 产生可见错误，不会改动
+  指定 uid）。回调先恢复 Rig 再应用 tone/model；Share 恢复重建 uid 时，仅在
+  原链位置和原 `modelRef` 同时匹配时安全重映射，否则产生可见错误且不改动
   其他 ChainItem。
 - 登出清除令牌和可重新下载的模型文本缓存，不停止已经驻留在 AudioWorklet 中的
   模型。之后的新增、恢复或重新加载必须重新认证。

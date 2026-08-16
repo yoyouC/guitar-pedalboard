@@ -387,13 +387,14 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     format?: string | { slug?: string; name?: string };
     image_url?: string;
     image?: { url?: string };
+    images?: string[] | null;
     user?: { username?: string; avatar_url?: string; avatar?: string };
   }
 
   function mapTone(t: ApiTone): ToneInfo {
     const gear = typeof t.gear === 'string' ? t.gear : t.gear?.slug ?? t.gear?.name;
     const format = typeof t.format === 'string' ? t.format : t.format?.slug ?? t.format?.name;
-    const imageUrl = t.image_url ?? t.image?.url;
+    const imageUrl = t.image_url ?? t.image?.url ?? t.images?.[0];
     const avatarUrl = t.user?.avatar_url ?? t.user?.avatar;
     return {
       id: t.id,

@@ -86,11 +86,7 @@ export function ChainView({ showMeters }: { showMeters: boolean }) {
           if (target?.reason === 'tone-unavailable') {
             setSelector({ kind: 'replace', uid, repair: true });
           } else if (target?.reason === 'not-authenticated') {
-            void loginTone3000(() => encodeShareState(rigToShareState(rigStore.getState()))).then(
-              (ok) => {
-                if (ok) void tone3000Rig.retryAll();
-              },
-            );
+            void loginTone3000(() => encodeShareState(rigToShareState(rigStore.getState())));
           } else {
             void tone3000Rig.retryAll();
           }
@@ -147,7 +143,6 @@ export function ChainView({ showMeters }: { showMeters: boolean }) {
               ? { kind: 'add-pedal', architecture: '2' }
               : { kind: 'replace-pedal', uid: selector.uid, architecture: '2' }
           }
-          gear="pedal"
           currentToneId={
             selector.kind === 'replace'
               ? rigStore.getState().chain.find((item) => item.uid === selector.uid)?.modelRef?.slice('tone3000:'.length)

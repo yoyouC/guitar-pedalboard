@@ -51,6 +51,20 @@ function failure(error: unknown): { reason: Tone3000ErrorReason; message: string
   };
 }
 
+function invalidIdentity(
+  toneId: string,
+  modelId: string | undefined,
+): Tone3000RigResult | null {
+  if (!/^\d+$/.test(toneId) || (modelId !== undefined && !/^\d+$/.test(modelId))) {
+    return {
+      ok: false,
+      reason: 'tone-unavailable',
+      message: 'TONE3000 tone/model id 格式无效',
+    };
+  }
+  return null;
+}
+
 export function createTone3000RigIntegration({
   rig,
   port,
@@ -65,6 +79,14 @@ export function createTone3000RigIntegration({
     state = { targets: { ...state.targets, [key]: target } };
     emit();
   };
+  const requestGenerations = new Map<string, number>();
+  const beginRequest = (key: string) => {
+    const generation = (requestGenerations.get(key) ?? 0) + 1;
+    requestGenerations.set(key, generation);
+    return generation;
+  };
+  const isLatestRequest = (key: string, generation: number) =>
+    requestGenerations.get(key) === generation;
   let activeDownloads = 0;
   const pendingDownloads: Array<{
     modelRef: string;
@@ -90,6 +112,19 @@ export function createTone3000RigIntegration({
       pendingDownloads.push({ modelRef, ...(modelId ? { modelId } : {}), resolve, reject });
       pumpDownloads();
     });
+  const isCurrentTarget = (key: string, modelRef: string, modelId?: string) => {
+    const current = rig.getState();
+    if (key === 'amp') {
+      return (
+        current.ampCategoryId === 'tone3000' &&
+        current.ampModelKeys.tone3000 === modelRef &&
+        (current.ampTone3000ModelId ?? undefined) === modelId
+      );
+    }
+    const uid = key.slice('pedal:'.length);
+    const item = current.chain.find((candidate) => candidate.uid === uid);
+    return item?.modelRef === modelRef && item.modelId === modelId;
+  };
 
   const loadCurrentTarget = async (
     key: string,
@@ -97,11 +132,17 @@ export function createTone3000RigIntegration({
     modelRef: string,
     modelId?: string,
   ) => {
+    const generation = beginRequest(key);
     setTarget(key, { phase: 'loading', toneId, ...(modelId ? { modelId } : {}) });
     try {
       await loadModelText(modelRef, modelId);
-      if (key.startsWith('pedal:')) rig.reloadTone3000Pedal(key.slice('pedal:'.length));
+      if (!isLatestRequest(key, generation) || !isCurrentTarget(key, modelRef, modelId)) return;
+      const stillCurrent = key.startsWith('pedal:')
+        ? rig.reloadTone3000Pedal(key.slice('pedal:'.length))
+        : rig.reloadTone3000Amp(modelRef, modelId);
+      if (!stillCurrent) return;
       const info = await port.getTone(toneId).catch(() => undefined);
+      if (!isLatestRequest(key, generation) || !isCurrentTarget(key, modelRef, modelId)) return;
       setTarget(key, {
         phase: 'ready',
         toneId,
@@ -109,11 +150,14 @@ export function createTone3000RigIntegration({
         ...(info ? { info } : {}),
       });
     } catch (error) {
+      if (!isLatestRequest(key, generation) || !isCurrentTarget(key, modelRef, modelId)) return;
+      const failed = failure(error);
+      if (key === 'amp') rig.demoteTone3000Amp(modelRef, failed.reason);
       setTarget(key, {
         phase: 'error',
         toneId,
         ...(modelId ? { modelId } : {}),
-        ...failure(error),
+        ...failed,
       });
     }
   };
@@ -156,6 +200,8 @@ export function createTone3000RigIntegration({
       return () => listeners.delete(listener);
     },
     async addPedal(toneId, modelId) {
+      const invalid = invalidIdentity(toneId, modelId);
+      if (invalid) return invalid;
       try {
         const info = await port.getTone(toneId);
         if (info.gear !== 'pedal' || info.format !== 'nam') {
@@ -201,6 +247,8 @@ export function createTone3000RigIntegration({
       }
     },
     async replacePedal(uid, toneId, modelId) {
+      const invalid = invalidIdentity(toneId, modelId);
+      if (invalid) return invalid;
       const key = `pedal:${uid}`;
       const current = rig.getState().chain.find((item) => item.uid === uid && item.modelRef);
       if (!current) {
@@ -208,6 +256,7 @@ export function createTone3000RigIntegration({
       }
       const previousTarget = state.targets[key];
       const previousToneId = parseTone3000Key(current.modelRef!)!;
+      const generation = beginRequest(key);
       setTarget(key, {
         phase: 'loading',
         toneId,
@@ -222,6 +271,9 @@ export function createTone3000RigIntegration({
         }
         const modelRef = buildTone3000Key(toneId);
         await loadModelText(modelRef, modelId);
+        if (!isLatestRequest(key, generation)) {
+          return { ok: false, reason: 'tone-unavailable', message: '替换请求已被更新' };
+        }
         if (!rig.replaceTone3000Pedal(uid, modelRef, modelId)) {
           throw Object.assign(new Error('目标单块已不存在'), { reason: 'tone-unavailable' });
         }
@@ -234,6 +286,7 @@ export function createTone3000RigIntegration({
         return { ok: true, uid };
       } catch (error) {
         const failed = failure(error);
+        if (!isLatestRequest(key, generation)) return { ok: false, ...failed };
         setTarget(
           key,
           previousTarget ?? {
@@ -248,6 +301,9 @@ export function createTone3000RigIntegration({
       }
     },
     async selectAmp(toneId, modelId) {
+      const invalid = invalidIdentity(toneId, modelId);
+      if (invalid) return invalid;
+      const generation = beginRequest('amp');
       setTarget('amp', { phase: 'loading', toneId, ...(modelId ? { modelId } : {}) });
       try {
         const info = await port.getTone(toneId);
@@ -258,6 +314,9 @@ export function createTone3000RigIntegration({
         }
         const modelRef = buildTone3000Key(toneId);
         await loadModelText(modelRef, modelId);
+        if (!isLatestRequest('amp', generation)) {
+          return { ok: false, reason: 'tone-unavailable', message: '箱头选择已被更新' };
+        }
         rig.setAmpModel('tone3000', modelRef, modelId);
         setTarget('amp', {
           phase: 'ready',
@@ -268,6 +327,7 @@ export function createTone3000RigIntegration({
         return { ok: true, uid: 'amp' };
       } catch (error) {
         const failed = failure(error);
+        if (!isLatestRequest('amp', generation)) return { ok: false, ...failed };
         setTarget('amp', {
           phase: 'error',
           toneId,

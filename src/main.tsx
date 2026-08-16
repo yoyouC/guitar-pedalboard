@@ -6,7 +6,11 @@ import './index.css'
 import './tone3000/instance.ts'
 import App from './App.tsx'
 import { tone3000, notifyTone3000AuthChanged } from './tone3000/instance.ts'
-import { handleOAuthCallbackBoot, relayFromCallbackUrl } from './tone3000/callback.ts'
+import {
+  handleOAuthCallbackBoot,
+  relayFromCallbackUrl,
+  resolvePendingReplaceUid,
+} from './tone3000/callback.ts'
 import { rigStore } from './state/useRig.ts'
 import { rigFromShare } from './state/rigStore.ts'
 import { decodeShareState } from './state/share.ts'
@@ -34,7 +38,10 @@ if (relay && window.opener) {
       if (intent?.kind === 'add-pedal') {
         result = await tone3000Rig.addPedal(toneId, modelId)
       } else if (intent?.kind === 'replace-pedal') {
-        result = await tone3000Rig.replacePedal(intent.uid, toneId, modelId)
+        const uid = resolvePendingReplaceUid(intent, rigStore.getState().chain)
+        result = uid
+          ? await tone3000Rig.replacePedal(uid, toneId, modelId)
+          : { ok: false as const, reason: 'tone-unavailable' as const, message: '目标单块已不存在' }
       } else if (intent?.kind === 'amp') {
         result = await tone3000Rig.selectAmp(toneId, modelId)
       } else {

@@ -58,3 +58,30 @@ test('Tone3000 模型缓存区分 exact modelId，并按最近使用限制为八
   await loadModelText('tone3000:1', 'a');
   assert.equal(seen.length, 10, '最旧 exact variant 已淘汰并重新下载');
 });
+
+test('Tone3000 provider 的生产共享队列最多并发两个真实下载', async () => {
+  let active = 0;
+  let peak = 0;
+  const releases: Array<() => void> = [];
+  setTone3000ModelTextProvider(async (toneId) => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise<void>((resolve) => releases.push(resolve));
+    active -= 1;
+    return toneId;
+  });
+
+  const pending = Promise.all([
+    loadModelText('tone3000:101'),
+    loadModelText('tone3000:102'),
+    loadModelText('tone3000:103'),
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(releases.length, 2);
+  releases.shift()!();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(releases.length, 2);
+  while (releases.length) releases.shift()!();
+  await pending;
+  assert.equal(peak, 2);
+});

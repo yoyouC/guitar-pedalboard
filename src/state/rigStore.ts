@@ -29,7 +29,6 @@ import {
   BUNDLED_WAVENET_MODELS,
   NAM_SWEEP_PACKS,
   buildTone3000Key,
-  loadModelText,
   parseTone3000Key,
   type NamModelSelection,
 } from '../audio/namWasm';
@@ -172,6 +171,10 @@ export interface RigStore {
   setAmpParam(key: string, value: number): void;
   /** 切分类/选型号:记住该类型号并应用(NAM 型号自增 namVersion) */
   setAmpModel(categoryId: string, modelKey: string, modelId?: string): void;
+  /** 已预取的外部模型恢复运行实例，不重置箱头参数。 */
+  reloadTone3000Amp(modelRef: string, modelId?: string): boolean;
+  /** 外部箱头恢复失败时仅降级运行实例，保留 canonical 引用与参数。 */
+  demoteTone3000Amp(modelRef: string, reason: Tone3000ErrorReason): boolean;
   /** 本地 .nam 文件加载成功后登记为当前类的自定义型号(不重置参数);sourceKey 为 namWasm 缓存键 */
   setNamCustomModel(displayName: string, sourceKey: string): void;
 
@@ -438,37 +441,13 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     emit();
   };
 
-  /** 清除指定 tone 的通知(重新装载成功 / 用户改选其他型号) */
-  const clearTone3000Notice = (toneId: string) => {
-    if (state.tone3000Notice?.toneId !== toneId) return;
-    state = { ...state, tone3000Notice: null };
-    emit();
-  };
-
-  /**
-   * 乐观应用后的异步可用性检查:与引擎装载共享 loadModelText 缓存
-   * (同一 promise,不重复下载);失败按原因降级,成功清掉对应通知。
-   */
-  const scheduleTone3000Check = (toneId: string) => {
-    const modelId =
-      state.ampModelKeys[state.ampCategoryId] === buildTone3000Key(toneId)
-        ? state.ampTone3000ModelId ?? undefined
-        : undefined;
-    loadModelText(buildTone3000Key(toneId), modelId)
-      .then(() => clearTone3000Notice(toneId))
-      .catch((e: unknown) => {
-        const reason = (e as { reason?: string } | null)?.reason;
-        demoteUnavailableTone(
-          toneId,
-          reason === 'not-authenticated' || reason === 'tone-unavailable' ? reason : 'http',
-        );
-      });
-  };
-
-  /** resolved.namModel 为 tone3000 源时调度检查(setAmpModel/applyRig 共用) */
-  const checkIfTone3000 = (namModel: NamModelSelection | null) => {
-    const toneId = namModel && 'source' in namModel ? parseTone3000Key(namModel.source) : null;
-    if (toneId !== null) scheduleTone3000Check(toneId);
+  const isTone3000Identity = (modelRef: string, modelId?: string) => {
+    const toneId = parseTone3000Key(modelRef);
+    return (
+      toneId !== null &&
+      /^\d+$/.test(toneId) &&
+      (modelId === undefined || /^\d+$/.test(modelId))
+    );
   };
 
   /** 结构同步:固定四连写引擎(每个 setter 内部 rebuildGraph,重建时回放 spec 携带的参数值)并自增 graphVersion */
@@ -539,6 +518,9 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     },
 
     addTone3000Pedal(modelRef, modelId) {
+      if (!isTone3000Identity(modelRef, modelId)) {
+        throw new RangeError('TONE3000 tone/model id 格式无效');
+      }
       const item = createChainItem(getEffectDef(TONE3000_PEDAL_EFFECT_ID));
       const dynamicItem: ChainItem = { ...item, modelRef, ...(modelId ? { modelId } : {}) };
       const next = [...state.chain];
@@ -551,6 +533,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     },
 
     replaceTone3000Pedal(uid, modelRef, modelId) {
+      if (!isTone3000Identity(modelRef, modelId)) return false;
       const target = state.chain.find(
         (item) => item.uid === uid && item.effectId === TONE3000_PEDAL_EFFECT_ID,
       );
@@ -664,6 +647,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     },
 
     setAmpModel(categoryId, modelKey, modelId) {
+      if (modelKey.startsWith('tone3000:') && !isTone3000Identity(modelKey, modelId)) return;
       // 改选其他型号:旧 tone 的降级通知随之失效
       if (state.tone3000Notice && modelKey !== buildTone3000Key(state.tone3000Notice.toneId)) {
         state = { ...state, tone3000Notice: null };
@@ -681,7 +665,37 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       };
       syncStructure();
       emit();
-      checkIfTone3000(resolved.namModel);
+    },
+
+    reloadTone3000Amp(modelRef, modelId) {
+      if (
+        !isTone3000Identity(modelRef, modelId) ||
+        state.ampCategoryId !== 'tone3000' ||
+        state.ampModelKeys.tone3000 !== modelRef
+      ) {
+        return false;
+      }
+      state = {
+        ...state,
+        ampId: 'nam-wasm',
+        ampTone3000ModelId: modelId ?? null,
+        namModel: { source: modelRef, ...(modelId ? { modelId } : {}) },
+        namVersion: state.namVersion + 1,
+        tone3000Notice: null,
+      };
+      syncStructure();
+      emit();
+      return true;
+    },
+
+    demoteTone3000Amp(modelRef, reason) {
+      const toneId = parseTone3000Key(modelRef);
+      if (!isTone3000Identity(modelRef) || toneId === null) return false;
+      if (state.ampCategoryId !== 'tone3000' || state.ampModelKeys.tone3000 !== modelRef) {
+        return false;
+      }
+      demoteUnavailableTone(toneId, reason);
+      return true;
     },
 
     setNamCustomModel(displayName, sourceKey) {
@@ -744,7 +758,6 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       const ampRef = rig.amp;
       let ampId: string;
       let namModel = state.namModel;
-      let appliedNamModel: NamModelSelection | null = null;
       let { ampCategoryId, ampModelKeys } = state;
       let ampTone3000ModelId = state.ampTone3000ModelId;
       if ('modelKey' in ampRef) {
@@ -763,7 +776,6 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
           ? ampRef.modelId ?? null
           : null;
         namModel = resolved.namModel ?? state.namModel;
-        appliedNamModel = resolved.namModel;
       } else {
         ampId = ampRef.legacyAmpId;
       }
@@ -789,7 +801,6 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       engine.setInputGain(state.inputGain);
       engine.setMasterVolume(state.masterVolume);
       emit();
-      checkIfTone3000(appliedNamModel);
     },
 
     // ---------- 快照 ----------

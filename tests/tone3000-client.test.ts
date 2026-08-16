@@ -438,7 +438,7 @@ test('getTone: 返回标题/作者/许可/链接', async () => {
         title: 'Dual Rectifier Rev G',
         gear: 'amp',
         format: 'nam',
-        image_url: 'https://img.example.com/tone.jpg',
+        images: ['https://img.example.com/tone.jpg'],
         license: 't3k',
         url: 'https://www.tone3000.com/tones/mesa-boogie-dual-rectifier-79103',
         user: {

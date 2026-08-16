@@ -39,7 +39,7 @@ export function Tone3000Panel() {
   }, [runtime?.info]);
 
   const loginAndRetry = async () => {
-    if (await loginTone3000(encodedRig)) await tone3000Rig.retryAll();
+    await loginTone3000(encodedRig);
   };
 
   return (
@@ -100,7 +100,6 @@ export function Tone3000Panel() {
       {selectorMode && (
         <Tone3000Selector
           intent={{ kind: 'amp', architecture: '2' }}
-          gear="amp"
           currentToneId={toneId}
           loadToneId={selectorMode === 'repair' ? toneId ?? undefined : undefined}
           onClose={() => setSelectorMode(null)}

@@ -19,7 +19,47 @@ const PENDING_INTENT_KEY = 't3k_pending_intent';
 export type Tone3000PendingIntent =
   | { kind: 'amp'; architecture: '2' | 'legacy' }
   | { kind: 'add-pedal'; architecture: '2' | 'legacy' }
-  | { kind: 'replace-pedal'; uid: string; architecture: '2' | 'legacy' };
+  | {
+      kind: 'replace-pedal';
+      uid: string;
+      architecture: '2' | 'legacy';
+      /** Share Rig 恢复会重建 uid；用位置+原引用做安全重映射。 */
+      returnIndex?: number;
+      returnModelRef?: string;
+    };
+
+export interface Tone3000ReplaceCandidate {
+  uid: string;
+  effectId: string;
+  modelRef?: string;
+}
+
+/** OAuth gear 是域意图的投影，避免 UI 另传一个可能冲突的值。 */
+export function tone3000GearForIntent(intent: Tone3000PendingIntent): 'amp' | 'pedal' {
+  return intent.kind === 'amp' ? 'amp' : 'pedal';
+}
+
+/** 优先使用仍有效的 uid；整页回跳后只在位置和原模型同时匹配时重映射。 */
+export function resolvePendingReplaceUid(
+  intent: Extract<Tone3000PendingIntent, { kind: 'replace-pedal' }>,
+  chain: Tone3000ReplaceCandidate[],
+): string | null {
+  const byUid = chain.find(
+    (item) => item.uid === intent.uid && item.effectId === 'tone3000Nam',
+  );
+  if (byUid) return byUid.uid;
+  if (
+    intent.returnIndex === undefined ||
+    intent.returnModelRef === undefined ||
+    !/^tone3000:\d+$/.test(intent.returnModelRef)
+  ) {
+    return null;
+  }
+  const restored = chain[intent.returnIndex];
+  return restored?.effectId === 'tone3000Nam' && restored.modelRef === intent.returnModelRef
+    ? restored.uid
+    : null;
+}
 
 /**
  * 若是 OAuth 回调着陆(路径匹配且带 code/error 参数),交给客户端处理;
@@ -86,7 +126,21 @@ export function popPendingIntent(storage: KeyValueStorage): Tone3000PendingInten
       return { kind: value.kind, architecture };
     }
     if (value.kind === 'replace-pedal' && typeof value.uid === 'string' && value.uid) {
-      return { kind: value.kind, uid: value.uid, architecture };
+      const returnIndex =
+        Number.isInteger(value.returnIndex) && Number(value.returnIndex) >= 0
+          ? Number(value.returnIndex)
+          : undefined;
+      const returnModelRef =
+        typeof value.returnModelRef === 'string' && /^tone3000:\d+$/.test(value.returnModelRef)
+          ? value.returnModelRef
+          : undefined;
+      return {
+        kind: value.kind,
+        uid: value.uid,
+        architecture,
+        ...(returnIndex !== undefined ? { returnIndex } : {}),
+        ...(returnModelRef ? { returnModelRef } : {}),
+      };
     }
     return null;
   } catch {
