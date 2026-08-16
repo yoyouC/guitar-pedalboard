@@ -140,8 +140,8 @@ export function ChainView({ showMeters }: { showMeters: boolean }) {
         <Tone3000Selector
           intent={
             selector.kind === 'add'
-              ? { kind: 'add-pedal', architecture: '2' }
-              : { kind: 'replace-pedal', uid: selector.uid, architecture: '2' }
+              ? { kind: 'add-pedal' }
+              : { kind: 'replace-pedal', uid: selector.uid }
           }
           currentToneId={
             selector.kind === 'replace'

@@ -99,7 +99,7 @@ export function Tone3000Panel() {
 
       {selectorMode && (
         <Tone3000Selector
-          intent={{ kind: 'amp', architecture: '2' }}
+          intent={{ kind: 'amp' }}
           currentToneId={toneId}
           loadToneId={selectorMode === 'repair' ? toneId ?? undefined : undefined}
           onClose={() => setSelectorMode(null)}

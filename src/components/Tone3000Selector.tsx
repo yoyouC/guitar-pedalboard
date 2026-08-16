@@ -1,24 +1,20 @@
 import { useState, useSyncExternalStore } from 'react';
-import { rigStore } from '../state/useRig';
-import { rigToShareState } from '../state/rigStore';
-import { encodeShareState } from '../state/share';
 import {
-  browseTone3000,
   getTone3000Authenticated,
   subscribeTone3000Auth,
   type Tone3000Selection,
-  replaceTone3000,
 } from '../tone3000/instance';
 import {
   tone3000GearForIntent,
-  type Tone3000PendingIntent,
 } from '../tone3000/callback';
+import { tone3000Rig } from '../tone3000/useTone3000Rig';
+import type { Tone3000TargetIntent } from '../tone3000/rigIntegration';
 import type { ToneInfo } from '../tone3000/client';
 import { Tone3000Discover } from './Tone3000Discover';
 import { Tone3000Account } from './Tone3000Display';
 
 interface Tone3000SelectorProps {
-  intent: Tone3000PendingIntent;
+  intent: Tone3000TargetIntent;
   currentToneId?: string | null;
   /** 失效修复时走 load_tone；普通“换模型”仍走完整 Select。 */
   loadToneId?: string;
@@ -38,35 +34,14 @@ export function Tone3000Selector({
   const authed = useSyncExternalStore(subscribeTone3000Auth, getTone3000Authenticated);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const encodedRig = () => encodeShareState(rigToShareState(rigStore.getState()));
 
   const browse = async (architecture: '2' | 'legacy') => {
     setBusy(true);
     setError(null);
     try {
-      const pendingIntent: Tone3000PendingIntent =
-        intent.kind === 'replace-pedal'
-          ? (() => {
-              const chain = rigStore.getState().chain;
-              const returnIndex = chain.findIndex((item) => item.uid === intent.uid);
-              const returnModelRef = returnIndex >= 0 ? chain[returnIndex].modelRef : undefined;
-              return {
-                ...intent,
-                architecture,
-                ...(returnIndex >= 0 ? { returnIndex } : {}),
-                ...(returnModelRef ? { returnModelRef } : {}),
-              };
-            })()
-          : { ...intent, architecture };
-      const options = {
-        intent: pendingIntent,
-        gears: gear,
-        architecture,
-      } as const;
-      const selection = loadToneId
-        ? await replaceTone3000(loadToneId, encodedRig, options)
-        : await browseTone3000(encodedRig, options);
-      if (selection) await onSelect(selection);
+      const result = await tone3000Rig.selectHosted(intent, architecture, loadToneId);
+      if (result && !result.ok) throw new Error(result.message);
+      if (result) onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {

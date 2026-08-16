@@ -207,6 +207,35 @@ test('concurrent replace: 较早的异步结果不能覆盖后发选择', async 
   assert.equal(integration.getState().targets[`pedal:${uid}`]?.toneId, '12');
 });
 
+test('add download finishing after an immediate replace cannot restore the added tone state', async () => {
+  const downloads = new Map<string, ReturnType<typeof deferred<string>>>();
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: `Pedal ${toneId}`, username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'pedal', format: 'nam',
+    }),
+    loadModelText: async (modelRef) => {
+      const request = deferred<string>();
+      downloads.set(modelRef, request);
+      return request.promise;
+    },
+  };
+  const rig = createRigStore(stubEngine());
+  const integration = createTone3000RigIntegration({ rig, port });
+  const adding = integration.addPedal('41');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const uid = rig.getState().chain.find((item) => item.modelRef === 'tone3000:41')!.uid;
+  const replacing = integration.replacePedal(uid, '42');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  downloads.get('tone3000:42')!.resolve('{}');
+  assert.equal((await replacing).ok, true);
+  downloads.get('tone3000:41')!.resolve('{}');
+  assert.equal((await adding).ok, true);
+  assert.equal(rig.getState().chain.find((item) => item.uid === uid)?.modelRef, 'tone3000:42');
+  assert.equal(integration.getState().targets[`pedal:${uid}`]?.toneId, '42');
+});
+
 test('restoreAll isolates failures and retryAll recovers every current Tone3000 target', async () => {
   let authenticated = false;
   const port: Tone3000RigPort = {
@@ -342,6 +371,54 @@ test('selectAmp accepts only Amp gear and retains exact modelId', async () => {
   assert.deepEqual(await integration.selectAmp('31', '301'), { ok: true, uid: 'amp' });
   assert.equal(rig.getState().ampModelKeys.tone3000, 'tone3000:31');
   assert.equal(rig.getState().ampTone3000ModelId, '301');
+});
+
+test('selectHosted owns OAuth gear/architecture intent and applies the returned selection', async () => {
+  let request: Parameters<NonNullable<Tone3000RigPort['selectTone']>>[0] | undefined;
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: 'Hosted pedal', username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'pedal', format: 'nam',
+    }),
+    loadModelText: async () => '{}',
+    selectTone: async (next) => {
+      request = next;
+      return { toneId: '88', modelId: '880' };
+    },
+  };
+  const rig = createRigStore(stubEngine());
+  const integration = createTone3000RigIntegration({ rig, port });
+  const result = await integration.selectHosted({ kind: 'add-pedal' }, '2');
+  assert.equal(result?.ok, true);
+  assert.deepEqual(request, {
+    intent: { kind: 'add-pedal', architecture: '2' },
+    gear: 'pedal',
+    architecture: '2',
+  });
+  assert.equal(rig.getState().chain.some((item) => item.modelRef === 'tone3000:88'), true);
+});
+
+test('applySelection owns redirect replace remapping after Share regenerated the uid', async () => {
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: 'Replacement', username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'pedal', format: 'nam',
+    }),
+    loadModelText: async () => '{}',
+  };
+  const rig = createRigStore(stubEngine());
+  const uid = rig.addTone3000Pedal('tone3000:10');
+  const returnIndex = rig.getState().chain.findIndex((item) => item.uid === uid);
+  const integration = createTone3000RigIntegration({ rig, port });
+  const result = await integration.applySelection('11', undefined, {
+    kind: 'replace-pedal',
+    uid: 'pre-redirect-uid',
+    architecture: 'legacy',
+    returnIndex,
+    returnModelRef: 'tone3000:10',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(rig.getState().chain.find((item) => item.uid === uid)?.modelRef, 'tone3000:11');
 });
 
 test('logout clears credentials/cache without discarding current Rig target', async () => {

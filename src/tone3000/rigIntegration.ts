@@ -1,10 +1,30 @@
 import type { RigStore } from '../state/rigStore';
 import type { Tone3000ErrorReason, ToneInfo } from './client';
 import { buildTone3000Key, parseTone3000Key } from '../audio/namWasm';
+import {
+  resolvePendingReplaceUid,
+  tone3000GearForIntent,
+  type Tone3000PendingIntent,
+} from './callback';
+
+export type Tone3000TargetIntent =
+  | { kind: 'amp' }
+  | { kind: 'add-pedal' }
+  | { kind: 'replace-pedal'; uid: string };
+
+export interface Tone3000HostedSelectionRequest {
+  intent: Tone3000PendingIntent;
+  gear: 'amp' | 'pedal';
+  architecture: '2' | 'legacy';
+  loadToneId?: string;
+}
 
 export interface Tone3000RigPort {
   getTone(toneId: string): Promise<ToneInfo>;
   loadModelText(modelRef: string, modelId?: string): Promise<string>;
+  selectTone?(
+    request: Tone3000HostedSelectionRequest,
+  ): Promise<{ toneId: string; modelId?: string } | null>;
   logout?(): void;
   clearModelCache?(): void;
 }
@@ -34,6 +54,16 @@ export interface Tone3000RigIntegration {
   addPedal(toneId: string, modelId?: string): Promise<Tone3000RigResult>;
   replacePedal(uid: string, toneId: string, modelId?: string): Promise<Tone3000RigResult>;
   selectAmp(toneId: string, modelId?: string): Promise<Tone3000RigResult>;
+  selectHosted(
+    intent: Tone3000TargetIntent,
+    architecture: '2' | 'legacy',
+    loadToneId?: string,
+  ): Promise<Tone3000RigResult | null>;
+  applySelection(
+    toneId: string,
+    modelId: string | undefined,
+    intent: Tone3000PendingIntent | null,
+  ): Promise<Tone3000RigResult>;
   restoreAll(): Promise<void>;
   retryAll(): Promise<void>;
   logout(): void;
@@ -193,7 +223,7 @@ export function createTone3000RigIntegration({
     await Promise.all(Array.from({ length: Math.min(2, tasks.length) }, () => worker()));
   };
 
-  return {
+  const integration: Tone3000RigIntegration = {
     getState: () => state,
     subscribe(listener) {
       listeners.add(listener);
@@ -214,6 +244,7 @@ export function createTone3000RigIntegration({
         const modelRef = buildTone3000Key(toneId);
         const uid = rig.addTone3000Pedal(modelRef, modelId);
         const key = `pedal:${uid}`;
+        const generation = beginRequest(key);
         setTarget(key, {
           phase: 'loading',
           toneId,
@@ -222,6 +253,9 @@ export function createTone3000RigIntegration({
         });
         try {
           await loadModelText(modelRef, modelId);
+          if (!isLatestRequest(key, generation) || !isCurrentTarget(key, modelRef, modelId)) {
+            return { ok: true, uid };
+          }
           rig.reloadTone3000Pedal(uid);
           setTarget(key, {
             phase: 'ready',
@@ -231,6 +265,9 @@ export function createTone3000RigIntegration({
           });
           return { ok: true, uid };
         } catch (error) {
+          if (!isLatestRequest(key, generation) || !isCurrentTarget(key, modelRef, modelId)) {
+            return { ok: true, uid };
+          }
           const failed = failure(error);
           setTarget(key, {
             phase: 'error',
@@ -337,6 +374,49 @@ export function createTone3000RigIntegration({
         return { ok: false, ...failed };
       }
     },
+    async selectHosted(targetIntent, architecture, loadToneId) {
+      if (!port.selectTone) {
+        return { ok: false, reason: 'http', message: 'TONE3000 OAuth adapter 未注册' };
+      }
+      let intent: Tone3000PendingIntent;
+      if (targetIntent.kind === 'replace-pedal') {
+        const chain = rig.getState().chain;
+        const returnIndex = chain.findIndex((item) => item.uid === targetIntent.uid);
+        const returnModelRef = returnIndex >= 0 ? chain[returnIndex].modelRef : undefined;
+        intent = {
+          ...targetIntent,
+          architecture,
+          ...(returnIndex >= 0 ? { returnIndex } : {}),
+          ...(returnModelRef ? { returnModelRef } : {}),
+        };
+      } else {
+        intent = { ...targetIntent, architecture };
+      }
+      try {
+        const selection = await port.selectTone({
+          intent,
+          gear: tone3000GearForIntent(intent),
+          architecture,
+          ...(loadToneId ? { loadToneId } : {}),
+        });
+        return selection
+          ? integration.applySelection(selection.toneId, selection.modelId, intent)
+          : null;
+      } catch (error) {
+        return { ok: false, ...failure(error) };
+      }
+    },
+    async applySelection(toneId, modelId, intent) {
+      if (intent?.kind === 'add-pedal') return integration.addPedal(toneId, modelId);
+      if (intent?.kind === 'replace-pedal') {
+        const uid = resolvePendingReplaceUid(intent, rig.getState().chain);
+        return uid
+          ? integration.replacePedal(uid, toneId, modelId)
+          : { ok: false, reason: 'tone-unavailable', message: '目标单块已不存在' };
+      }
+      // 无 intent 是旧 redirect stash，保留原箱头语义。
+      return integration.selectAmp(toneId, modelId);
+    },
     restoreAll: loadAllCurrentTargets,
     retryAll: loadAllCurrentTargets,
     logout() {
@@ -344,4 +424,5 @@ export function createTone3000RigIntegration({
       port.clearModelCache?.();
     },
   };
+  return integration;
 }

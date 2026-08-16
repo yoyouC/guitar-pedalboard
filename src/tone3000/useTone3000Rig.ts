@@ -2,9 +2,13 @@ import { useSyncExternalStore } from 'react';
 import { loadModelText } from '../audio/namWasm';
 import { parseTone3000Key } from '../audio/namWasm';
 import { rigStore } from '../state/useRig';
+import { rigToShareState } from '../state/rigStore';
+import { encodeShareState } from '../state/share';
 import {
+  browseTone3000,
   getTone3000Authenticated,
   logoutTone3000,
+  replaceTone3000,
   subscribeTone3000Auth,
   tone3000,
 } from './instance';
@@ -23,6 +27,13 @@ export const tone3000Rig = createTone3000RigIntegration({
       return info;
     },
     loadModelText,
+    selectTone: ({ intent, gear, architecture, loadToneId }) => {
+      const encodedRig = () => encodeShareState(rigToShareState(rigStore.getState()));
+      const options = { intent, gears: gear, architecture } as const;
+      return loadToneId
+        ? replaceTone3000(loadToneId, encodedRig, options)
+        : browseTone3000(encodedRig, options);
+    },
     logout: logoutTone3000,
   },
 });

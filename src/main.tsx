@@ -9,12 +9,10 @@ import { tone3000, notifyTone3000AuthChanged } from './tone3000/instance.ts'
 import {
   handleOAuthCallbackBoot,
   relayFromCallbackUrl,
-  resolvePendingReplaceUid,
 } from './tone3000/callback.ts'
 import { rigStore } from './state/useRig.ts'
 import { rigFromShare } from './state/rigStore.ts'
 import { decodeShareState } from './state/share.ts'
-import { buildTone3000Key } from './audio/namWasm.ts'
 import { tone3000Rig } from './tone3000/useTone3000Rig.ts'
 
 // OAuth 回调着陆(ADR-0007)分两种:
@@ -34,21 +32,8 @@ if (relay && window.opener) {
       if (share) rigStore.applyRig(rigFromShare(share))
     },
     applyTone: async (toneId, modelId, intent) => {
-      let result;
-      if (intent?.kind === 'add-pedal') {
-        result = await tone3000Rig.addPedal(toneId, modelId)
-      } else if (intent?.kind === 'replace-pedal') {
-        const uid = resolvePendingReplaceUid(intent, rigStore.getState().chain)
-        result = uid
-          ? await tone3000Rig.replacePedal(uid, toneId, modelId)
-          : { ok: false as const, reason: 'tone-unavailable' as const, message: '目标单块已不存在' }
-      } else if (intent?.kind === 'amp') {
-        result = await tone3000Rig.selectAmp(toneId, modelId)
-      } else {
-        // 兼容旧 redirect stash：没有 intent 时仍按原箱头语义恢复。
-        rigStore.setAmpModel('tone3000', buildTone3000Key(toneId), modelId)
-      }
-      if (result && !result.ok) throw new Error(result.message)
+      const result = await tone3000Rig.applySelection(toneId, modelId, intent)
+      if (!result.ok) throw new Error(result.message)
     },
     onSettled: () => {
       notifyTone3000AuthChanged()

@@ -109,17 +109,6 @@ export interface RigStoreState {
   presets: RigPreset[];
   /** 图谱重建后自增,供依赖引擎侧节点引用(电平表/背景)的组件重读 */
   graphVersion: number;
-  /**
-   * tone3000 模型降级通知(issue #14):恢复/选择后可用性检查失败时设置,
-   * 箱头已回退目录默认;原 modelKey 引用保留(降级不写入持久化)。
-   */
-  tone3000Notice: Tone3000Notice | null;
-}
-
-/** tone3000 降级通知;reason 契约即客户端的 Tone3000ErrorReason */
-export interface Tone3000Notice {
-  toneId: string;
-  reason: Tone3000ErrorReason;
 }
 
 /**
@@ -418,7 +407,6 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     activeSlot: -1,
     presets: loadPresets(),
     graphVersion: 0,
-    tone3000Notice: null,
   };
 
   const listeners = new Set<() => void>();
@@ -433,10 +421,10 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
    * 箱头回退目录默认(保留 ampCategoryId/ampModelKeys 与原引用——降级不写入
    * 持久化,重新登录后仍可恢复);检查完成前用户已切走则不降级。
    */
-  const demoteUnavailableTone = (toneId: string, reason: Tone3000Notice['reason']) => {
+  const demoteUnavailableTone = (toneId: string) => {
     if (state.ampModelKeys[state.ampCategoryId] !== buildTone3000Key(toneId)) return;
     // 回退目录默认箱头(复用初始状态已解析的 initialAmpId);引用与参数保留
-    state = { ...state, ampId: initialAmpId, tone3000Notice: { toneId, reason } };
+    state = { ...state, ampId: initialAmpId };
     syncStructure();
     emit();
   };
@@ -647,11 +635,11 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     },
 
     setAmpModel(categoryId, modelKey, modelId) {
-      if (modelKey.startsWith('tone3000:') && !isTone3000Identity(modelKey, modelId)) return;
-      // 改选其他型号:旧 tone 的降级通知随之失效
-      if (state.tone3000Notice && modelKey !== buildTone3000Key(state.tone3000Notice.toneId)) {
-        state = { ...state, tone3000Notice: null };
-      }
+      const tone3000Model = modelKey.startsWith('tone3000:');
+      if (
+        (tone3000Model && categoryId !== 'tone3000') ||
+        (categoryId === 'tone3000' && !isTone3000Identity(modelKey, modelId))
+      ) return;
       const resolved = resolveAmpModel(modelKey, modelId);
       state = {
         ...state,
@@ -681,20 +669,19 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         ampTone3000ModelId: modelId ?? null,
         namModel: { source: modelRef, ...(modelId ? { modelId } : {}) },
         namVersion: state.namVersion + 1,
-        tone3000Notice: null,
       };
       syncStructure();
       emit();
       return true;
     },
 
-    demoteTone3000Amp(modelRef, reason) {
+    demoteTone3000Amp(modelRef, _reason) {
       const toneId = parseTone3000Key(modelRef);
       if (!isTone3000Identity(modelRef) || toneId === null) return false;
       if (state.ampCategoryId !== 'tone3000' || state.ampModelKeys.tone3000 !== modelRef) {
         return false;
       }
-      demoteUnavailableTone(toneId, reason);
+      demoteUnavailableTone(toneId);
       return true;
     },
 
@@ -761,12 +748,6 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       let { ampCategoryId, ampModelKeys } = state;
       let ampTone3000ModelId = state.ampTone3000ModelId;
       if ('modelKey' in ampRef) {
-        if (
-          state.tone3000Notice &&
-          ampRef.modelKey !== buildTone3000Key(state.tone3000Notice.toneId)
-        ) {
-          state = { ...state, tone3000Notice: null };
-        }
         const resolved = resolveAmpModel(ampRef.modelKey, ampRef.modelId);
         if (resolved.namReload) namVersion += 1;
         ampId = ampIdForModelKey(ampRef.modelKey);

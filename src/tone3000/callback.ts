@@ -10,6 +10,7 @@ export interface OAuthCallbackOutcome {
   toneId?: string;
   modelId?: string;
   error?: string;
+  canceled?: boolean;
 }
 
 const CALLBACK_PATH = '/tone3000/callback';
@@ -35,7 +36,7 @@ export interface Tone3000ReplaceCandidate {
 }
 
 /** OAuth gear 是域意图的投影，避免 UI 另传一个可能冲突的值。 */
-export function tone3000GearForIntent(intent: Tone3000PendingIntent): 'amp' | 'pedal' {
+export function tone3000GearForIntent(intent: { kind: Tone3000PendingIntent['kind'] }): 'amp' | 'pedal' {
   return intent.kind === 'amp' ? 'amp' : 'pedal';
 }
 
@@ -75,7 +76,11 @@ export async function maybeHandleOAuthCallback(
 ): Promise<OAuthCallbackOutcome> {
   const u = new URL(url);
   if (!u.pathname.endsWith(CALLBACK_PATH)) return { handled: false };
-  if (!u.searchParams.get('code') && !u.searchParams.get('error')) {
+  if (
+    !u.searchParams.get('code') &&
+    !u.searchParams.get('error') &&
+    u.searchParams.get('canceled') !== 'true'
+  ) {
     return { handled: false };
   }
   const result = await client.handleCallback(url);
@@ -86,6 +91,7 @@ export async function maybeHandleOAuthCallback(
       ...(result.modelId ? { modelId: result.modelId } : {}),
     };
   }
+  if (result.error === 'canceled') return { handled: true, canceled: true };
   return { handled: true, error: result.error };
 }
 
@@ -185,7 +191,7 @@ export async function handleOAuthCallbackBoot(
     if (stashed) deps.applyShareRig(stashed);
     if (outcome.toneId) {
       await deps.applyTone(outcome.toneId, outcome.modelId, intent);
-    } else if (outcome.error) {
+    } else if (outcome.error && !outcome.canceled) {
       deps.onError(outcome.error);
     }
   } catch (error) {
@@ -209,13 +215,14 @@ export interface Tone3000OAuthRelay {
   canceled?: boolean;
 }
 
-/** 从回调 URL 提取 relay 消息;非回调 URL(或无 code/error)返回 null */
+/** 从回调 URL 提取 relay 消息;非回调 URL(或无 code/error/canceled)返回 null */
 export function relayFromCallbackUrl(url: string): Tone3000OAuthRelay | null {
   const u = new URL(url);
   if (!u.pathname.endsWith(CALLBACK_PATH)) return null;
   const code = u.searchParams.get('code');
   const error = u.searchParams.get('error');
-  if (!code && !error) return null;
+  const canceled = u.searchParams.get('canceled') === 'true';
+  if (!code && !error && !canceled) return null;
   return {
     type: 't3k_oauth_callback',
     code,
@@ -223,7 +230,7 @@ export function relayFromCallbackUrl(url: string): Tone3000OAuthRelay | null {
     tone_id: u.searchParams.get('tone_id'),
     model_id: u.searchParams.get('model_id'),
     error,
-    canceled: u.searchParams.get('canceled') === 'true',
+    canceled,
   };
 }
 

@@ -58,6 +58,13 @@ test('回调失败(state_mismatch/access_denied):handled 且带 error', async ()
   assert.deepEqual(outcome, { handled: true, error: 'access_denied' });
 });
 
+test('canceled-only 回调会被处理且不当作错误', async () => {
+  const client = fakeClient({ ok: false, error: 'canceled' });
+  const outcome = await maybeHandleOAuthCallback(`${REDIRECT}?canceled=true&state=S`, client);
+  assert.deepEqual(outcome, { handled: true, canceled: true });
+  assert.equal(client.calls.length, 1);
+});
+
 test('return-rig stash:写入→取出→取出后清除', () => {
   const storage = memoryStorage();
   stashReturnRig('ENCODED_RIG', storage);
@@ -170,6 +177,24 @@ test('handleOAuthCallbackBoot: 回调失败走 onError 且仍 onSettled', async 
   assert.deepEqual(order, ['error:access_denied', 'settled']);
 });
 
+test('handleOAuthCallbackBoot: canceled-only 恢复 return Rig 且静默收尾', async () => {
+  const order: string[] = [];
+  const storage = memoryStorage();
+  stashReturnRig('UNCHANGED_RIG', storage);
+  const { handleOAuthCallbackBoot } = await import('../src/tone3000/callback.ts');
+  const handled = await handleOAuthCallbackBoot(`${REDIRECT}?canceled=true&state=S`, {
+    client: { handleCallback: async () => ({ ok: false as const, error: 'canceled' }) },
+    storage,
+    applyShareRig: (encoded) => order.push(`rig:${encoded}`),
+    applyTone: () => order.push('tone'),
+    onSettled: () => order.push('settled'),
+    onError: (error) => order.push(`error:${error}`),
+  });
+  assert.equal(handled, true);
+  assert.deepEqual(order, ['rig:UNCHANGED_RIG', 'settled']);
+  assert.equal(popReturnRig(storage), null);
+});
+
 test('handleOAuthCallbackBoot: stale replace 应用失败可见且仍完成登录态收尾', async () => {
   const order: string[] = [];
   const storage = memoryStorage();
@@ -225,6 +250,18 @@ test('relayFromCallbackUrl: 提取回调参数;非回调/无参数返回 null', 
   });
   assert.equal(relayFromCallbackUrl('http://localhost:5173/'), null);
   assert.equal(relayFromCallbackUrl('http://localhost:5173/tone3000/callback'), null);
+  assert.deepEqual(
+    relayFromCallbackUrl('http://localhost:5173/tone3000/callback?canceled=true&state=S'),
+    {
+      type: 't3k_oauth_callback',
+      code: null,
+      state: 'S',
+      tone_id: null,
+      model_id: null,
+      error: null,
+      canceled: true,
+    },
+  );
 });
 
 test('relayToCallbackUrl: 还原为回调 URL,null 字段省略,与 handleCallback 契约一致', async () => {

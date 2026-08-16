@@ -275,6 +275,8 @@ test('Tone3000 public store verbs reject malformed model identities before graph
   calls.length = 0;
   assert.equal(store.replaceTone3000Pedal(uid, 'tone3000:43', 'bad-model'), false);
   store.setAmpModel('tone3000', 'tone3000:not-a-number');
+  store.setAmpModel('clean', 'tone3000:43');
+  store.setAmpModel('tone3000', 'builtin:clean');
 
   assert.equal(store.getState().chain[0], beforeChain[0]);
   assert.equal(store.getState().chain.find((item) => item.uid === uid)?.modelRef, 'tone3000:42');
@@ -748,7 +750,6 @@ test('degradation: 编排器报告未登录 → 箱头回退默认,引用与 rig
 
     const state = store.getState();
     assert.equal(state.ampId, 'crunch'); // 回退目录默认箱头
-    assert.deepEqual(state.tone3000Notice, { toneId: '79103', reason: 'not-authenticated' });
     // 引用保留(降级不写入持久化的前提)
     assert.equal(state.ampCategoryId, 'tone3000');
     assert.equal(state.ampModelKeys.tone3000, 'tone3000:79103');
@@ -772,17 +773,15 @@ test('degradation: runtime 重载恢复 NAM 箱头且保留用户参数', () => 
     assert.equal(state.ampValues.gain, 37);
     assert.equal(state.ampTone3000ModelId, '88001');
     assert.deepEqual(state.namModel, { source: 'tone3000:79001', modelId: '88001' });
-    assert.equal(state.tone3000Notice, null);
   });
 
-test('degradation: tone 失效(被删/转私有)→ 回退默认 + tone-unavailable 通知', () => {
+test('degradation: tone 失效(被删/转私有)→ 回退默认且保留引用', () => {
     const { engine } = createStubEngine();
     const store = createRigStore(engine);
     store.setAmpModel('tone3000', 'tone3000:99999');
     store.demoteTone3000Amp('tone3000:99999', 'tone-unavailable');
     const state = store.getState();
     assert.equal(state.ampId, 'crunch');
-    assert.deepEqual(state.tone3000Notice, { toneId: '99999', reason: 'tone-unavailable' });
   });
 
 test('degradation: 选择后在编排器确认失败前保持乐观 NAM 状态', () => {
@@ -791,7 +790,6 @@ test('degradation: 选择后在编排器确认失败前保持乐观 NAM 状态',
     store.setAmpModel('tone3000', 'tone3000:79103');
     const state = store.getState();
     assert.equal(state.ampId, 'nam-wasm');
-    assert.equal(state.tone3000Notice, null);
   });
 
 test('degradation: 编排器失败到达前用户已切走 → 不降级', () => {
@@ -802,7 +800,6 @@ test('degradation: 编排器失败到达前用户已切走 → 不降级', () =>
     assert.equal(store.demoteTone3000Amp('tone3000:79103', 'not-authenticated'), false);
     const state = store.getState();
     assert.equal(state.ampId, 'clean');
-    assert.equal(state.tone3000Notice, null);
   });
 
 test('degradation: 降级后 savePreset 仍保存原 tone3000 引用(不写入持久化)', () => {
@@ -816,23 +813,11 @@ test('degradation: 降级后 savePreset 仍保存原 tone3000 引用(不写入�
     assert.equal(preset.rig.amp.modelKey, 'tone3000:79103');
   });
 
-test('degradation: 降级后改选其他型号 → 旧通知清除', () => {
-    const { engine } = createStubEngine();
-    const store = createRigStore(engine);
-    store.setAmpModel('tone3000', 'tone3000:555');
-    store.demoteTone3000Amp('tone3000:555', 'not-authenticated');
-    assert.equal(store.getState().tone3000Notice?.reason, 'not-authenticated');
-    store.setAmpModel('clean', 'builtin:clean'); // 改选其他型号
-    assert.equal(store.getState().tone3000Notice, null);
-  });
-
-test('degradation: 编排器重试成功 → 通知清除', () => {
+test('degradation: 编排器重试成功 → NAM 运行实例恢复', () => {
   const { engine } = createStubEngine();
   const store = createRigStore(engine);
   store.setAmpModel('tone3000', 'tone3000:777');
   store.demoteTone3000Amp('tone3000:777', 'not-authenticated');
-  assert.equal(store.getState().tone3000Notice?.reason, 'not-authenticated');
   assert.equal(store.reloadTone3000Amp('tone3000:777'), true);
-  assert.equal(store.getState().tone3000Notice, null);
   assert.equal(store.getState().ampId, 'nam-wasm');
 });
