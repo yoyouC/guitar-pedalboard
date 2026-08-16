@@ -36,7 +36,8 @@ const FX_LOOP_EFFECTS = new Set([
   'pingpong',
 ]);
 
-const RIG_PRESET_CATALOG: RigPresetCatalog = {
+/** 真实目录:由效果/箱头/箱体注册表与箱头分类构建,所有 normalize 路径共用(ADR-0006) */
+export const RIG_PRESET_CATALOG: RigPresetCatalog = {
   effects: EFFECT_REGISTRY.map((definition) => ({
     id: definition.id,
     params: definition.params,

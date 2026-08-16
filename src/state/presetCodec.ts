@@ -198,7 +198,8 @@ function normalizeGlobals(
   };
 }
 
-function normalizeRig(rawRig: unknown, catalog: RigPresetCatalog): RigPresetState {
+/** 用 catalog 规范化任意来源的 rig 输入(预设/分享/快照共用唯一的 normalize 实现) */
+export function normalizeRig(rawRig: unknown, catalog: RigPresetCatalog): RigPresetState {
   const source = isRecord(rawRig) ? rawRig : {};
   return {
     chain: normalizeChain(source.chain, catalog),

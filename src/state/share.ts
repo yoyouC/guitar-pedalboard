@@ -1,14 +1,13 @@
-import { getEffectDef } from '../audio/effects';
-import { getCabDef } from '../audio/cabs';
-import { getAmpDef } from '../audio/amps';
-import { getAmpModelEntry, getAmpModelCategory } from '../audio/ampCategories';
 import type { ChainItem } from './store';
-import { createChainItem } from './store';
+import { RIG_PRESET_CATALOG } from './store';
+import { normalizeRig } from './presetCodec';
 
 /**
  * 效果链/箱头/箱体配置的 URL 分享编码。
  * 格式:`#p=` + base64url(JSON),字段全用短名控制长度,带版本号 v 向前兼容。
- * 未知 effectId/型号/箱体会被容错跳过,参数值钳制到定义范围内。
+ * 编码层只负责压缩;decode 后的 normalize/clamp 统一走 presetCodec 的
+ * catalog 路径(ADR-0006):未知 effectId/型号/箱体回退目录默认,
+ * 参数值按 presetCodec 严格语义(非 number 回退默认)钳制到定义范围。
  */
 
 export interface ShareState {
@@ -43,16 +42,51 @@ function base64urlDecode(s: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-function clampValues(defParams: { key: string; min: number; max: number; defaultValue: number }[], values: unknown): Record<string, number> {
-  const out: Record<string, number> = {};
-  const src = (values ?? {}) as Record<string, unknown>;
-  for (const p of defParams) {
-    const raw = Number(src[p.key]);
-    out[p.key] = Number.isFinite(raw)
-      ? Math.min(p.max, Math.max(p.min, raw))
-      : p.defaultValue;
+/** 解码失败返回 null(调用方忽略);normalize/clamp 走 catalog 统一路径 */
+export function decodeShareState(encoded: string): ShareState | null {
+  try {
+    const payload = JSON.parse(base64urlDecode(encoded)) as SharePayload;
+    if (payload?.v !== 1 || !Array.isArray(payload.c)) return null;
+
+    // payload → canonical 形状的原始输入,交给 presetCodec 统一规范化
+    const rig = normalizeRig(
+      {
+        chain: payload.c.map((item) => ({
+          effectId: item?.id,
+          enabled: typeof item?.e === 'number' ? item.e !== 0 : undefined,
+          values: item?.v,
+          post: typeof item?.p === 'number' ? item.p === 1 : undefined,
+        })),
+        amp: payload.a
+          ? {
+              categoryId: payload.a.cat,
+              modelKey: payload.a.key,
+              enabled: payload.a.on !== 0,
+              values: payload.a.v,
+              customName: null,
+            }
+          : undefined,
+        cab: payload.b
+          ? { id: payload.b.id, enabled: payload.b.on !== 0, values: payload.b.v }
+          : undefined,
+        globals: undefined,
+      },
+      RIG_PRESET_CATALOG,
+    );
+
+    return {
+      chain: rig.chain.map((item) => ({ ...item, uid: crypto.randomUUID() })),
+      ampCategoryId: rig.amp.categoryId,
+      ampModelKey: rig.amp.modelKey,
+      ampEnabled: rig.amp.enabled,
+      ampValues: rig.amp.values,
+      cabId: rig.cab.id,
+      cabEnabled: rig.cab.enabled,
+      cabValues: rig.cab.values,
+    };
+  } catch {
+    return null;
   }
-  return out;
 }
 
 export function encodeShareState(state: ShareState): string {
@@ -72,68 +106,6 @@ export function encodeShareState(state: ShareState): string {
     },
   };
   return base64urlEncode(JSON.stringify(payload));
-}
-
-/** 解码失败返回 null(调用方忽略);未知项跳过,参数钳制 */
-export function decodeShareState(encoded: string): ShareState | null {
-  try {
-    const payload = JSON.parse(base64urlDecode(encoded)) as SharePayload;
-    if (payload?.v !== 1 || !Array.isArray(payload.c)) return null;
-
-    const chain: ChainItem[] = [];
-    for (const item of payload.c) {
-      try {
-        const def = getEffectDef(item.id);
-        const base = createChainItem(def);
-        chain.push({
-          uid: crypto.randomUUID(),
-          effectId: def.id,
-          enabled: item.e !== 0,
-          values: clampValues(def.params, item.v),
-          post: typeof item.p === 'number' ? item.p === 1 : base.post,
-        });
-      } catch {
-        console.warn(`[share] 跳过未知效果器: ${item.id}`);
-      }
-    }
-
-    const ampModelKey = payload.a?.key ?? 'builtin:crunch';
-    const ampEntry = getAmpModelEntry(ampModelKey);
-    const ampCategory = getAmpModelCategory(ampModelKey);
-
-    let cabId = 'gb4x12';
-    let cabValues: Record<string, number> = {};
-    if (payload.b?.id) {
-      try {
-        const def = getCabDef(payload.b.id);
-        cabId = def.id;
-        cabValues = clampValues(def.params, payload.b.v);
-      } catch {
-        console.warn(`[share] 未知箱体 ${payload.b.id},使用默认`);
-        cabValues = clampValues(getCabDef('gb4x12').params, {});
-      }
-    }
-
-    // 箱头参数钳制(def 由型号 kind 解析:builtin→ref,其余→nam-wasm)
-    const resolvedKey = ampEntry ? ampModelKey : 'builtin:crunch';
-    const resolvedEntry = ampEntry ?? getAmpModelEntry(resolvedKey)!;
-    const ampDefId =
-      resolvedEntry.kind === 'builtin' ? resolvedEntry.ref : 'nam-wasm';
-    const ampValues = clampValues(getAmpDef(ampDefId).params, payload.a?.v);
-
-    return {
-      chain,
-      ampCategoryId: ampCategory?.id ?? 'crunch',
-      ampModelKey: resolvedKey,
-      ampEnabled: payload.a?.on !== 0,
-      ampValues,
-      cabId,
-      cabEnabled: payload.b?.on !== 0,
-      cabValues,
-    };
-  } catch {
-    return null;
-  }
 }
 
 export const SHARE_HASH_PREFIX = '#p=';
