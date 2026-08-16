@@ -1,4 +1,11 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
+import {
+  executePlan,
+  planGraph,
+  type AmpSpec,
+  type ChainSpec,
+  type PedalEntry,
+} from './graphBuilder';
 import { loadNoiseGate } from './noiseGateWorklet';
 import { loadWahWorklet } from './wahWorklet';
 import { loadWhammyWorklet } from './whammyWorklet';
@@ -32,27 +39,8 @@ import {
   type LooperStatus,
 } from './looperState';
 
-/** 引擎重建链条所需的快照 */
-export interface ChainSpec {
-  uid: string;
-  def: EffectDefinition;
-  enabled: boolean;
-  values: Record<string, number>;
-  /** false = 箱头之前(前置);true = 箱头之后、箱体之前(FX Loop) */
-  post: boolean;
-}
-
-/** 箱头快照(null 表示不启用箱头) */
-export interface AmpSpec {
-  def: EffectDefinition;
-  enabled: boolean;
-  values: Record<string, number>;
-  /**
-   * 配置版本键:def 与 key 都相同且启用时,重建复用存活实例(不重新加载模型)。
-   * 模型/配置变化时必须换 key(如 `${ampId}:${namVersion}`)。
-   */
-  key?: string;
-}
+/** 引擎重建链条所需的快照(定义在 graphBuilder,此处 re-export 保持既有 import 路径) */
+export type { ChainSpec, AmpSpec } from './graphBuilder';
 
 export type InputSourceType = 'mic' | 'file' | 'test';
 
@@ -99,14 +87,20 @@ class AudioEngine {
   private mediaStream: MediaStream | null = null;
   private testTimer: number | null = null;
 
-  private instances: { uid: string; def: EffectDefinition; inst: EffectInstance }[] = [];
+  // ---- 图谱产物(由 executePlan 返回,整体替换;见 graphBuilder/ADR-0005) ----
+  private instances = new Map<string, PedalEntry>();
   private moduleAnalysers = new Map<string, AnalyserNode>();
-  private chain: ChainSpec[] = [];
   private ampInstance: EffectInstance | null = null;
   private ampInstanceDef: EffectDefinition | null = null;
   private ampInstanceKey: string | null = null;
-  private ampSpec: AmpSpec | null = null;
   private cabInstance: EffectInstance | null = null;
+  private cabInstanceDef: EffectDefinition | null = null;
+  /** 上次实际建图时的 globalBypass;null = 从未建图(首次强制出非空 plan) */
+  private graphGlobalBypass: boolean | null = null;
+
+  // ---- Rig 结构 spec(setter 只更新 spec,重建由 planGraph/executePlan 完成) ----
+  private chain: ChainSpec[] = [];
+  private ampSpec: AmpSpec | null = null;
   private cabSpec: AmpSpec | null = null;
   private globalBypass = false;
 
@@ -592,8 +586,7 @@ class AudioEngine {
 
   /** 参数连续调整,不重建图 */
   updateParam(uid: string, key: string, value: number): void {
-    const found = this.instances.find((i) => i.uid === uid);
-    found?.inst.update(key, value);
+    this.instances.get(uid)?.inst.update(key, value);
   }
 
   /** 某模块输出侧的电平表节点(不存在则 null) */
@@ -623,122 +616,55 @@ class AudioEngine {
     this.cabInstance?.update(key, value);
   }
 
+  /**
+   * 图谱编译(ADR-0005):决策全部在 planGraph(纯函数,见 graphBuilder.ts),
+   * 这里只负责喂 spec/上次产物、调用 executePlan、整体替换 artifacts 字段。
+   * 空 plan(spec 无结构变化)直接 no-op,不触碰任何状态。
+   */
   private rebuildGraph(): void {
     const ctx = this.ctx;
-    if (!ctx || !this.inputGain || !this.outputAnalyser) return;
+    if (!ctx || !this.inputGain || !this.inputAnalyser || !this.outputAnalyser) return;
 
-    // 1. 处置旧实例:uid+def 未变的复用(保住已加载的模型与 LFO/延迟状态),
-    //    其余销毁。复用者先断开旧下游(电平抽头/下一级),稍后按新顺序重接。
-    const kept = new Map<string, { def: EffectDefinition; inst: EffectInstance }>();
-    for (const { uid, def, inst } of this.instances) {
-      const spec = this.chain.find((s) => s.uid === uid && s.enabled && s.def === def);
-      if (spec) {
-        inst.output.disconnect();
-        kept.set(uid, { def, inst });
-      } else {
-        inst.dispose();
-      }
-    }
-    const nextInstances: { uid: string; def: EffectDefinition; inst: EffectInstance }[] = [];
-    this.moduleAnalysers.clear();
+    const plan = planGraph(
+      {
+        chain: this.chain,
+        amp: this.ampSpec,
+        cab: this.cabSpec,
+        globalBypass: this.globalBypass,
+      },
+      {
+        instances: this.instances,
+        ampInstance: this.ampInstance,
+        ampInstanceDef: this.ampInstanceDef,
+        ampInstanceKey: this.ampInstanceKey,
+        cabInstance: this.cabInstance,
+        cabInstanceDef: this.cabInstanceDef,
+        globalBypass: this.graphGlobalBypass,
+      },
+    );
+    const artifacts = executePlan(
+      ctx,
+      {
+        inputGain: this.inputGain,
+        inputAnalyser: this.inputAnalyser,
+        outputAnalyser: this.outputAnalyser,
+        looperNode: this.looperNode,
+      },
+      plan,
+    );
+    if (!artifacts) return;
 
-    // 箱头:def + key 相同且启用 → 复用(避免 NAM 模型重复加载)
-    const reuseAmp =
-      this.ampInstance !== null &&
-      this.ampSpec !== null &&
-      this.ampSpec.enabled &&
-      this.ampInstanceDef === this.ampSpec.def &&
-      this.ampInstanceKey === (this.ampSpec.key ?? null);
-    if (this.ampInstance) {
-      if (reuseAmp) {
-        this.ampInstance.output.disconnect();
-        this.ampAnalyser?.disconnect();
-      } else {
-        this.ampInstance.dispose();
-        this.ampInstance = null;
-        this.ampInstanceDef = null;
-        this.ampInstanceKey = null;
-      }
-    }
-    if (this.cabInstance) {
-      this.cabInstance.dispose();
-      this.cabInstance = null;
-    }
-    this.ampAnalyser = null;
-    this.cabAnalyser = null;
-    this.preAmpAnalyser = null;
-
-    // 断开 inputGain 全部下游(含 analyser 与旧链),再按新链重连
-    this.inputGain.disconnect();
-    this.inputGain.connect(this.inputAnalyser!);
-
-    let prev: AudioNode = this.inputGain;
-    if (!this.globalBypass) {
-      const connectSpec = (spec: ChainSpec) => {
-        if (!spec.enabled) return;
-        let inst = kept.get(spec.uid)?.inst;
-        if (!inst) {
-          inst = spec.def.create(ctx);
-        }
-        // 新建与复用都回放参数(值可能已变)
-        for (const [k, v] of Object.entries(spec.values)) inst.update(k, v);
-        prev.connect(inst.input);
-        prev = inst.output;
-        // 模块输出电平表抽头(仅测量,不影响音频路径)
-        const tap = ctx.createAnalyser();
-        tap.fftSize = 1024;
-        inst.output.connect(tap);
-        this.moduleAnalysers.set(spec.uid, tap);
-        nextInstances.push({ uid: spec.uid, def: spec.def, inst });
-      };
-      // 前置段(post=false):踏板 → 箱头
-      for (const spec of this.chain) {
-        if (!spec.post) connectSpec(spec);
-      }
-      // 箱头前抽头:前置链末端(削波检测/背景变色用)
-      this.preAmpAnalyser = ctx.createAnalyser();
-      this.preAmpAnalyser.fftSize = 1024;
-      prev.connect(this.preAmpAnalyser);
-      // 箱头位于前置效果链之后(踏板 → 箱头的真实路由)
-      if (this.ampSpec && this.ampSpec.enabled) {
-        let amp = this.ampInstance;
-        if (!amp) {
-          amp = this.ampSpec.def.create(ctx);
-          this.ampInstanceDef = this.ampSpec.def;
-          this.ampInstanceKey = this.ampSpec.key ?? null;
-        }
-        for (const [k, v] of Object.entries(this.ampSpec.values)) amp.update(k, v);
-        prev.connect(amp.input);
-        prev = amp.output;
-        this.ampInstance = amp;
-        this.ampAnalyser = ctx.createAnalyser();
-        this.ampAnalyser.fftSize = 1024;
-        amp.output.connect(this.ampAnalyser);
-      }
-      // 后置段(post=true):FX Loop,箱头之后、箱体之前
-      for (const spec of this.chain) {
-        if (spec.post) connectSpec(spec);
-      }
-      // 箱体位于箱头之后、输出之前(关闭即 DI 直通)
-      if (this.cabSpec && this.cabSpec.enabled) {
-        const cab = this.cabSpec.def.create(ctx);
-        for (const [k, v] of Object.entries(this.cabSpec.values)) cab.update(k, v);
-        prev.connect(cab.input);
-        prev = cab.output;
-        this.cabInstance = cab;
-        this.cabAnalyser = ctx.createAnalyser();
-        this.cabAnalyser.fftSize = 1024;
-        cab.output.connect(this.cabAnalyser);
-      }
-    }
-    if (this.globalBypass) {
-      // bypass 期间保留复用实例的归属(不接线、不重载,恢复时原样接回)
-      this.instances = [...kept.entries()].map(([uid, v]) => ({ uid, def: v.def, inst: v.inst }));
-    } else {
-      this.instances = nextInstances;
-    }
-    // Looper 是固定输出级的一部分，不随效果链重建；若加载失败则安全直通。
-    prev.connect(this.looperNode ?? this.outputAnalyser);
+    this.instances = artifacts.instances;
+    this.moduleAnalysers = artifacts.moduleAnalysers;
+    this.ampInstance = artifacts.ampInstance;
+    this.ampInstanceDef = artifacts.ampInstanceDef;
+    this.ampInstanceKey = artifacts.ampInstanceKey;
+    this.cabInstance = artifacts.cabInstance;
+    this.cabInstanceDef = artifacts.cabInstanceDef;
+    this.preAmpAnalyser = artifacts.preAmpAnalyser;
+    this.ampAnalyser = artifacts.ampAnalyser;
+    this.cabAnalyser = artifacts.cabAnalyser;
+    this.graphGlobalBypass = artifacts.globalBypass;
   }
 }
 
