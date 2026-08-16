@@ -2463,3 +2463,17 @@ body.midi-learn-mode input:disabled {
 .tone3000-logout:hover {
   opacity: 1;
 }
+
+/* tone3000 降级通知(issue #14):非阻断,箱头已回退默认 */
+.tone3000-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgba(232, 178, 78, 0.5);
+  border-radius: 6px;
+  background: rgba(232, 178, 78, 0.1);
+  font-size: 12px;
+}

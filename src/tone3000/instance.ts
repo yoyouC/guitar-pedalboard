@@ -49,6 +49,21 @@ export async function browseTone3000(getEncodedRig: () => string): Promise<void>
   window.location.href = url;
 }
 
+/**
+ * 模型失效的修复入口(issue #14):load_tone 流程——TONE3000 校验访问权,
+ * 失效时提供替代选择;回传(可能不同的)tone_id 由 boot 装载。
+ * 暂存当前 rig 以便跳回后恢复。
+ */
+export async function replaceTone3000(toneId: string, getEncodedRig: () => string): Promise<void> {
+  stashReturnRig(getEncodedRig(), window.localStorage);
+  const { url } = await tone3000.buildAuthorizeUrl({
+    prompt: 'load_tone',
+    toneId,
+    format: 'nam',
+  });
+  window.location.href = url;
+}
+
 /** 登出并通知 UI */
 export function logoutTone3000(): void {
   tone3000.logout();

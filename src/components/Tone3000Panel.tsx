@@ -6,6 +6,7 @@ import { encodeShareState } from '../state/share';
 import {
   browseTone3000,
   logoutTone3000,
+  replaceTone3000,
   tone3000,
   subscribeTone3000Auth,
   getTone3000Authenticated,
@@ -21,6 +22,7 @@ import type { ToneInfo } from '../tone3000/client';
 export function Tone3000Panel() {
   const authed = useSyncExternalStore(subscribeTone3000Auth, getTone3000Authenticated);
   const modelKey = useRig((s) => s.ampModelKeys[s.ampCategoryId]);
+  const notice = useRig((s) => s.tone3000Notice);
   const toneId = modelKey ? parseTone3000Key(modelKey) : null;
   const [tone, setTone] = useState<ToneInfo | null>(null);
   const [toneError, setToneError] = useState<string | null>(null);
@@ -82,6 +84,42 @@ export function Tone3000Panel() {
             <span className="tone3000-byline">
               {toneError ?? (authed ? '模型信息加载中…' : '登录后可查看模型信息')}
             </span>
+          )}
+        </div>
+      )}
+
+      {notice && (
+        <div className="tone3000-notice" role="alert">
+          <span className="tone3000-notice-text">
+            {notice.reason === 'not-authenticated' && (
+              <>该模型需要登录 TONE3000,箱头已回退为默认。</>
+            )}
+            {notice.reason === 'tone-unavailable' && (
+              <>原模型已失效(可能已被作者删除或转私有),箱头已回退为默认。</>
+            )}
+            {notice.reason === 'http' && <>模型下载失败(网络问题),箱头已回退为默认。</>}
+          </span>
+          {notice.reason === 'not-authenticated' && (
+            <button className="nam-load-btn" onClick={startBrowse}>
+              登录 TONE3000
+            </button>
+          )}
+          {notice.reason === 'tone-unavailable' && (
+            <button
+              className="nam-load-btn"
+              onClick={() =>
+                void replaceTone3000(notice.toneId, () =>
+                  encodeShareState(rigToShareState(rigStore.getState())),
+                )
+              }
+            >
+              在 TONE3000 选择替代模型…
+            </button>
+          )}
+          {notice.reason === 'http' && modelKey && (
+            <button className="nam-load-btn" onClick={() => rigStore.setAmpModel('tone3000', modelKey)}>
+              重试
+            </button>
           )}
         </div>
       )}
