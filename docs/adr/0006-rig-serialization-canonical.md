@@ -22,7 +22,10 @@ globals 与 customName)、`ShareState`(URL 分享,平面、无 globals)、
 - **Snapshot = Rig − globals、Share = Rig − globals − customName**,
   均为派生。share 的短字段 base64url 编码层保留(只管压缩),decode
   后改走 catalog normalize;`ApplyRigState` 收敛为 canonical + uid 化
-  chain,`rigFrom*` 三个规范化器退化为薄派生。
+  chain,`rigFrom*` 三个规范化器退化为薄派生。正向派生同样显式:
+  `toSnapshot(state)` / `rigToShareState(state)` 即"canonical 减去
+  约定字段"的减法,派生关系由专门测试 pin 住(与同一状态的
+  savePreset 输出对比)。
 - **快照携带 `ampCategoryId` + `ampModelKey` 成对**,recall 走型号机制
   (修复 modelKey 丢失)。amp 为 union:型号机制分支 |
   `legacyAmpId` 分支。
@@ -44,9 +47,11 @@ globals 与 customName)、`ShareState`(URL 分享,平面、无 globals)、
 
 - 加一个 rig 字段只改 canonical 与派生规则,不再三处分别决定。
 - 两处有意行为变化(随 PR 标注):① 快照 recall 开始走型号机制;
-  ② 坏快照槽位从 throw 变为静默置空。另有两处微小行为对齐:
+  ② 坏快照槽位从 throw 变为静默置空。另有几处微小行为对齐:
   share 缺省箱体段产出默认参数值(原为空 values);share 不再容忍
-  字符串数字(合法编码器从不产生)。
+  字符串数字(合法编码器从不产生);`loadSnapshots` 槽位数截断/补齐到
+  SNAPSHOT_COUNT(原样返回任意长度数组);share decode 跳过未知
+  效果/箱体时不再 `console.warn`(normalizeChain 静默跳过)。
 - 已知限制(留待评审候选 8):modelKey `nam-wasm:custom` 的快照/
   分享恢复的是"自定义模型"这个引用,实际模型源仍是 namWasm 模块级
   全局态;自定义 NAM 模型不随快照/分享切换。

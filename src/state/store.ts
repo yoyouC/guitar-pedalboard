@@ -81,6 +81,15 @@ export function createChainItem(def: EffectDefinition): ChainItem {
   };
 }
 
+/** 初始型号簿记:每个箱头分类记住该类的第一个型号(catalog 单点) */
+export function defaultAmpModelKeys(): Record<string, string> {
+  const keys: Record<string, string> = {};
+  for (const model of RIG_PRESET_CATALOG.ampModels) {
+    if (!(model.categoryId in keys)) keys[model.categoryId] = model.key;
+  }
+  return keys;
+}
+
 const STORAGE_KEY = 'guitar-pedalboard-presets';
 
 export function loadPresets(): RigPreset[] {

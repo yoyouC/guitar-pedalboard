@@ -6,6 +6,7 @@ import {
   rigFromShare,
   rigFromSnapshot,
   rigToShareState,
+  toSnapshot,
   isSnapshotDirty,
   type RigEngine,
   type RigStoreState,
@@ -351,6 +352,44 @@ test('createRigStore applies initialRig at construction (factory default share p
 });
 
 // ---------- 快照:capture/recall/clear + dirty 派生 ----------
+
+test('derivation: toSnapshot/rigToShareState are canonical minus the agreed fields', () => {
+  // 同一状态:savePreset(canonical 全量)与 toSnapshot(− globals)、
+  // rigToShareState(− globals − customName)的 chain/amp/cab 完全一致——
+  // 派生是显式减法,不是各自维护的形状(ADR-0006)
+  const { engine } = createStubEngine();
+  const store = createRigStore(engine);
+  store.addPedal('chorus');
+  store.setAmpModel('crunch', 'nam-wasm-pack:jcm800-sweep');
+  store.setAmpParam('gain', 66);
+  store.savePreset('P');
+  const state = store.getState();
+  const preset = state.presets.find((p) => p.name === 'P')!;
+
+  // snapshot = preset.rig − globals(customName 不在快照形状里,型号引用一致)
+  const snap = toSnapshot(state);
+  assert.deepEqual(snap.chain, preset.rig.chain);
+  assert.deepEqual(snap.amp, {
+    categoryId: preset.rig.amp.categoryId,
+    modelKey: preset.rig.amp.modelKey,
+    enabled: preset.rig.amp.enabled,
+    values: preset.rig.amp.values,
+  });
+  assert.deepEqual(snap.cab, preset.rig.cab);
+  assert.equal('globals' in snap, false);
+
+  // share = preset.rig − globals − customName(扁平化是编码层的形状,不是第三套知识)
+  const share = rigToShareState(state);
+  assert.deepEqual(
+    share.chain.map(({ effectId, enabled, values, post }) => ({ effectId, enabled, values, post })),
+    preset.rig.chain,
+  );
+  assert.equal(share.ampCategoryId, preset.rig.amp.categoryId);
+  assert.equal(share.ampModelKey, preset.rig.amp.modelKey);
+  assert.deepEqual(share.ampValues, preset.rig.amp.values);
+  assert.equal(share.cabId, preset.rig.cab.id);
+  assert.deepEqual(share.cabValues, preset.rig.cab.values);
+});
 
 test('snapshot capture/recall/clear with derived dirty flag', () => {
   const { engine, calls } = createStubEngine();

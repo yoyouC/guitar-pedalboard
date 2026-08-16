@@ -28,7 +28,7 @@ import {
   setNamWasmPack,
 } from '../audio/namWasm';
 import type { ShareState } from './share';
-import type { RigPreset, Snapshot, SnapshotAmpRef } from './presetCodec';
+import type { RigPreset, Snapshot, SnapshotAmp, SnapshotCab } from './presetCodec';
 import {
   createChainItem,
   currentRigToPreset,
@@ -40,6 +40,7 @@ import {
   loadSnapshots,
   saveSnapshots,
   RIG_PRESET_CATALOG,
+  defaultAmpModelKeys,
   type ChainItem,
 } from './store';
 
@@ -71,14 +72,7 @@ export const RIG_GLOBAL_DEFAULTS: RigGlobals = {
   bypass: false,
 };
 
-/** 初始型号簿记:每个箱头分类记住该类的第一个型号(目录单点) */
-function initialAmpModelKeys(): Record<string, string> {
-  const keys: Record<string, string> = {};
-  for (const model of RIG_PRESET_CATALOG.ampModels) {
-    if (!(model.categoryId in keys)) keys[model.categoryId] = model.key;
-  }
-  return keys;
-}
+/** 初始型号簿记来自 catalog 单点(store.ts 的 defaultAmpModelKeys) */
 
 /** rigStore 持有的全部 Rig 状态(单一事实源) */
 export interface RigStoreState {
@@ -115,8 +109,8 @@ export interface RigStoreState {
  */
 export interface ApplyRigState {
   chain: ChainItem[];
-  amp: SnapshotAmpRef & { enabled: boolean; values: Record<string, number> };
-  cab: { id: string; enabled: boolean; values: Record<string, number> };
+  amp: SnapshotAmp;
+  cab: SnapshotCab;
   globals: RigGlobals;
 }
 
@@ -297,8 +291,8 @@ export function rigToShareState(state: RigStoreState): ShareState {
   };
 }
 
-/** 当前状态 → 快照对象(= rig − globals;箱头记型号机制引用,见 ADR-0006) */
-function captureCurrentSnapshot(state: RigStoreState): Snapshot {
+/** 正向派生:当前状态 → 快照(= rig − globals;箱头记型号机制引用,见 ADR-0006) */
+export function toSnapshot(state: RigStoreState): Snapshot {
   return {
     chain: state.chain.map(({ effectId, enabled, values, post }) => ({
       effectId,
@@ -325,7 +319,7 @@ export function isSnapshotDirty(state: RigStoreState, slot: number): boolean {
   if (slot < 0 || slot !== state.activeSlot) return false;
   const snap = state.snapshots[slot];
   if (!snap) return false;
-  return JSON.stringify(captureCurrentSnapshot(state)) !== JSON.stringify(snap);
+  return JSON.stringify(toSnapshot(state)) !== JSON.stringify(snap);
 }
 
 export interface RigStoreInit {
@@ -341,7 +335,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
   let state: RigStoreState = {
     chain: defaultChain(),
     ampCategoryId: defaultModel?.categoryId ?? RIG_PRESET_CATALOG.ampCategoryIds[0],
-    ampModelKeys: initialAmpModelKeys(),
+    ampModelKeys: defaultAmpModelKeys(),
     ampId: initialAmpId,
     ampEnabled: true,
     ampValues: defaultAmpValues(initialAmpId),
@@ -609,7 +603,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
     captureSnapshot(slot) {
       const snapshots = [...state.snapshots];
-      snapshots[slot] = captureCurrentSnapshot(state);
+      snapshots[slot] = toSnapshot(state);
       saveSnapshots(snapshots);
       state = { ...state, snapshots, activeSlot: slot };
       emit();

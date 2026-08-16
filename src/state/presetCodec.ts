@@ -85,11 +85,24 @@ export type SnapshotAmpRef =
   | { categoryId: string; modelKey: string }
   | { legacyAmpId: string };
 
+/** 快照/恢复共用的箱头状态(引用 + 开关 + 参数) */
+export type SnapshotAmp = SnapshotAmpRef & {
+  enabled: boolean;
+  values: Record<string, number>;
+};
+
+/** 快照/恢复共用的箱体状态 */
+export interface SnapshotCab {
+  id: string;
+  enabled: boolean;
+  values: Record<string, number>;
+}
+
 /** 快照:canonical Rig 表示减去 globals 的派生(ADR-0006) */
 export interface Snapshot {
   chain: PresetChainItem[];
-  amp: SnapshotAmpRef & { enabled: boolean; values: Record<string, number> };
-  cab: { id: string; enabled: boolean; values: Record<string, number> };
+  amp: SnapshotAmp;
+  cab: SnapshotCab;
 }
 
 interface PresetExportEnvelope {
