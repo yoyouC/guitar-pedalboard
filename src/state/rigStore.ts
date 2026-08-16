@@ -28,7 +28,7 @@ import {
   setNamWasmPack,
 } from '../audio/namWasm';
 import type { ShareState } from './share';
-import type { Snapshot, SnapshotAmpRef } from './presetCodec';
+import type { RigPreset, Snapshot, SnapshotAmpRef } from './presetCodec';
 import {
   createChainItem,
   currentRigToPreset,
@@ -39,8 +39,8 @@ import {
   savePresets,
   loadSnapshots,
   saveSnapshots,
+  RIG_PRESET_CATALOG,
   type ChainItem,
-  type Preset,
 } from './store';
 
 /** rigStore 需要的引擎面(AudioEngine 的子集;测试用 stub 注入) */
@@ -64,11 +64,21 @@ export interface RigGlobals {
   bypass: boolean;
 }
 
+/** 默认值来自 catalog 单点(ADR-0006) */
 export const RIG_GLOBAL_DEFAULTS: RigGlobals = {
-  inputGain: 1,
-  masterVolume: 0.5,
+  inputGain: RIG_PRESET_CATALOG.defaults.inputGain,
+  masterVolume: RIG_PRESET_CATALOG.defaults.masterVolume,
   bypass: false,
 };
+
+/** 初始型号簿记:每个箱头分类记住该类的第一个型号(目录单点) */
+function initialAmpModelKeys(): Record<string, string> {
+  const keys: Record<string, string> = {};
+  for (const model of RIG_PRESET_CATALOG.ampModels) {
+    if (!(model.categoryId in keys)) keys[model.categoryId] = model.key;
+  }
+  return keys;
+}
 
 /** rigStore 持有的全部 Rig 状态(单一事实源) */
 export interface RigStoreState {
@@ -92,7 +102,7 @@ export interface RigStoreState {
   snapshots: (Snapshot | null)[];
   /** 激活快照槽;-1 = 无 */
   activeSlot: number;
-  presets: Preset[];
+  presets: RigPreset[];
   /** 图谱重建后自增,供依赖引擎侧节点引用(电平表/背景)的组件重读 */
   graphVersion: number;
 }
@@ -223,7 +233,7 @@ function resolveAmpModel(modelKey: string): {
 }
 
 /** 预设 → applyRig 输入(chain 重新生成 uid;箱头走型号机制) */
-export function rigFromPreset(preset: Preset): ApplyRigState {
+export function rigFromPreset(preset: RigPreset): ApplyRigState {
   const rig = presetToRig(preset);
   return {
     chain: rig.chain,
@@ -324,21 +334,20 @@ export interface RigStoreInit {
 }
 
 export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore {
+  // 初始箱头/箱体来自 catalog 默认型号(ADR-0006 单点)
+  const defaultModelKey = RIG_PRESET_CATALOG.defaults.ampModelKey;
+  const defaultModel = RIG_PRESET_CATALOG.ampModels.find((m) => m.key === defaultModelKey);
+  const initialAmpId = ampIdForModelKey(defaultModelKey);
   let state: RigStoreState = {
     chain: defaultChain(),
-    ampCategoryId: 'crunch',
-    ampModelKeys: {
-      clean: 'builtin:clean',
-      chime: 'builtin:chime',
-      crunch: 'builtin:crunch',
-      recto: 'builtin:recto',
-    },
-    ampId: 'crunch',
+    ampCategoryId: defaultModel?.categoryId ?? RIG_PRESET_CATALOG.ampCategoryIds[0],
+    ampModelKeys: initialAmpModelKeys(),
+    ampId: initialAmpId,
     ampEnabled: true,
-    ampValues: defaultAmpValues('crunch'),
-    cabId: 'gb4x12',
+    ampValues: defaultAmpValues(initialAmpId),
+    cabId: RIG_PRESET_CATALOG.defaults.cabId,
     cabEnabled: true,
-    cabValues: defaultCabValues('gb4x12'),
+    cabValues: defaultCabValues(RIG_PRESET_CATALOG.defaults.cabId),
     namCustomName: null,
     namVersion: 0,
     inputGain: RIG_GLOBAL_DEFAULTS.inputGain,

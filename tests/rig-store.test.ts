@@ -100,6 +100,24 @@ test.beforeEach(() => {
 
 // ---------- 参数 verb:状态 + 引擎双写,不触发重建 ----------
 
+test('initial state aligns with catalog defaults (ADR-0006 单点)', () => {
+  const { engine } = createStubEngine();
+  const state = createRigStore(engine).getState();
+  // 全局参数与箱体来自 catalog.defaults
+  assert.equal(state.inputGain, 1);
+  assert.equal(state.masterVolume, 0.5);
+  assert.equal(state.globalBypass, false);
+  assert.equal(state.cabId, 'gb4x12');
+  // 默认型号(builtin:crunch)推导初始箱头分类与 def
+  assert.equal(state.ampCategoryId, 'crunch');
+  assert.equal(state.ampId, 'crunch');
+  // 每个箱头分类记住该类的第一个型号
+  assert.equal(state.ampModelKeys.clean, 'builtin:clean');
+  assert.equal(state.ampModelKeys.chime, 'builtin:chime');
+  assert.equal(state.ampModelKeys.crunch, 'builtin:crunch');
+  assert.equal(state.ampModelKeys.recto, 'builtin:recto');
+});
+
 test('param verbs update state and engine without structure rebuild', () => {
   const { engine, calls } = createStubEngine();
   const store = createRigStore(engine);

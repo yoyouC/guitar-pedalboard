@@ -81,13 +81,9 @@ export function createChainItem(def: EffectDefinition): ChainItem {
   };
 }
 
-export type Preset = RigPreset;
-export type FullRigState = RigPresetState;
-export type RestoredFullRigState = RestoredRigPresetState;
-
 const STORAGE_KEY = 'guitar-pedalboard-presets';
 
-export function loadPresets(): Preset[] {
+export function loadPresets(): RigPreset[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
@@ -101,23 +97,23 @@ export function loadPresets(): Preset[] {
   }
 }
 
-export function savePresets(presets: Preset[]): void {
+export function savePresets(presets: RigPreset[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
 }
 
-export function currentRigToPreset(name: string, rig: FullRigState): Preset {
+export function currentRigToPreset(name: string, rig: RigPresetState): RigPreset {
   return createRigPreset(name, rig, RIG_PRESET_CATALOG);
 }
 
-export function presetToRig(preset: Preset): RestoredFullRigState {
+export function presetToRig(preset: RigPreset): RestoredRigPresetState {
   return restoreRigPreset(preset, RIG_PRESET_CATALOG);
 }
 
-export function exportPresetsJson(presets: Preset[]): string {
+export function exportPresetsJson(presets: RigPreset[]): string {
   return exportRigPresetsJson(presets);
 }
 
-export function importPresetsJson(text: string): Preset[] {
+export function importPresetsJson(text: string): RigPreset[] {
   return importRigPresetsJson(text, RIG_PRESET_CATALOG);
 }
 
