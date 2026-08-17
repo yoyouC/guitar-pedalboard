@@ -40,13 +40,13 @@ mat2 rot2(float a) {
   return mat2(c, -s, s, c);
 }
 
-// 场景:前倾露出端面与长面,绕竖直轴缓转(约 25s 一圈);短身三棱体(非长柱),
-// 整体靠左下(x 负向),给右侧光谱留出扇出空间
+// 场景:微前倾(固定)露一点侧面厚度,绕柱身长轴自旋(约 25s 一圈)——
+// 轮廓恒为三角端面(3 个角),厚度只作陪衬;短身三棱体,整体靠左下,给右侧光谱留扇出空间
 float map(vec3 p) {
   p += vec3(0.62, 0.18, 0.0);
-  p.yz = rot2(-0.42) * p.yz;
-  p.xz = rot2(u_time * 0.25) * p.xz;
-  return sdTriPrism(p, vec2(0.42, 0.28));
+  p.xy = rot2(u_time * 0.25) * p.xy;
+  p.yz = rot2(-0.22) * p.yz;
+  return sdTriPrism(p, vec2(0.42, 0.20));
 }
 
 vec3 calcNormal(vec3 p, float eps) {
