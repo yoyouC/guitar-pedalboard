@@ -40,16 +40,17 @@ mat2 rot2(float a) {
   return mat2(c, -s, s, c);
 }
 
-// 场景:前倾露出端面与长面,绕竖直轴缓转(约 25s 一圈);短身三棱体(非长柱),整体下移让出顶部
+// 场景:前倾露出端面与长面,绕竖直轴缓转(约 25s 一圈);短身三棱体(非长柱),
+// 整体靠左下(x 负向),给右侧光谱留出扇出空间
 float map(vec3 p) {
-  p.y += 0.18;
+  p += vec3(0.62, 0.18, 0.0);
   p.yz = rot2(-0.42) * p.yz;
   p.xz = rot2(u_time * 0.25) * p.xz;
   return sdTriPrism(p, vec2(0.42, 0.28));
 }
 
-vec3 calcNormal(vec3 p) {
-  vec2 e = vec2(0.0015, -0.0015);
+vec3 calcNormal(vec3 p, float eps) {
+  vec2 e = vec2(eps, -eps);
   return normalize(
     e.xyy * map(p + e.xyy) + e.yyx * map(p + e.yyx) +
     e.yxy * map(p + e.yxy) + e.xxx * map(p + e.xxx));
@@ -72,34 +73,60 @@ void main() {
   float energy = 0.50 + 0.55 * u_amp + 0.05 * sin(u_time * 0.8);
 
   // 相机:固定于原点前方,看向棱镜
-  vec3 ro = vec3(0.0, 0.10, 2.6);
+  vec3 ro = vec3(0.0, 0.0, 2.6);
   vec3 rd = normalize(vec3(uv, -1.9));
 
-  // raymarch 棱镜
+  // raymarch 棱镜(软命中:记录最终距离,近失像素给部分覆盖,压轮廓锯齿)
   float dist = 0.0;
-  float hit = 0.0;
+  float lastD = 10.0;
   vec3 pos = ro;
   for (int i = 0; i < 80; i++) {
     pos = ro + rd * dist;
-    float d = map(pos);
-    if (d < 0.001) { hit = 1.0; break; }
-    dist += d;
+    lastD = map(pos);
+    if (lastD < 0.001) break;
+    dist += lastD;
     if (dist > 6.0) break;
   }
+  float cover = smoothstep(0.006, 0.0005, lastD);
 
-  // --- 入射光束(屏幕空间,左 → 棱镜;被镜体遮挡处截断)---
-  float beamY = -0.01;
-  float beamDy = (uv.y - beamY) / 0.005;
-  float beamCore = exp(-beamDy * beamDy);
-  float glowDy = (uv.y - beamY) / 0.03;
-  float beamGlow = 0.4 * exp(-glowDy * glowDy);
-  float beam = (beamCore + beamGlow) * step(uv.x, 0.0) * (1.0 - hit);
+  // --- 光束锚定:沿光束轴线(y=beamW, z=0)求入射/出射棱镜的世界 x ---
+  float beamW = -0.18;
+  float xEnter = -0.15; // 未命中兜底:截在棱镜附近
+  float xExit = 0.15;
+  {
+    float bx = -2.5;
+    for (int i = 0; i < 32; i++) {
+      float dd = map(vec3(bx, beamW, 0.0));
+      if (dd < 0.001) { xEnter = bx; break; }
+      bx += max(dd, 0.02);
+      if (bx > 1.5) break;
+    }
+    bx = 1.5;
+    for (int i = 0; i < 32; i++) {
+      float dd = map(vec3(bx, beamW, 0.0));
+      if (dd < 0.001) { xExit = bx; break; }
+      bx -= max(dd, 0.02);
+      if (bx < -2.5) break;
+    }
+  }
 
-  // --- 色散光谱(屏幕空间,棱镜右侧 → 右缘扇出;被镜体遮挡处截断)---
+  // --- 入射光束:视线与光束线段(x ≤ xEnter)的最近距离;双向遮挡正确 ---
+  vec3 w0 = vec3(0.0, beamW, 0.0) - ro;
+  float bb = rd.x;
+  float ee = -dot(rd, ro) + rd.y * beamW;
+  float denom = 1.0 - bb * bb;
+  float sLine = (bb * ee + ro.x) / denom;  // 光束轴上最近点的 x
+  float tRay = (ee + bb * ro.x) / denom;   // 视线上最近点参数
+  vec3 closest = w0 + vec3(sLine, 0.0, 0.0) - tRay * rd;
+  float beamD2 = dot(closest, closest);
+  float beamVis = (tRay > 0.0 && sLine < xEnter && tRay < dist) ? 1.0 : 0.0;
+  float beam = (exp(-beamD2 / 0.00003) + 0.4 * exp(-beamD2 / 0.0009)) * beamVis;
+
+  // --- 色散光谱(出射面 → 右缘扇出;被镜体遮挡处截断)---
   // 色散强度与长面朝向耦合:三条长面轮流正对光束,周期 2π/3
   float ang = u_time * 0.25;
   float dispers = 0.45 + 0.55 * (0.5 + 0.5 * cos(ang * 3.0));
-  vec2 E = vec2(0.12, 0.0);
+  vec2 E = vec2(xExit, beamW) * (1.9 / 2.6); // 世界(z=0)→ 屏幕投影
   float sx = uv.x - E.x;
   float fanCenter = E.y + sx * 0.10;
   float spread = 0.20 * (0.6 + 0.4 * dispers);
@@ -108,30 +135,36 @@ void main() {
   float fanT = (ft - 0.5) * 3.2;
   float fanGlow = 0.3 * exp(-fanT * fanT);
   float atten = 1.0 / (1.0 + sx * 0.4);
-  float rightMask = smoothstep(0.0, 0.015, sx) * (1.0 - hit);
+  float rightMask = smoothstep(0.0, 0.015, sx) * (1.0 - cover);
   vec3 spec = spectrum(clamp(ft, 0.0, 1.0)) * (inFan + fanGlow) * atten * rightMask * dispers;
 
   vec3 col = vec3(0.0);
   col += vec3(1.0) * beam * energy;
   col += spec * energy;
 
-  // --- 棱镜本体:深色玻璃(fresnel 棱线 + 高光 + 透光)---
-  if (hit > 0.5) {
-    vec3 n = calcNormal(pos);
+  // --- 棱镜本体:深色玻璃(棱线反光 + fresnel 轮廓光 + 透光)---
+  if (cover > 0.0) {
+    vec3 n = calcNormal(pos, 0.0015);
     vec3 L = normalize(vec3(-0.6, 0.7, 0.5));
     float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 5.0);
     float dif = max(0.0, dot(n, L));
     float specHi = pow(max(0.0, dot(reflect(rd, n), L)), 48.0);
+    // 几何棱检测:大 epsilon 的法线在棱附近被"磨圆",与小 epsilon 法线分离;
+    // 面上两法线一致(连续信号,不会产生虚线 artifact)
+    vec3 nSoft = calcNormal(pos, 0.035);
+    float edge = smoothstep(0.03, 0.25, 1.0 - dot(n, nSoft));
     vec3 glass = vec3(0.008, 0.009, 0.012);
     glass += vec3(0.05, 0.055, 0.07) * dif * 0.12;
     glass += vec3(0.9, 0.95, 1.0) * specHi * 0.25;
     glass += vec3(0.55, 0.65, 0.85) * fres * 0.30;
-    // 白光穿入的微弱延续(入射侧)
-    float innerDy = (uv.y - beamY) / 0.015;
-    glass += vec3(0.18) * exp(-innerDy * innerDy) * step(uv.x, 0.0);
+    // 棱线反光:受光侧更亮
+    glass += vec3(0.85, 0.92, 1.0) * edge * (0.25 + 0.75 * dif);
+    // 白光穿入的微弱延续(入射侧,世界空间到光束轴的距离)
+    float inD2 = (pos.y - beamW) * (pos.y - beamW) + pos.z * pos.z;
+    glass += vec3(0.18) * exp(-inD2 / 0.0004) * step(pos.x, xEnter + 0.05);
     // 内部色散微光(出射侧)
-    glass += spectrum(clamp((uv.y - beamY) / 0.35 + 0.5, 0.0, 1.0)) * 0.12 * smoothstep(-0.1, 0.3, uv.x) * dispers;
-    col += glass * energy;
+    glass += spectrum(clamp((uv.y - beamW * (1.9 / 2.6)) / 0.35 + 0.5, 0.0, 1.0)) * 0.12 * smoothstep(E.x - 0.35, E.x, uv.x) * dispers;
+    col += glass * cover * energy;
   }
 
   // 棱镜周围的环境微光晕
@@ -196,9 +229,9 @@ export function PrismBackground({ analyser }: PrismBackgroundProps) {
     const uAmp = gl.getUniformLocation(prog, 'u_amp');
 
     const resize = () => {
-      // 半分辨率渲染,背景无需精细,省性能
-      canvas.width = Math.floor(window.innerWidth * 0.5);
-      canvas.height = Math.floor(window.innerHeight * 0.5);
+      // 0.75 分辨率渲染:raymarch 轮廓比噪声纹理更吃像素,略提清晰度
+      canvas.width = Math.floor(window.innerWidth * 0.75);
+      canvas.height = Math.floor(window.innerHeight * 0.75);
       gl.viewport(0, 0, canvas.width, canvas.height);
     };
     resize();

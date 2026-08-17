@@ -77,7 +77,7 @@ Rig 状态全部在 rigStore(`createRigStore(audioEngine)` 的生产单例在 `s
   - 快攻慢释平滑(amp 0.25/0.04,clip 0.12),避免闪烁。
   - `debug` prop 可打开 4Hz 刷新的指标浮层(rms/peak/ratio/frac/kurt),标定削波阈值时用。
 
-两者共用约定:半分辨率渲染省性能;WebGL 不可用时静默回退到 body 底色;`YouTubeBackground` 激活时隐藏。
+两者共用约定:降分辨率渲染省性能(流体 0.5×,棱镜 0.75×——raymarch 轮廓更吃像素);WebGL 不可用时静默回退到 body 底色;`YouTubeBackground` 激活时隐藏。
 
 ## 5. 样式体系(`src/index.css`,~1500 行)
 
