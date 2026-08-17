@@ -54,9 +54,9 @@ Rig 状态全部在 rigStore(`createRigStore(audioEngine)` 的生产单例在 `s
 | `Oscilloscope` | 双踪示波器:左半 IN 右半 OUT,实时波形 | 读 `inputAnalyser`/`outputAnalyser` 的时域数据,canvas + rAF |
 | `RigFooter` | 页脚信号流向文本 | selector 返回字符串,内容不变时不重渲染 |
 | `LevelMeter` | RMS 电平表(dB 刻度,-60~0dB 映射,绿→黄→红渐变) | canvas + rAF,只在 analyser 非空时挂载循环 |
-| `FluidBackground` | 全屏 WebGL 流体背景 | 见 §4 |
+| `FluidBackground` / `PrismBackground` | 全屏 WebGL 背景(流体 / Pink Floyd 棱镜,可切换) | 见 §4 |
 
-渲染顺序(App JSX):`FluidBackground`(绝对定位垫底)→ 标题 → `TopBar` → `PresetBar` → `ChainView` → `AmpPanel` → `CabPanel` → `Oscilloscope` → 页脚信号流说明。
+渲染顺序(App JSX):背景(棱镜或流体,固定垫底)→ 标题 → `TopBar` → `PresetBar` → `ChainView` → `AmpPanel` → `CabPanel` → `Oscilloscope` → 页脚信号流说明。
 
 ### 可视化组件的共同点
 
@@ -64,17 +64,20 @@ Rig 状态全部在 rigStore(`createRigStore(audioEngine)` 的生产单例在 `s
 - 引擎未初始化时 analyser 为 `null`,组件静默(`engineReady` 控制传入)。
 - 动画统一 `requestAnimationFrame` 循环 + 卸载时 `cancelAnimationFrame`。
 
-## 4. FluidBackground(WebGL)
+## 4. 全屏背景(WebGL,可切换)
 
-`src/components/FluidBackground.tsx`,全屏背景,也是"输出信号健康度"的环境指示:
+背景有两个主题,App 左下角按钮切换,选择持久化到 localStorage(`guitar-pedalboard-bg-theme`):
 
-- 片元 shader:双重 domain-warp 的 fbm 噪声生成流体纹理,暗绿(干净)↔ 橙红(削波)两套配色插值。
-- 每帧从 `outputAnalyser` 读时域数据算两个 uniform:
-  - `u_amp`:RMS × 3 截断到 0~1,只影响整体明暗;
-  - `u_clip`:削波检测 = `rms / p99峰值` 比值(清音 ≈0.4、失真 ≈0.65~0.75、方波 =1),映射 `(ratio-0.55)/0.15` 到 0~1。
-- 快攻慢释平滑(amp 0.25/0.04,clip 0.12),避免闪烁。
-- 性能:**半分辨率渲染**;WebGL 不可用时静默回退到 body 底色。
-- `debug` prop 可打开 4Hz 刷新的指标浮层(rms/peak/ratio/frac/kurt),标定削波阈值时用。
+- **PrismBackground(默认,Pink Floyd 主题)**:黑底 + 缓转三棱镜,左侧白光射入、右侧色散成彩虹光谱扇出。等边三角形 SDF + 六色光谱渐变;光谱/光束明暗跟随输出响度,色散角随转动轻微呼吸。
+- **FluidBackground**:全屏背景,也是"输出信号健康度"的环境指示:
+  - 片元 shader:双重 domain-warp 的 fbm 噪声生成流体纹理,暗绿(干净)↔ 橙红(削波)两套配色插值。
+  - 每帧从 `outputAnalyser` 读时域数据算两个 uniform:
+    - `u_amp`:RMS × 3 截断到 0~1,只影响整体明暗;
+    - `u_clip`:削波检测 = `rms / p99峰值` 比值(清音 ≈0.4、失真 ≈0.65~0.75、方波 =1),映射 `(ratio-0.55)/0.15` 到 0~1。
+  - 快攻慢释平滑(amp 0.25/0.04,clip 0.12),避免闪烁。
+  - `debug` prop 可打开 4Hz 刷新的指标浮层(rms/peak/ratio/frac/kurt),标定削波阈值时用。
+
+两者共用约定:半分辨率渲染省性能;WebGL 不可用时静默回退到 body 底色;`YouTubeBackground` 激活时隐藏。
 
 ## 5. 样式体系(`src/index.css`,~1500 行)
 

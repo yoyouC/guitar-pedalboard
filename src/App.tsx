@@ -27,11 +27,24 @@ import { AmpPanel } from './components/AmpPanel';
 import { CabPanel } from './components/CabPanel';
 import { Oscilloscope } from './components/Oscilloscope';
 import { FluidBackground } from './components/FluidBackground';
+import { PrismBackground } from './components/PrismBackground';
 import { YouTubeBackground } from './components/YouTubeBackground';
 import { RigFooter } from './components/RigFooter';
 import { Analytics } from '@vercel/analytics/react';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
+
+/** 背景主题:棱镜(Pink Floyd,默认)↔ 流体 */
+type BgTheme = 'prism' | 'fluid';
+const BG_THEME_KEY = 'guitar-pedalboard-bg-theme';
+
+function loadBgTheme(): BgTheme {
+  try {
+    return localStorage.getItem(BG_THEME_KEY) === 'fluid' ? 'fluid' : 'prism';
+  } catch {
+    return 'prism';
+  }
+}
 
 /**
  * 统一 RigAction 分发器(ADR-0004):MIDI 默认映射 / MIDI Learn / 键盘
@@ -60,6 +73,15 @@ export default function App() {
   const [showMeters, setShowMeters] = useState(true);
   const [showTuner, setShowTuner] = useState(false);
   const [ytBgActive, setYtBgActive] = useState(false);
+  const [bgTheme, setBgTheme] = useState<BgTheme>(loadBgTheme);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(BG_THEME_KEY, bgTheme);
+    } catch {
+      /* localStorage 不可用时跳过持久化 */
+    }
+  }, [bgTheme]);
 
   // 图谱重建后 bump:让 render 时读取引擎侧节点引用(preAmpAnalyser)的组件拿到新实例,
   // 同时驱动 Learn 模式的 armed 高亮重扫(data-midi-target 只随结构变化)
@@ -282,11 +304,23 @@ export default function App() {
 
   return (
     <div className="app">
-      {!ytBgActive && (
-        <FluidBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
-      )}
+      {!ytBgActive &&
+        (bgTheme === 'prism' ? (
+          <PrismBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
+        ) : (
+          <FluidBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
+        ))}
       <YouTubeBackground onActiveChange={setYtBgActive} />
       <Analytics />
+
+      {/* 背景主题切换:棱镜(Pink Floyd)↔ 流体 */}
+      <button
+        className="bg-theme-toggle"
+        title={bgTheme === 'prism' ? '切换背景:流体' : '切换背景:棱镜(Pink Floyd)'}
+        onClick={() => setBgTheme((t) => (t === 'prism' ? 'fluid' : 'prism'))}
+      >
+        {bgTheme === 'prism' ? '🌊' : '🔺'}
+      </button>
 
       <header className="app-header">
         <h1>🎸 Guitar Pedalboard</h1>
