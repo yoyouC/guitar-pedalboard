@@ -12,31 +12,47 @@ void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
 
 /**
  * Pink Floyd《The Dark Side of the Moon》主题:
- * 黑底上一只缓转的三棱镜,白光自左侧射入,右侧色散成彩虹光谱扇出。
- * 光谱/光束的明暗跟随输出响度(u_amp);色散角与出射点随转动轻微呼吸,
- * 暗示色散与棱镜朝向的耦合(非物理精确,视觉上成立即可)。
+ * 黑底上一只 3D 三棱镜(raymarch 三棱柱 SDF,绕竖直轴缓转 + 前倾),
+ * 白光自左侧射入玻璃,右侧色散成彩虹光谱扇出。
+ * 玻璃 = fresnel 棱线 + 关键光高光 + 微弱透光;色散强度与长面朝向耦合
+ * (三长面,周期 2π/3)。光谱/光束的明暗跟随输出响度(u_amp)。
+ * 屏幕空间的光束/光谱用 raymarch 命中掩码遮挡,看起来像被镜体截断/射出。
  */
 const FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
+#endif
 uniform vec2 u_res;
 uniform float u_time;
 uniform float u_amp;   // 0..1 输出响度
 
-const float SQRT3 = 1.7320508;
-
-// 等边三角形 SDF(IQ)
-float sdTriangle(vec2 p, float r) {
-  p.x = abs(p.x) - r;
-  p.y = p.y + r / SQRT3;
-  if (p.x + SQRT3 * p.y > 0.0) p = vec2(p.x - SQRT3 * p.y, -SQRT3 * p.x - p.y) / 2.0;
-  p.x -= clamp(p.x, -2.0 * r, 0.0);
-  return -length(p) * sign(p.y);
+// 三棱柱 SDF(IQ):xy 等边三角截面(顶点朝上),z 轴柱身
+float sdTriPrism(vec3 p, vec2 h) {
+  vec3 q = abs(p);
+  return max(q.z - h.y, max(q.x * 0.866025 + p.y * 0.5, -p.y) - h.x * 0.5);
 }
 
 mat2 rot2(float a) {
   float c = cos(a);
   float s = sin(a);
   return mat2(c, -s, s, c);
+}
+
+// 场景:前倾露出长面与端面,绕竖直轴缓转(约 25s 一圈);整体下移让出顶部
+float map(vec3 p) {
+  p.y += 0.18;
+  p.yz = rot2(-0.42) * p.yz;
+  p.xz = rot2(u_time * 0.25) * p.xz;
+  return sdTriPrism(p, vec2(0.40, 0.80));
+}
+
+vec3 calcNormal(vec3 p) {
+  vec2 e = vec2(0.0015, -0.0015);
+  return normalize(
+    e.xyy * map(p + e.xyy) + e.yyx * map(p + e.yyx) +
+    e.yxy * map(p + e.yxy) + e.xxx * map(p + e.xxx));
 }
 
 // 红→紫六色光谱
@@ -52,59 +68,74 @@ vec3 spectrum(float t) {
 void main() {
   vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / u_res.y;
 
-  // 棱镜:缓转等边三角形(约 42s 一圈);构图放大,让光束/光谱探出 UI 遮挡
-  vec2 C = vec2(-0.18, -0.06);
-  float R = 0.42;
-  float ang = u_time * 0.15;
-  float d = sdTriangle(rot2(ang) * (uv - C), R);
-
   // 能量:静默时保留暗呼吸,发声随响度提亮
   float energy = 0.50 + 0.55 * u_amp + 0.05 * sin(u_time * 0.8);
 
-  // 棱镜外掩码(光束/光谱都不穿入镜面)
-  float outside = smoothstep(0.004, 0.03, d);
+  // 相机:固定于原点前方,看向棱镜
+  vec3 ro = vec3(0.0, 0.10, 2.6);
+  vec3 rd = normalize(vec3(uv, -1.9));
 
-  // --- 入射光束(左缘 → 棱镜,水平)---
-  float beamY = C.y + 0.03;
+  // raymarch 棱镜
+  float dist = 0.0;
+  float hit = 0.0;
+  vec3 pos = ro;
+  for (int i = 0; i < 80; i++) {
+    pos = ro + rd * dist;
+    float d = map(pos);
+    if (d < 0.001) { hit = 1.0; break; }
+    dist += d;
+    if (dist > 6.0) break;
+  }
+
+  // --- 入射光束(屏幕空间,左 → 棱镜;被镜体遮挡处截断)---
+  float beamY = -0.01;
   float beamDy = (uv.y - beamY) / 0.005;
   float beamCore = exp(-beamDy * beamDy);
   float glowDy = (uv.y - beamY) / 0.03;
   float beamGlow = 0.4 * exp(-glowDy * glowDy);
-  float beam = (beamCore + beamGlow) * outside * step(uv.x, C.x);
+  float beam = (beamCore + beamGlow) * step(uv.x, 0.0) * (1.0 - hit);
 
-  // --- 色散光谱(棱镜右侧 → 右缘,扇形展开,微上仰)---
-  vec2 E = C + vec2(R * 0.6, 0.01);
+  // --- 色散光谱(屏幕空间,棱镜右侧 → 右缘扇出;被镜体遮挡处截断)---
+  // 色散强度与长面朝向耦合:三条长面轮流正对光束,周期 2π/3
+  float ang = u_time * 0.25;
+  float dispers = 0.45 + 0.55 * (0.5 + 0.5 * cos(ang * 3.0));
+  vec2 E = vec2(0.12, 0.0);
   float sx = uv.x - E.x;
-  float fanCenter = E.y + sx * 0.10 + 0.02 * sin(ang * 2.0);
-  float spread = 0.20 * (1.0 + 0.12 * sin(ang));
-  float t = sx > 0.0 ? (uv.y - fanCenter) / (sx * spread) * 0.5 + 0.5 : -1.0;
-  float inFan = smoothstep(0.0, 0.06, t) * smoothstep(1.0, 0.94, t);
-  float fanT = (t - 0.5) * 3.2;
+  float fanCenter = E.y + sx * 0.10;
+  float spread = 0.20 * (0.6 + 0.4 * dispers);
+  float ft = sx > 0.0 ? (uv.y - fanCenter) / (sx * spread) * 0.5 + 0.5 : -1.0;
+  float inFan = smoothstep(0.0, 0.06, ft) * smoothstep(1.0, 0.94, ft);
+  float fanT = (ft - 0.5) * 3.2;
   float fanGlow = 0.3 * exp(-fanT * fanT);
   float atten = 1.0 / (1.0 + sx * 0.4);
-  float rightMask = smoothstep(0.0, 0.015, sx) * smoothstep(0.002, 0.02, d);
-  vec3 specCol = spectrum(clamp(t, 0.0, 1.0));
-  vec3 spec = specCol * (inFan + fanGlow) * atten * rightMask;
+  float rightMask = smoothstep(0.0, 0.015, sx) * (1.0 - hit);
+  vec3 spec = spectrum(clamp(ft, 0.0, 1.0)) * (inFan + fanGlow) * atten * rightMask * dispers;
 
-  // --- 棱镜本体:近黑玻璃 + 白色描边 + 内部微光 ---
-  float inside = smoothstep(0.0, -0.03, d);
-  float edge = smoothstep(0.010, 0.0, abs(d));
-  float innerDy = (uv.y - beamY) / 0.015;
-  vec3 prismCol = vec3(0.03, 0.033, 0.04) * inside;
-  // 白光穿入的微弱延续
-  prismCol += vec3(0.16) * inside * exp(-innerDy * innerDy) * step(uv.x, C.x);
-  // 内部色散微光
-  prismCol += spectrum(clamp((uv.y - C.y) / (R * 1.2) + 0.5, 0.0, 1.0)) * inside * 0.10 * step(C.x, uv.x);
-
-  // 合成:镜体压掉背后的光,再叠加镜前光束/光谱
   vec3 col = vec3(0.0);
   col += vec3(1.0) * beam * energy;
   col += spec * energy;
-  col = mix(col, prismCol * energy, inside);
-  col += vec3(0.9, 0.95, 1.0) * edge * (0.7 + 0.3 * sin(u_time * 0.8)) * energy;
+
+  // --- 棱镜本体:深色玻璃(fresnel 棱线 + 高光 + 透光)---
+  if (hit > 0.5) {
+    vec3 n = calcNormal(pos);
+    vec3 L = normalize(vec3(-0.6, 0.7, 0.5));
+    float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 5.0);
+    float dif = max(0.0, dot(n, L));
+    float specHi = pow(max(0.0, dot(reflect(rd, n), L)), 48.0);
+    vec3 glass = vec3(0.008, 0.009, 0.012);
+    glass += vec3(0.05, 0.055, 0.07) * dif * 0.12;
+    glass += vec3(0.9, 0.95, 1.0) * specHi * 0.25;
+    glass += vec3(0.55, 0.65, 0.85) * fres * 0.30;
+    // 白光穿入的微弱延续(入射侧)
+    float innerDy = (uv.y - beamY) / 0.015;
+    glass += vec3(0.18) * exp(-innerDy * innerDy) * step(uv.x, 0.0);
+    // 内部色散微光(出射侧)
+    glass += spectrum(clamp((uv.y - beamY) / 0.35 + 0.5, 0.0, 1.0)) * 0.12 * smoothstep(-0.1, 0.3, uv.x) * dispers;
+    col += glass * energy;
+  }
+
   // 棱镜周围的环境微光晕
-  vec2 haloDv = uv - C;
-  col += vec3(0.02, 0.023, 0.03) * exp(-dot(haloDv, haloDv) * 2.0);
+  col += vec3(0.02, 0.023, 0.03) * exp(-dot(uv, uv) * 2.0);
 
   gl_FragColor = vec4(col, 1.0);
 }
