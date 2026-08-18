@@ -12,10 +12,10 @@ void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
 
 /**
  * Pink Floyd《The Dark Side of the Moon》主题:
- * 黑底上一只 3D 三棱镜(raymarch 三棱柱 SDF,绕竖直轴缓转 + 前倾),
+ * 黑底上一只 3D 三棱镜(raymarch 方底金字塔 SDF,绕底面中心的竖直轴自旋 + 微前倾),
  * 白光自左侧射入玻璃,右侧色散成彩虹光谱扇出。
- * 玻璃 = fresnel 棱线 + 关键光高光 + 微弱透光;色散强度与长面朝向耦合
- * (三长面,周期 2π/3)。光谱/光束的明暗跟随输出响度(u_amp)。
+ * 玻璃 = 棱线反光(双 epsilon 法线差)+ fresnel 轮廓光 + 微弱透光;
+ * 色散强度与侧面朝向耦合(四个侧面,周期 2π/4)。光谱/光束的明暗跟随输出响度(u_amp)。
  * 屏幕空间的光束/光谱用 raymarch 命中掩码遮挡,看起来像被镜体截断/射出。
  */
 const FRAG = `
@@ -28,10 +28,12 @@ uniform vec2 u_res;
 uniform float u_time;
 uniform float u_amp;   // 0..1 输出响度
 
-// 三棱柱 SDF(IQ):xy 等边三角截面(顶点朝上),z 轴柱身
-float sdTriPrism(vec3 p, vec2 h) {
-  vec3 q = abs(p);
-  return max(q.z - h.y, max(q.x * 0.866025 + p.y * 0.5, -p.y) - h.x * 0.5);
+// 四棱锥(方底金字塔)SDF:底面 |x|≤a,|z|≤a 在 y=0,顶点 (0,h,0)。
+// 5 个半空间的 max(4 斜面 + 底面);棱/顶点附近低估真实距离(保守行进,不穿透),面上精确。
+float sdPyramid(vec3 p, float a, float h) {
+  float sl = sqrt(h * h + a * a);
+  float side = h * max(abs(p.x), abs(p.z)) + a * p.y - h * a;
+  return max(side / sl, -p.y);
 }
 
 mat2 rot2(float a) {
@@ -40,14 +42,13 @@ mat2 rot2(float a) {
   return mat2(c, -s, s, c);
 }
 
-// 场景:先固定微前倾、再绕棱镜自身长轴自旋(约 25s 一圈)——
-// 长轴方向不动,厚度边的朝向恒定,轮廓在任何相位都是 3 个角;
-// 短身三棱体,整体靠左下,给右侧光谱留扇出空间
+// 场景:方底金字塔,绕"底面正方形中点的竖直垂线"自旋(约 25s 一圈),
+// 固定微前倾露出侧面层次;整体靠左下,给右侧光谱留扇出空间
 float map(vec3 p) {
-  p += vec3(0.62, 0.18, 0.0);
-  p.yz = rot2(-0.22) * p.yz;
-  p.xy = rot2(u_time * 0.25) * p.xy;
-  return sdTriPrism(p, vec2(0.42, 0.20));
+  p += vec3(0.62, 0.10, 0.0);
+  p.xz = rot2(u_time * 0.25) * p.xz; // 绕竖直轴(world y)自旋
+  p.yz = rot2(0.18) * p.yz;          // 固定前倾
+  return sdPyramid(p, 0.34, 0.55);
 }
 
 vec3 calcNormal(vec3 p, float eps) {
@@ -90,44 +91,48 @@ void main() {
   }
   float cover = smoothstep(0.006, 0.0005, lastD);
 
-  // --- 光束锚定:沿光束轴线(y=beamW, z=0)求入射/出射棱镜的世界 x ---
-  float beamW = -0.18;
-  float xEnter = -0.15; // 未命中兜底:截在棱镜附近
-  float xExit = 0.15;
+  // --- 光束锚定:光束是过棱镜中心、指向左上约 50° 的世界直线(z=0);
+  //     沿直线行进求入射点(sEnter,左上侧)与出射点(sExit,右下侧)---
+  vec3 beamU = normalize(vec3(-1.0, 1.2, 0.0)); // 出射方向(指向左上)
+  vec3 beamP0 = vec3(-0.62, -0.02, 0.0);        // 棱镜中心(塔身中部)
+  float sEnter = 1.2;  // 未命中兜底:截在棱镜附近
+  float sExit = -1.2;
   {
-    float bx = -2.5;
+    float s = 3.5;
     for (int i = 0; i < 32; i++) {
-      float dd = map(vec3(bx, beamW, 0.0));
-      if (dd < 0.001) { xEnter = bx; break; }
-      bx += max(dd, 0.02);
-      if (bx > 1.5) break;
+      float dd = map(beamP0 + s * beamU);
+      if (dd < 0.001) { sEnter = s; break; }
+      s -= max(dd, 0.02);
+      if (s < 0.0) break;
     }
-    bx = 1.5;
+    s = -3.5;
     for (int i = 0; i < 32; i++) {
-      float dd = map(vec3(bx, beamW, 0.0));
-      if (dd < 0.001) { xExit = bx; break; }
-      bx -= max(dd, 0.02);
-      if (bx < -2.5) break;
+      float dd = map(beamP0 + s * beamU);
+      if (dd < 0.001) { sExit = s; break; }
+      s += max(dd, 0.02);
+      if (s > 0.0) break;
     }
   }
 
-  // --- 入射光束:视线与光束线段(x ≤ xEnter)的最近距离;双向遮挡正确 ---
-  vec3 w0 = vec3(0.0, beamW, 0.0) - ro;
-  float bb = rd.x;
-  float ee = -dot(rd, ro) + rd.y * beamW;
+  // --- 入射光束(左上角 → 棱镜):视线与光束线段(s ≤ sEnter)的最近距离;双向遮挡正确 ---
+  vec3 w0 = beamP0 - ro;
+  float bb = dot(beamU, rd);
+  float d0 = dot(beamU, w0);
+  float ee = dot(rd, w0);
   float denom = 1.0 - bb * bb;
-  float sLine = (bb * ee + ro.x) / denom;  // 光束轴上最近点的 x
-  float tRay = (ee + bb * ro.x) / denom;   // 视线上最近点参数
-  vec3 closest = w0 + vec3(sLine, 0.0, 0.0) - tRay * rd;
+  float sLine = (bb * ee - d0) / denom;  // 光束线上最近点参数(沿 beamU)
+  float tRay = (ee - bb * d0) / denom;   // 视线上最近点参数
+  vec3 closest = w0 + sLine * beamU - tRay * rd;
   float beamD2 = dot(closest, closest);
-  float beamVis = (tRay > 0.0 && sLine < xEnter && tRay < dist) ? 1.0 : 0.0;
+  float beamVis = (tRay > 0.0 && sLine > sEnter && tRay < dist) ? 1.0 : 0.0;
   float beam = (exp(-beamD2 / 0.00003) + 0.4 * exp(-beamD2 / 0.0009)) * beamVis;
 
-  // --- 色散光谱(出射面 → 右缘扇出;被镜体遮挡处截断)---
-  // 色散强度与长面朝向耦合:三条长面轮流正对光束,周期 2π/3
+  // --- 色散光谱(出射点 → 右缘水平扇出,角度不变;被镜体遮挡处截断)---
+  // 色散强度与侧面朝向耦合:四个侧面轮流迎向光束,周期 2π/4
   float ang = u_time * 0.25;
-  float dispers = 0.45 + 0.55 * (0.5 + 0.5 * cos(ang * 3.0));
-  vec2 E = vec2(xExit, beamW) * (1.9 / 2.6); // 世界(z=0)→ 屏幕投影
+  float dispers = 0.45 + 0.55 * (0.5 + 0.5 * cos(ang * 4.0));
+  vec3 exitW = beamP0 + sExit * beamU;
+  vec2 E = exitW.xy * (1.9 / 2.6); // 世界(z=0)→ 屏幕投影
   float sx = uv.x - E.x;
   float fanCenter = E.y + sx * 0.10;
   float spread = 0.20 * (0.6 + 0.4 * dispers);
@@ -160,11 +165,15 @@ void main() {
     glass += vec3(0.55, 0.65, 0.85) * fres * 0.30;
     // 棱线反光:受光侧更亮
     glass += vec3(0.85, 0.92, 1.0) * edge * (0.25 + 0.75 * dif);
-    // 白光穿入的微弱延续(入射侧,世界空间到光束轴的距离)
-    float inD2 = (pos.y - beamW) * (pos.y - beamW) + pos.z * pos.z;
-    glass += vec3(0.18) * exp(-inD2 / 0.0004) * step(pos.x, xEnter + 0.05);
+    // 底面(朝下)整体压暗(含棱线),避免发亮破坏黑玻璃感
+    glass *= mix(1.0, 0.25, smoothstep(-0.2, -0.7, n.y));
+    // 白光穿入的微弱延续(入射侧,世界空间到光束线的垂直距离)
+    vec3 rel = pos - beamP0;
+    vec3 perp = rel - dot(rel, beamU) * beamU;
+    float sPos = dot(rel, beamU);
+    glass += vec3(0.18) * exp(-dot(perp, perp) / 0.0004) * step(sPos, sEnter + 0.05);
     // 内部色散微光(出射侧)
-    glass += spectrum(clamp((uv.y - beamW * (1.9 / 2.6)) / 0.35 + 0.5, 0.0, 1.0)) * 0.12 * smoothstep(E.x - 0.35, E.x, uv.x) * dispers;
+    glass += spectrum(clamp((uv.y - E.y) / 0.35 + 0.5, 0.0, 1.0)) * 0.12 * smoothstep(E.x - 0.35, E.x, uv.x) * dispers;
     col += glass * cover * energy;
   }
 

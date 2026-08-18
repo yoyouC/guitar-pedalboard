@@ -68,7 +68,7 @@ Rig 状态全部在 rigStore(`createRigStore(audioEngine)` 的生产单例在 `s
 
 背景有两个主题,App 左下角按钮切换,选择持久化到 localStorage(`guitar-pedalboard-bg-theme`):
 
-- **PrismBackground(默认,Pink Floyd 主题)**:黑底 + 3D 三棱镜(raymarch 三棱柱 SDF,绕竖直轴缓转 + 前倾,深色玻璃:fresnel 棱线 + 高光 + 微弱透光),左侧白光射入、右侧色散成彩虹光谱扇出;光谱/光束用命中掩码被镜体截断,色散强度与长面朝向耦合(周期 2π/3)。整体明暗跟随输出响度。
+- **PrismBackground(默认,Pink Floyd 主题)**:黑底 + 3D 方底金字塔(raymarch 半空间交集 SDF,绕底面中心的竖直轴自旋 + 微前倾;深色玻璃:双 epsilon 法线差棱线反光 + fresnel 轮廓光 + 微弱透光),光束从左上角斜射入镜、右侧色散成彩虹光谱水平扇出;光束/出射点世界空间锚定(行进求交),命中掩码遮挡;色散强度与侧面朝向耦合(周期 2π/4)。整体明暗跟随输出响度。
 - **FluidBackground**:全屏背景,也是"输出信号健康度"的环境指示:
   - 片元 shader:双重 domain-warp 的 fbm 噪声生成流体纹理,暗绿(干净)↔ 橙红(削波)两套配色插值。
   - 每帧从 `outputAnalyser` 读时域数据算两个 uniform:
