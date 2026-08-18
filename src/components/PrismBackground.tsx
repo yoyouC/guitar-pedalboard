@@ -43,12 +43,12 @@ mat2 rot2(float a) {
 }
 
 // 场景:方底金字塔,绕"底面正方形中点的竖直垂线"自旋(约 25s 一圈),
-// 固定微前倾露出侧面层次;整体靠左下,给右侧光谱留扇出空间
+// 固定微前倾露出侧面层次;整体置于左下,光谱向右上角扇出
 float map(vec3 p) {
-  p += vec3(0.62, 0.10, 0.0);
+  p += vec3(0.72, 0.34, 0.0);
   p.xz = rot2(u_time * 0.25) * p.xz; // 绕竖直轴(world y)自旋
   p.yz = rot2(0.18) * p.yz;          // 固定前倾
-  return sdPyramid(p, 0.34, 0.55);
+  return sdPyramid(p, 0.32, 0.68);
 }
 
 vec3 calcNormal(vec3 p, float eps) {
@@ -94,7 +94,7 @@ void main() {
   // --- 光束锚定:光束是过棱镜中心、指向左上约 50° 的世界直线(z=0);
   //     沿直线行进求入射点(sEnter,左上侧)与出射点(sExit,右下侧)---
   vec3 beamU = normalize(vec3(-1.0, 1.2, 0.0)); // 出射方向(指向左上)
-  vec3 beamP0 = vec3(-0.62, -0.02, 0.0);        // 棱镜中心(塔身中部)
+  vec3 beamP0 = vec3(-0.64, 0.12, 0.0);        // 光束锚点:塔身中腰偏上(距自旋轴 ≤ 内切半径,任意相位都在体内)
   float sEnter = 1.2;  // 未命中兜底:截在棱镜附近
   float sExit = -1.2;
   {
@@ -134,7 +134,7 @@ void main() {
   vec3 exitW = beamP0 + sExit * beamU;
   vec2 E = exitW.xy * (1.9 / 2.6); // 世界(z=0)→ 屏幕投影
   float sx = uv.x - E.x;
-  float fanCenter = E.y + sx * 0.10;
+  float fanCenter = E.y + sx * 0.48; // 向右上角抬升
   float spread = 0.20 * (0.6 + 0.4 * dispers);
   float ft = sx > 0.0 ? (uv.y - fanCenter) / (sx * spread) * 0.5 + 0.5 : -1.0;
   float inFan = smoothstep(0.0, 0.06, ft) * smoothstep(1.0, 0.94, ft);
