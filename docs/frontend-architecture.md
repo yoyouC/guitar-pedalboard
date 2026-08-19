@@ -54,9 +54,9 @@ Rig 状态全部在 rigStore(`createRigStore(audioEngine)` 的生产单例在 `s
 | `Oscilloscope` | 双踪示波器:左半 IN 右半 OUT,实时波形 | 读 `inputAnalyser`/`outputAnalyser` 的时域数据,canvas + rAF |
 | `RigFooter` | 页脚信号流向文本 | selector 返回字符串,内容不变时不重渲染 |
 | `LevelMeter` | RMS 电平表(dB 刻度,-60~0dB 映射,绿→黄→红渐变) | canvas + rAF,只在 analyser 非空时挂载循环 |
-| `FluidBackground` / `PrismBackground` | 全屏 WebGL 背景(流体 / Pink Floyd 棱镜,可切换) | 见 §4 |
+| `FluidBackground` / `PrismBackground` / `MeddleBackground` | 全屏 WebGL 背景(流体 / Pink Floyd 棱镜 / Meddle 水下之耳,循环切换) | 见 §4 |
 
-渲染顺序(App JSX):背景(棱镜或流体,固定垫底)→ 标题 → `TopBar` → `PresetBar` → `ChainView` → `AmpPanel` → `CabPanel` → `Oscilloscope` → 页脚信号流说明。
+渲染顺序(App JSX):背景(棱镜 / 流体 / Meddle 之一,固定垫底)→ 标题 → `TopBar` → `PresetBar` → `ChainView` → `AmpPanel` → `CabPanel` → `Oscilloscope` → 页脚信号流说明。
 
 ### 可视化组件的共同点
 
@@ -66,18 +66,19 @@ Rig 状态全部在 rigStore(`createRigStore(audioEngine)` 的生产单例在 `s
 
 ## 4. 全屏背景(WebGL,可切换)
 
-背景有两个主题,App 左下角按钮切换,选择持久化到 localStorage(`guitar-pedalboard-bg-theme`):
+背景有三个主题,App 左下角按钮循环切换(Meddle → 棱镜 → 流体),选择持久化到 localStorage(`guitar-pedalboard-bg-theme`):
 
-- **PrismBackground(默认,Pink Floyd 主题)**:黑底 + 3D 方底金字塔(raymarch 半空间交集 SDF,绕底面中心的竖直轴自旋 + 微前倾;深色玻璃:双 epsilon 法线差棱线反光 + fresnel 轮廓光 + 微弱透光),光束从左上角斜射入镜、右侧色散成彩虹光谱水平扇出;光束/出射点世界空间锚定(行进求交),命中掩码遮挡;色散强度与侧面朝向耦合(周期 2π/4)。整体明暗跟随输出响度。
+- **MeddleBackground(默认,Pink Floyd《Meddle》主题)**:封面"水下的耳朵"(Hipgnosis, 1971)的抽象再现:深青水体 ↔ 灰粉紫(耳廓肉色)两大色区经 domain-warp 的 fbm 互相渗透(肉色区占大头),三个错相声源扩散同心涟漪(呼应 "Echoes" 开头的声呐 ping),叠加胶片颗粒。`u_amp` 推高潮幅与整体明暗,`u_clip` 把画面推向暗红褐(与流体背景同一套削波标定:阈值 `(ratio-0.47)/0.21`,clip 快攻慢释 0.25/0.06)。
+- **PrismBackground(Pink Floyd 主题)**:黑底 + 3D 方底金字塔(raymarch 半空间交集 SDF,绕底面中心的竖直轴自旋 + 微前倾;深色玻璃:双 epsilon 法线差棱线反光 + fresnel 轮廓光 + 微弱透光),光束从左上角斜射入镜、右侧色散成彩虹光谱水平扇出;光束/出射点世界空间锚定(行进求交),命中掩码遮挡;色散强度与侧面朝向耦合(周期 2π/4)。整体明暗跟随输出响度。
 - **FluidBackground**:全屏背景,也是"输出信号健康度"的环境指示:
   - 片元 shader:双重 domain-warp 的 fbm 噪声生成流体纹理,暗绿(干净)↔ 橙红(削波)两套配色插值。
   - 每帧从 `outputAnalyser` 读时域数据算两个 uniform:
     - `u_amp`:RMS × 3 截断到 0~1,只影响整体明暗;
-    - `u_clip`:削波检测 = `rms / p99峰值` 比值(清音 ≈0.4、失真 ≈0.65~0.75、方波 =1),映射 `(ratio-0.55)/0.15` 到 0~1。
-  - 快攻慢释平滑(amp 0.25/0.04,clip 0.12),避免闪烁。
+    - `u_clip`:削波检测 = `rms / p99峰值` 比值(清音 ≈0.4、失真 ≈0.65~0.75、方波 =1),映射 `(ratio-0.47)/0.21` 到 0~1。
+  - 快攻慢释平滑(amp 0.25/0.04,clip 0.25/0.06),避免闪烁。
   - `debug` prop 可打开 4Hz 刷新的指标浮层(rms/peak/ratio/frac/kurt),标定削波阈值时用。
 
-两者共用约定:降分辨率渲染省性能(流体 0.5×,棱镜 0.75×——raymarch 轮廓更吃像素);WebGL 不可用时静默回退到 body 底色;`YouTubeBackground` 激活时隐藏。
+三者共用约定:降分辨率渲染省性能(流体 0.5×,Meddle 0.6×——涟漪环频率高需要更多像素,棱镜 0.75×——raymarch 轮廓更吃像素);WebGL 不可用时静默回退到 body 底色;`YouTubeBackground` 激活时隐藏。
 
 ## 5. 样式体系(`src/index.css`,~1500 行)
 

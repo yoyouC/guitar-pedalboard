@@ -38,7 +38,7 @@ body {
   gap: 14px;
 }
 
-/* 全屏流体背景(棱镜背景复用同一定位) */
+/* 全屏背景画布(棱镜 / 流体 / Meddle 复用同一定位) */
 .fluid-bg {
   position: fixed;
   inset: 0;
@@ -48,7 +48,7 @@ body {
   display: block;
 }
 
-/* 背景主题切换(棱镜 ↔ 流体) */
+/* 背景主题切换(棱镜 / 流体 / Meddle 循环) */
 .bg-theme-toggle {
   position: fixed;
   left: 12px;

@@ -28,21 +28,30 @@ import { CabPanel } from './components/CabPanel';
 import { Oscilloscope } from './components/Oscilloscope';
 import { FluidBackground } from './components/FluidBackground';
 import { PrismBackground } from './components/PrismBackground';
+import { MeddleBackground } from './components/MeddleBackground';
 import { YouTubeBackground } from './components/YouTubeBackground';
 import { RigFooter } from './components/RigFooter';
 import { Analytics } from '@vercel/analytics/react';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
-/** 背景主题:棱镜(Pink Floyd,默认)↔ 流体 */
-type BgTheme = 'prism' | 'fluid';
+/** 背景主题:Meddle(水下之耳,默认)/ 棱镜(Pink Floyd)/ 流体,点击循环切换 */
+const BG_THEMES = ['meddle', 'prism', 'fluid'] as const;
+type BgTheme = (typeof BG_THEMES)[number];
 const BG_THEME_KEY = 'guitar-pedalboard-bg-theme';
+const BG_THEME_LABEL: Record<BgTheme, string> = {
+  meddle: 'Meddle(水下之耳)',
+  prism: '棱镜(Pink Floyd)',
+  fluid: '流体',
+};
+const BG_THEME_ICON: Record<BgTheme, string> = { meddle: '👂', prism: '🔺', fluid: '🌊' };
 
 function loadBgTheme(): BgTheme {
   try {
-    return localStorage.getItem(BG_THEME_KEY) === 'fluid' ? 'fluid' : 'prism';
+    const v = localStorage.getItem(BG_THEME_KEY);
+    return (BG_THEMES as readonly string[]).includes(v ?? '') ? (v as BgTheme) : 'meddle';
   } catch {
-    return 'prism';
+    return 'meddle';
   }
 }
 
@@ -307,19 +316,23 @@ export default function App() {
       {!ytBgActive &&
         (bgTheme === 'prism' ? (
           <PrismBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
-        ) : (
+        ) : bgTheme === 'fluid' ? (
           <FluidBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
+        ) : (
+          <MeddleBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
         ))}
       <YouTubeBackground onActiveChange={setYtBgActive} />
       <Analytics />
 
-      {/* 背景主题切换:棱镜(Pink Floyd)↔ 流体 */}
+      {/* 背景主题切换:Meddle → 棱镜 → 流体 循环 */}
       <button
         className="bg-theme-toggle"
-        title={bgTheme === 'prism' ? '切换背景:流体' : '切换背景:棱镜(Pink Floyd)'}
-        onClick={() => setBgTheme((t) => (t === 'prism' ? 'fluid' : 'prism'))}
+        title={`切换背景:${BG_THEME_LABEL[BG_THEMES[(BG_THEMES.indexOf(bgTheme) + 1) % BG_THEMES.length]]}`}
+        onClick={() =>
+          setBgTheme((t) => BG_THEMES[(BG_THEMES.indexOf(t) + 1) % BG_THEMES.length])
+        }
       >
-        {bgTheme === 'prism' ? '🌊' : '🔺'}
+        {BG_THEME_ICON[bgTheme]}
       </button>
 
       <header className="app-header">
