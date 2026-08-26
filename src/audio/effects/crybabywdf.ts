@@ -1,4 +1,5 @@
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
+import { WDF_4X_FIR_LATENCY } from '../latency';
 import { defineWorkletEffect, type ParamMapping } from './workletEffect';
 
 /**
@@ -9,6 +10,7 @@ import { defineWorkletEffect, type ParamMapping } from './workletEffect';
  * 0=跟位(低频),100=顶位(高频)。
  */
 export const crybabyWdfEffect = defineWorkletEffect({
+  latency: WDF_4X_FIR_LATENCY,
   id: 'crybabywdf',
   name: 'Wah WDF ⚗',
   color: '#3a3f46',

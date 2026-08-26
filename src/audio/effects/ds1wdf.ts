@@ -1,4 +1,5 @@
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
+import { WDF_4X_FIR_LATENCY } from '../latency';
 import { defineWorkletEffect, withDbParam } from './workletEffect';
 
 /**
@@ -7,6 +8,7 @@ import { defineWorkletEffect, withDbParam } from './workletEffect';
  * worklet 实现,加载失败兜底直通。
  */
 export const ds1WdfEffect = defineWorkletEffect({
+  latency: WDF_4X_FIR_LATENCY,
   id: 'ds1wdf',
   name: 'DS-1 WDF ⚗',
   color: '#d97218',

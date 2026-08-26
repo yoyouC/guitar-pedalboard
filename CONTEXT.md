@@ -26,6 +26,12 @@
 - **Worklet** —— AudioWorklet 处理器;经 `createWorkletLoader` 按 AudioContext 幂等注册(ADR-0001)。
 - **图谱编译(rebuildGraph)** —— 由 Rig 快照重建/复用音频节点图的过程;实例复用语义:uid+def 复用单块,def+key 复用箱头,箱体从不复用。内部分两层(ADR-0005):**plan**(纯函数决策:创建/复用/销毁清单,无 WebAudio 依赖)与 **execute**(薄执行:节点创建与连线,NAM 的 fetch 等副作用隔离在此层)。
 - **DSP 核(`*.dsp.js`)** —— WDF 算法的唯一 canonical 源(纯 JS + JSDoc,与 worklet 同目录)。两个消费对象:worklet 侧经 `?raw` 取源码字符串拼装 Blob,eval/测试侧正常 import 执行。验证的代码 = 发声的代码(ADR-0003)。
+- **音频档位(Audio Profile)** —— 当前设备的运行偏好：实时演奏、平衡或稳定播放。它只影响浏览器音频请求，不属于 Rig，也不改变 DSP 音质。
+- **输出估算(Output Estimate)** —— 浏览器报告的 `baseLatency + outputLatency` 输出侧估算；不包含输入捕获、Rig 链路或完整物理设备往返。
+- **链路时延(Rig Latency)** —— 当前活动 Pedal、Amp、Cab 在直接监听路径中声明并合成的 sample/ms 计算值；处理时延与音乐性的设计时延分开记录。
+- **往返时延(Round-trip Latency)** —— 仅指低电平电气回环校准得到的输入到输出实测值；设备或音频环境变化即失效。
+- **音频中断(Underrun)** —— 仅指浏览器 `playbackStats` 等音频能力明确报告的中断。主线程长任务、掉帧与压力测试只是独立代理指标。
+- **DSP 质量(DSP Quality)** —— 独立于音频档位的音色/资源选择；只有具有真实能力且完成性能与音频验证的模块才可开放。
 
 ## 演奏辅助
 

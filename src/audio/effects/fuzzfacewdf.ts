@@ -1,4 +1,5 @@
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
+import { WDF_4X_FIR_LATENCY } from '../latency';
 import { defineWorkletEffect, withDbParam } from './workletEffect';
 
 /**
@@ -6,6 +7,7 @@ import { defineWorkletEffect, withDbParam } from './workletEffect';
  * 100k 电压反馈偏置,4x 过采样)。worklet 实现,加载失败兜底直通。
  */
 export const fuzzfaceWdfEffect = defineWorkletEffect({
+  latency: WDF_4X_FIR_LATENCY,
   id: 'fuzzfacewdf',
   name: 'Fuzz Face WDF ⚗',
   color: '#a93226',

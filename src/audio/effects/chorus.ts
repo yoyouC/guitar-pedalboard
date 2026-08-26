@@ -8,6 +8,12 @@ export const chorusEffect: EffectDefinition = {
   id: 'chorus',
   name: 'Chorus',
   color: '#9b59b6',
+  latency: (values, sampleRate) => ({
+    processingSamples: 0,
+    designSamples: values.mix >= 100
+      ? Math.round((BASE_DELAY - (values.depth / 100) * MAX_DEPTH) * sampleRate)
+      : 0,
+  }),
   params: [
     { key: 'rate', label: 'Rate', min: 0.1, max: 5, step: 0.1, defaultValue: 0.8, unit: 'Hz' },
     { key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, defaultValue: 50, unit: '%' },

@@ -32,6 +32,7 @@ import { MeddleBackground } from './components/MeddleBackground';
 import { YouTubeBackground } from './components/YouTubeBackground';
 import { RigFooter } from './components/RigFooter';
 import { Analytics } from '@vercel/analytics/react';
+import type { AudioDiagnosticsSnapshot } from './audio/audioDiagnostics';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -39,6 +40,7 @@ const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 const BG_THEMES = ['meddle', 'prism', 'fluid'] as const;
 type BgTheme = (typeof BG_THEMES)[number];
 const BG_THEME_KEY = 'guitar-pedalboard-bg-theme';
+const REDUCE_VISUAL_LOAD_KEY = 'guitar-pedalboard-reduce-visual-load-v1';
 const BG_THEME_LABEL: Record<BgTheme, string> = {
   meddle: 'Meddle(水下之耳)',
   prism: '棱镜(Pink Floyd)',
@@ -52,6 +54,14 @@ function loadBgTheme(): BgTheme {
     return (BG_THEMES as readonly string[]).includes(v ?? '') ? (v as BgTheme) : 'meddle';
   } catch {
     return 'meddle';
+  }
+}
+
+function loadReduceVisualLoad(): boolean {
+  try {
+    return localStorage.getItem(REDUCE_VISUAL_LOAD_KEY) === 'true';
+  } catch {
+    return false;
   }
 }
 
@@ -83,6 +93,10 @@ export default function App() {
   const [showTuner, setShowTuner] = useState(false);
   const [ytBgActive, setYtBgActive] = useState(false);
   const [bgTheme, setBgTheme] = useState<BgTheme>(loadBgTheme);
+  const [reduceVisualLoad, setReduceVisualLoad] = useState(loadReduceVisualLoad);
+  const [diagnostics, setDiagnostics] = useState<AudioDiagnosticsSnapshot>(audioEngine.currentDiagnostics);
+  const effectiveShowMeters = showMeters && !reduceVisualLoad;
+  const effectiveShowTuner = showTuner && !reduceVisualLoad;
 
   useEffect(() => {
     try {
@@ -91,6 +105,16 @@ export default function App() {
       /* localStorage 不可用时跳过持久化 */
     }
   }, [bgTheme]);
+
+  useEffect(() => audioEngine.subscribeDiagnostics(setDiagnostics), []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(REDUCE_VISUAL_LOAD_KEY, String(reduceVisualLoad));
+    } catch {
+      /* localStorage 不可用时保持本次会话设置 */
+    }
+  }, [reduceVisualLoad]);
 
   // 图谱重建后 bump:让 render 时读取引擎侧节点引用(preAmpAnalyser)的组件拿到新实例,
   // 同时驱动 Learn 模式的 armed 高亮重扫(data-midi-target 只随结构变化)
@@ -313,7 +337,7 @@ export default function App() {
 
   return (
     <div className="app">
-      {!ytBgActive &&
+      {!reduceVisualLoad && !ytBgActive &&
         (bgTheme === 'prism' ? (
           <PrismBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
         ) : bgTheme === 'fluid' ? (
@@ -321,11 +345,11 @@ export default function App() {
         ) : (
           <MeddleBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
         ))}
-      <YouTubeBackground onActiveChange={setYtBgActive} />
+      <YouTubeBackground disabled={reduceVisualLoad} onActiveChange={setYtBgActive} />
       <Analytics />
 
       {/* 背景主题切换:Meddle → 棱镜 → 流体 循环 */}
-      <button
+      {!reduceVisualLoad && <button
         className="bg-theme-toggle"
         title={`切换背景:${BG_THEME_LABEL[BG_THEMES[(BG_THEMES.indexOf(bgTheme) + 1) % BG_THEMES.length]]}`}
         onClick={() =>
@@ -333,7 +357,7 @@ export default function App() {
         }
       >
         {BG_THEME_ICON[bgTheme]}
-      </button>
+      </button>}
 
       <header className="app-header">
         <h1>🎸 Guitar Pedalboard</h1>
@@ -352,9 +376,9 @@ export default function App() {
         outputId={outputId}
         onOutputChange={handleOutputChange}
         outputSelectSupported={outputSelectSupported}
-        showMeters={showMeters}
+        showMeters={effectiveShowMeters}
         onToggleMeters={() => setShowMeters((m) => !m)}
-        showTuner={showTuner}
+        showTuner={effectiveShowTuner}
         onToggleTuner={() => setShowTuner((t) => !t)}
         midi={midi}
         midiLearn={{
@@ -372,27 +396,30 @@ export default function App() {
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
         engineReady={engineReady}
+        diagnostics={diagnostics}
+        reduceVisualLoad={reduceVisualLoad}
+        onReduceVisualLoadChange={setReduceVisualLoad}
       />
 
       {/* 调音表:下拉面板,不占效果链位置 */}
-      {showTuner && <Tuner analyser={engineReady ? audioEngine.inputAnalyser : null} />}
+      {effectiveShowTuner && <Tuner analyser={engineReady ? audioEngine.inputAnalyser : null} />}
 
       <PresetBar />
 
       <main className="board">
         <SnapshotSwitches />
-        <ChainView showMeters={showMeters} />
+        <ChainView showMeters={effectiveShowMeters} />
       </main>
 
-      <AmpPanel showMeters={showMeters} engineReady={engineReady} />
+      <AmpPanel showMeters={effectiveShowMeters} engineReady={engineReady} />
 
-      <CabPanel showMeters={showMeters} engineReady={engineReady} />
+      <CabPanel showMeters={effectiveShowMeters} engineReady={engineReady} />
 
-      <Oscilloscope
+      {!reduceVisualLoad && <Oscilloscope
         inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
         outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
-        showMeters={showMeters}
-      />
+        showMeters={effectiveShowMeters}
+      />}
 
       <RigFooter inputType={inputType} />
     </div>

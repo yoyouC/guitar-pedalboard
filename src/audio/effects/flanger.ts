@@ -13,6 +13,12 @@ export const flangerEffect: EffectDefinition = {
   id: 'flanger',
   name: 'Flanger',
   color: '#e67e22',
+  latency: (values, sampleRate) => ({
+    processingSamples: 0,
+    designSamples: values.mix >= 100
+      ? Math.round((BASE_DELAY - (values.depth / 100) * MAX_DEPTH_DELAY) * sampleRate)
+      : 0,
+  }),
   params: [
     { key: 'rate', label: 'Rate', min: 0.1, max: 2, step: 0.01, defaultValue: 0.3, unit: 'Hz' },
     { key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, defaultValue: 60, unit: '%' },

@@ -5,6 +5,7 @@ interface OscilloscopeProps {
   inputAnalyser: AnalyserNode | null;
   outputAnalyser: AnalyserNode | null;
   showMeters: boolean;
+  active?: boolean;
 }
 
 const IN_COLOR = '#4a90d9';
@@ -57,11 +58,11 @@ function drawGrid(g2d: CanvasRenderingContext2D, x0: number, w: number) {
 }
 
 /** 输入/输出对半分区的双踪示波器(示意性质,非精确测量) */
-export function Oscilloscope({ inputAnalyser, outputAnalyser, showMeters }: OscilloscopeProps) {
+export function Oscilloscope({ inputAnalyser, outputAnalyser, showMeters, active = true }: OscilloscopeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!inputAnalyser && !outputAnalyser) return;
+    if (!active || (!inputAnalyser && !outputAnalyser)) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const g2d = canvas.getContext('2d');
@@ -97,7 +98,7 @@ export function Oscilloscope({ inputAnalyser, outputAnalyser, showMeters }: Osci
     };
     draw();
     return () => cancelAnimationFrame(raf);
-  }, [inputAnalyser, outputAnalyser]);
+  }, [inputAnalyser, outputAnalyser, active]);
 
   return (
     <div className="oscilloscope">

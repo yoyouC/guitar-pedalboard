@@ -37,6 +37,7 @@ function loadYTApi(): Promise<any> {
 interface YouTubeBackgroundProps {
   /** 视频背景激活/退出时通知(App 用来隐藏流体背景) */
   onActiveChange?: (active: boolean) => void;
+  disabled?: boolean;
 }
 
 /**
@@ -44,7 +45,7 @@ interface YouTubeBackgroundProps {
  * iframe pointer-events 关闭,通过 IFrame API 控制播放/静音;
  * 默认静音自动播放(浏览器自动播放策略),可手动开声当伴奏。
  */
-export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
+export function YouTubeBackground({ onActiveChange, disabled = false }: YouTubeBackgroundProps) {
   const [urlInput, setUrlInput] = useState('');
   const [videoId, setVideoId] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -58,6 +59,12 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRef = useRef<any>(null);
   const hostRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!disabled) return;
+    setVideoId(null);
+    onActiveChange?.(false);
+  }, [disabled, onActiveChange]);
 
   // 创建/销毁播放器
   useEffect(() => {
@@ -195,6 +202,8 @@ export function YouTubeBackground({ onActiveChange }: YouTubeBackgroundProps) {
       setMuted(true);
     }
   };
+
+  if (disabled) return null;
 
   return (
     <>

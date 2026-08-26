@@ -4,6 +4,8 @@ import {
   planGraph,
   type AmpSpec,
   type ChainSpec,
+  type GraphArtifacts,
+  type GraphPrevState,
   type PedalEntry,
 } from './graphBuilder';
 import { loadNoiseGate } from './noiseGateWorklet';
@@ -32,453 +34,949 @@ import { loadFet1176 } from './wdf/fet1176Worklet';
 import { loadDynaCompWdf } from './wdf/dynacompWorklet';
 import { loadNamWasmWorklet } from './namWasmWorklet';
 import { loadLooperWorklet } from './looperWorklet';
+import { loadLoopbackProbe } from './loopbackWorklet';
 import {
   INITIAL_LOOPER_STATUS,
   canRunLooperCommand,
   type LooperCommand,
   type LooperStatus,
 } from './looperState';
+import {
+  audioContextOptions,
+  loadAudioProfile,
+  openMicWithFallback,
+  saveAudioProfile,
+  type AudioProfile,
+} from './audioProfile';
+import {
+  LatencyWindow,
+  readPlaybackStats,
+  type AudioDiagnosticsSnapshot,
+} from './audioDiagnostics';
+import { calculateRigLatency } from './latency';
+import {
+  analyzeLoopback,
+  calibrationMatches,
+  createLoopbackSequence,
+  loadLoopbackCalibration,
+  saveLoopbackCalibration,
+  type LoopbackAnalysis,
+  type LoopbackCalibrationKey,
+  type StoredLoopbackCalibration,
+} from './loopbackCalibration';
+import { profileSwitchBlock, runRuntimeTransaction } from './runtimeTransaction';
+import { LongTaskTracker, type StabilityObservation } from './performanceDiagnostics';
 
 /** 引擎重建链条所需的快照(定义在 graphBuilder,此处 re-export 保持既有 import 路径) */
 export type { ChainSpec, AmpSpec } from './graphBuilder';
 
 export type InputSourceType = 'mic' | 'file' | 'test';
 
+interface RuntimeGraphState {
+  instances: Map<string, PedalEntry>;
+  moduleAnalysers: Map<string, AnalyserNode>;
+  ampInstance: EffectInstance | null;
+  ampInstanceDef: EffectDefinition | null;
+  ampInstanceKey: string | null;
+  cabInstance: EffectInstance | null;
+  cabInstanceDef: EffectDefinition | null;
+  preAmpAnalyser: AnalyserNode | null;
+  ampAnalyser: AnalyserNode | null;
+  cabAnalyser: AnalyserNode | null;
+  globalBypass: boolean | null;
+}
+
+interface AudioRuntime {
+  ctx: AudioContext;
+  inputGain: GainNode;
+  inputAnalyser: AnalyserNode;
+  outputAnalyser: AnalyserNode;
+  masterGain: GainNode;
+  limiter: DynamicsCompressorNode;
+  metronomeBus: GainNode;
+  recorderDest: MediaStreamAudioDestinationNode;
+  looperNode: AudioWorkletNode | null;
+  loadedWorklets: Set<string>;
+  graph: RuntimeGraphState;
+}
+
+type InputDescriptor =
+  | { type: 'mic'; deviceId?: string; stream: MediaStream }
+  | { type: 'file'; file: File }
+  | { type: 'test' };
+
+interface PreparedSource {
+  node: AudioNode;
+  startTimer?: () => number;
+  descriptor?: InputDescriptor;
+  inputDegraded?: boolean;
+  cleanup?: () => void;
+}
+
+export interface AudioEngineOptions {
+  createContext?: (options: AudioContextOptions) => AudioContext;
+  getUserMedia?: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
+}
+
+export type AudioProfileSwitchResult =
+  | { ok: true }
+  | { ok: false; reason: 'recording' | 'looper-not-empty' | 'failed'; message: string };
+
+interface WorkletRegistration {
+  label: string;
+  load: (ctx: AudioContext) => Promise<void>;
+}
+
+const WORKLETS: readonly WorkletRegistration[] = [
+  { label: 'NoiseGate', load: loadNoiseGate },
+  { label: 'Wah', load: loadWahWorklet },
+  { label: 'Whammy', load: loadWhammyWorklet },
+  { label: 'Crybaby WDF', load: loadCrybabyWdf },
+  { label: 'WDF Champ', load: loadChampWdf },
+  { label: 'WDF Bogner', load: loadBognerWdf },
+  { label: 'TS808 WDF', load: loadTs808Wdf },
+  { label: 'RAT WDF', load: loadRatWdf },
+  { label: 'Klon WDF', load: loadKlonWdf },
+  { label: 'DS-1 WDF', load: loadDs1Wdf },
+  { label: 'Fuzz Face WDF', load: loadFuzzFaceWdf },
+  { label: 'Big Muff WDF', load: loadBigMuffWdf },
+  { label: 'WDF Twin', load: loadTwinWdf },
+  { label: 'WDF AC30', load: loadAc30Wdf },
+  { label: 'WDF JC-120', load: loadJc120Wdf },
+  { label: 'Spring Reverb', load: loadSpringReverbWdf },
+  { label: 'Plate Reverb', load: loadPlateReverb },
+  { label: 'Shimmer', load: loadShimmerWdf },
+  { label: 'Analog Delay', load: loadAnalogDelayWdf },
+  { label: 'Tape Delay', load: loadTapeDelayWdf },
+  { label: 'Ping Pong Delay', load: loadPingPongDelay },
+  { label: 'LA-2A', load: loadLa2aOpto },
+  { label: 'FET1176', load: loadFet1176 },
+  { label: 'DynaComp', load: loadDynaCompWdf },
+  { label: 'NAM WASM', load: loadNamWasmWorklet },
+  { label: 'Looper', load: loadLooperWorklet },
+  { label: 'Loopback Probe', load: loadLoopbackProbe },
+];
+
+function emptyGraphState(): RuntimeGraphState {
+  return {
+    instances: new Map(),
+    moduleAnalysers: new Map(),
+    ampInstance: null,
+    ampInstanceDef: null,
+    ampInstanceKey: null,
+    cabInstance: null,
+    cabInstanceDef: null,
+    preAmpAnalyser: null,
+    ampAnalyser: null,
+    cabAnalyser: null,
+    globalBypass: null,
+  };
+}
+
+function graphPrevState(graph: RuntimeGraphState): GraphPrevState {
+  return {
+    instances: graph.instances,
+    ampInstance: graph.ampInstance,
+    ampInstanceDef: graph.ampInstanceDef,
+    ampInstanceKey: graph.ampInstanceKey,
+    cabInstance: graph.cabInstance,
+    cabInstanceDef: graph.cabInstanceDef,
+    globalBypass: graph.globalBypass,
+  };
+}
+
+function applyArtifacts(runtime: AudioRuntime, artifacts: GraphArtifacts): void {
+  runtime.graph = {
+    instances: artifacts.instances,
+    moduleAnalysers: artifacts.moduleAnalysers,
+    ampInstance: artifacts.ampInstance,
+    ampInstanceDef: artifacts.ampInstanceDef,
+    ampInstanceKey: artifacts.ampInstanceKey,
+    cabInstance: artifacts.cabInstance,
+    cabInstanceDef: artifacts.cabInstanceDef,
+    preAmpAnalyser: artifacts.preAmpAnalyser,
+    ampAnalyser: artifacts.ampAnalyser,
+    cabAnalyser: artifacts.cabAnalyser,
+    globalBypass: artifacts.globalBypass,
+  };
+}
+
+function finiteMs(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value * 1000 : null;
+}
+
+function browserMajor(): string {
+  if (typeof navigator === 'undefined') return 'unknown';
+  const match = navigator.userAgent.match(/(Chrome|Edg|Firefox|Version)\/(\d+)/);
+  return match ? `${match[1]} ${match[2]}` : 'unknown';
+}
+
+function osAudioConfig(): string {
+  if (typeof navigator === 'undefined') return 'unknown';
+  const ua = navigator.userAgent;
+  if (/Windows/i.test(ua)) return 'Windows-default';
+  if (/Mac OS|Macintosh/i.test(ua)) return 'macOS-default';
+  if (/Linux/i.test(ua)) return 'Linux-default';
+  return 'unknown';
+}
+
+function emptyDiagnostics(profile: AudioProfile): AudioDiagnosticsSnapshot {
+  return {
+    ready: false,
+    runtimeVersion: 0,
+    profile,
+    profileIgnored: false,
+    degradedInput: false,
+    workletFailures: [],
+    warning: null,
+    baseLatencyMs: null,
+    outputLatencyMs: null,
+    outputEstimate: { medianMs: null, minMs: null, maxMs: null, samples: 0 },
+    sampleRate: null,
+    inputSettings: null,
+    playback: {
+      supported: false,
+      underrunEvents: null,
+      underrunDurationMs: null,
+      averageLatencyMs: null,
+      minimumLatencyMs: null,
+      maximumLatencyMs: null,
+    },
+    mainThread: { supported: false, longTaskCount: 0, longTaskDurationMs: 0 },
+    stabilityObservation: null,
+    rigLatency: null,
+    calibrationMs: null,
+  };
+}
+
 /**
- * 音频引擎单例:
- *   输入源 → inputGain → inputAnalyser(仅测量) → [效果链] → looper → outputAnalyser
- *   → limiter(-1dBFS 安全网) → masterGain → destination
- *                          ↘ recorderDest(录音抽头)
- * 限幅器只拦截临近削波的峰值,常态不压缩节目动态;
- * 主音量位于限幅器之后(≤1),监听音量与压缩量解耦,destination 不会过载。
- * 录音抽头与 masterGain 并列(限幅器之后),录音电平不受监听音量影响。
+ * 音频引擎单例：把 Context 生命周期、输入源、固定输出级、Looper 与图谱编译
+ * 藏在一个深 module 后。音频档位切换准备完整新 runtime 后才提交；失败保留旧 runtime。
  */
-class AudioEngine {
-  private static _instance = new AudioEngine();
-  static get instance(): AudioEngine {
-    return this._instance;
-  }
-  private constructor() {}
+export class AudioEngine {
+  private readonly createContext: (options: AudioContextOptions) => AudioContext;
+  private readonly getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
+  private runtime: AudioRuntime | null = null;
+  private profile: AudioProfile = loadAudioProfile();
+  private outputDeviceId = 'default';
+  private inputGainValue = 1;
+  private masterVolumeValue = 0.5;
 
-  ctx: AudioContext | null = null;
-  inputAnalyser: AnalyserNode | null = null;
-  outputAnalyser: AnalyserNode | null = null;
-  /** 箱头/箱体输出侧的电平表抽头(随图谱重建更新) */
-  ampAnalyser: AnalyserNode | null = null;
-  cabAnalyser: AnalyserNode | null = null;
-  /** 箱头之前的抽头(前置效果链末端,削波检测用) */
-  preAmpAnalyser: AnalyserNode | null = null;
+  private inputDescriptor: InputDescriptor | null = null;
+  private sourceNode: AudioNode | null = null;
+  private testTimer: number | null = null;
+  private inputDegraded = false;
 
-  private inputGain: GainNode | null = null;
-  private masterGain: GainNode | null = null;
-  private limiter: DynamicsCompressorNode | null = null;
-  /** 节拍器总线(挂到限幅前) */
-  metronomeBus: GainNode | null = null;
-  /** 录音抽头:限幅器之后的 MediaStreamDestination(与监听音量解耦) */
-  private recorderDest: MediaStreamAudioDestinationNode | null = null;
   private mediaRecorder: MediaRecorder | null = null;
   private recordChunks: Blob[] = [];
-  /** 完整 Rig 之后、输出表之前的无缝单轨 Looper。 */
-  private looperNode: AudioWorkletNode | null = null;
   private looperStatus: LooperStatus = { ...INITIAL_LOOPER_STATUS };
   private looperListeners = new Set<(status: LooperStatus) => void>();
 
-  private sourceNode: AudioNode | null = null;
-  private mediaStream: MediaStream | null = null;
-  private testTimer: number | null = null;
-
-  // ---- 图谱产物(由 executePlan 返回,整体替换;见 graphBuilder/ADR-0005) ----
-  private instances = new Map<string, PedalEntry>();
-  private moduleAnalysers = new Map<string, AnalyserNode>();
-  private ampInstance: EffectInstance | null = null;
-  private ampInstanceDef: EffectDefinition | null = null;
-  private ampInstanceKey: string | null = null;
-  private cabInstance: EffectInstance | null = null;
-  private cabInstanceDef: EffectDefinition | null = null;
-  /** 上次实际建图时的 globalBypass;null = 从未建图(首次强制出非空 plan) */
-  private graphGlobalBypass: boolean | null = null;
-
-  // ---- Rig 结构 spec(setter 只更新 spec,重建由 planGraph/executePlan 完成) ----
   private chain: ChainSpec[] = [];
   private ampSpec: AmpSpec | null = null;
   private cabSpec: AmpSpec | null = null;
   private globalBypass = false;
 
-  /** 创建/恢复 AudioContext,搭建固定主链路。幂等。 */
+  private diagnostics = emptyDiagnostics(this.profile);
+  private diagnosticsListeners = new Set<(snapshot: AudioDiagnosticsSnapshot) => void>();
+  private diagnosticsTimer: number | null = null;
+  private latencyWindow = new LatencyWindow(5);
+  private profileLatencies = new Map<AudioProfile, number>();
+  private runtimeVersion = 0;
+  private calibration: StoredLoopbackCalibration | null = loadLoopbackCalibration();
+  private longTasks = new LongTaskTracker();
+  private stabilityObservation: StabilityObservation | null = null;
+
+  constructor(options: AudioEngineOptions = {}) {
+    this.createContext = options.createContext ?? ((contextOptions) => new AudioContext(contextOptions));
+    this.getUserMedia = options.getUserMedia ?? ((constraints) => navigator.mediaDevices.getUserMedia(constraints));
+  }
+
+  get ctx(): AudioContext | null {
+    return this.runtime?.ctx ?? null;
+  }
+  get inputAnalyser(): AnalyserNode | null {
+    return this.runtime?.inputAnalyser ?? null;
+  }
+  get outputAnalyser(): AnalyserNode | null {
+    return this.runtime?.outputAnalyser ?? null;
+  }
+  get preAmpAnalyser(): AnalyserNode | null {
+    return this.runtime?.graph.preAmpAnalyser ?? null;
+  }
+  get ampAnalyser(): AnalyserNode | null {
+    return this.runtime?.graph.ampAnalyser ?? null;
+  }
+  get cabAnalyser(): AnalyserNode | null {
+    return this.runtime?.graph.cabAnalyser ?? null;
+  }
+  get metronomeBus(): GainNode | null {
+    return this.runtime?.metronomeBus ?? null;
+  }
+  get audioProfile(): AudioProfile {
+    return this.profile;
+  }
+  get activeInputType(): InputSourceType | null {
+    return this.inputDescriptor?.type ?? null;
+  }
+
+  /** 创建/恢复当前 AudioContext。幂等。 */
   async init(): Promise<void> {
-    if (this.ctx) {
+    this.longTasks.start();
+    if (this.runtime) {
       await this.resume();
       return;
     }
-    const ctx = new AudioContext();
-    this.ctx = ctx;
-
-    this.inputGain = ctx.createGain();
-    this.inputAnalyser = ctx.createAnalyser();
-    this.inputAnalyser.fftSize = 2048;
-    this.outputAnalyser = ctx.createAnalyser();
-    this.outputAnalyser.fftSize = 2048;
-    this.masterGain = ctx.createGain();
-    this.limiter = ctx.createDynamicsCompressor();
-    // 安全网限幅器:仅拦截接近 0dBFS 的峰值;无 lookahead,瞬态仍可能轻微过冲
-    this.limiter.threshold.value = -1;
-    this.limiter.knee.value = 0;
-    this.limiter.ratio.value = 20;
-    this.limiter.attack.value = 0.001;
-    this.limiter.release.value = 0.05;
-
-    this.inputGain.connect(this.inputAnalyser);
-    this.outputAnalyser.connect(this.limiter);
-    this.limiter.connect(this.masterGain);
-    this.masterGain.connect(ctx.destination);
-    // 节拍器总线:挂到限幅前,与节目信号同受主音量/限幅控制(也会进录音,符合练琴场景)
-    this.metronomeBus = ctx.createGain();
-    this.metronomeBus.connect(this.limiter);
-    // 录音抽头:与 masterGain 并列,录的是限幅后的节目电平(不受监听音量影响)
-    this.recorderDest = ctx.createMediaStreamDestination();
-    this.limiter.connect(this.recorderDest);
-
-    try {
-      await loadNoiseGate(ctx);
-    } catch (e) {
-      console.warn('NoiseGate worklet 加载失败,该效果将不可用:', e);
-    }
-    try {
-      await loadWahWorklet(ctx);
-    } catch (e) {
-      console.warn('Wah worklet 加载失败,该效果将回退为带通:', e);
-    }
-    try {
-      await loadWhammyWorklet(ctx);
-    } catch (e) {
-      console.warn('Whammy worklet 加载失败,该单块将不可用:', e);
-    }
-    try {
-      await loadCrybabyWdf(ctx);
-    } catch (e) {
-      console.warn('Crybaby WDF worklet 加载失败,该单块将不可用:', e);
-    }
-    try {
-      await loadChampWdf(ctx);
-    } catch (e) {
-      console.warn('WDF Champ worklet 加载失败,该箱头将不可用:', e);
-    }
-    try {
-      await loadBognerWdf(ctx);
-    } catch (e) {
-      console.warn('WDF Bogner worklet 加载失败,该箱头将不可用:', e);
-    }
-    try {
-      await loadTs808Wdf(ctx);
-    } catch (e) {
-      console.warn('TS808 WDF worklet 加载失败,该单块将不可用:', e);
-    }
-    try {
-      await loadRatWdf(ctx);
-    } catch (e) {
-      console.warn('RAT WDF worklet 加载失败,该单块将不可用:', e);
-    }
-    try {
-      await loadKlonWdf(ctx);
-    } catch (e) {
-      console.warn('Klon WDF worklet 加载失败,该单块将不可用:', e);
-    }
-    try {
-      await loadDs1Wdf(ctx);
-    } catch (e) {
-      console.warn('DS-1 WDF worklet 加载失败,该单块将不可用:', e);
-    }
-    try {
-      await loadFuzzFaceWdf(ctx);
-    } catch (e) {
-      console.warn('Fuzz Face WDF worklet 加载失败,该单块将不可用:', e);
-    }
-    try {
-      await loadBigMuffWdf(ctx);
-    } catch (e) {
-      console.warn('Big Muff WDF worklet 加载失败,该单块将不可用:', e);
-    }
-    try {
-      await loadTwinWdf(ctx);
-    } catch (e) {
-      console.warn('WDF Twin worklet 加载失败,该箱头将不可用:', e);
-    }
-    try {
-      await loadAc30Wdf(ctx);
-    } catch (e) {
-      console.warn('WDF AC30 worklet 加载失败,该箱头将不可用:', e);
-    }
-    try {
-      await loadJc120Wdf(ctx);
-    } catch (e) {
-      console.warn('WDF JC-120 worklet 加载失败,该箱头将不可用:', e);
-    }
-    try {
-      await loadSpringReverbWdf(ctx);
-    } catch (e) {
-      console.warn('弹簧混响 worklet 加载失败:', e);
-    }
-    try {
-      await loadPlateReverb(ctx);
-    } catch (e) {
-      console.warn('板式混响 worklet 加载失败:', e);
-    }
-    try {
-      await loadShimmerWdf(ctx);
-    } catch (e) {
-      console.warn('微光混响 worklet 加载失败:', e);
-    }
-    try {
-      await loadAnalogDelayWdf(ctx);
-    } catch (e) {
-      console.warn('模拟延迟 worklet 加载失败:', e);
-    }
-    try {
-      await loadTapeDelayWdf(ctx);
-    } catch (e) {
-      console.warn('磁带延迟 worklet 加载失败:', e);
-    }
-    try {
-      await loadPingPongDelay(ctx);
-    } catch (e) {
-      console.warn('乒乓延迟 worklet 加载失败:', e);
-    }
-    try {
-      await loadLa2aOpto(ctx);
-    } catch (e) {
-      console.warn('LA-2A worklet 加载失败:', e);
-    }
-    try {
-      await loadFet1176(ctx);
-    } catch (e) {
-      console.warn('FET1176 worklet 加载失败:', e);
-    }
-    try {
-      await loadDynaCompWdf(ctx);
-    } catch (e) {
-      console.warn('DynaComp worklet 加载失败:', e);
-    }
-    try {
-      await loadNamWasmWorklet(ctx);
-    } catch (e) {
-      console.warn('NAM WASM worklet 加载失败,NAM WaveNet 箱头将回退为直通:', e);
-    }
-    try {
-      await loadLooperWorklet(ctx);
-      this.looperNode = new AudioWorkletNode(ctx, 'single-track-looper', {
-        numberOfInputs: 1,
-        numberOfOutputs: 1,
-        outputChannelCount: [2],
-        channelCount: 2,
-        channelCountMode: 'explicit',
-      });
-      this.looperNode.connect(this.outputAnalyser);
-      this.looperStatus = {
-        ...INITIAL_LOOPER_STATUS,
-        available: true,
-      };
-      this.looperNode.port.onmessage = (event: MessageEvent<unknown>) => {
-        this.handleLooperMessage(event.data);
-      };
-      this.emitLooperStatus();
-    } catch (e) {
-      console.warn('Looper worklet 加载失败,循环功能将不可用:', e);
-    }
-    this.rebuildGraph();
+    const runtime = await this.prepareRuntime(this.profile, false, false);
+    this.runtime = runtime;
+    this.runtimeVersion++;
+    this.resetLooperForRuntime(runtime);
+    await this.resume();
+    this.startDiagnostics();
   }
 
   async resume(): Promise<void> {
-    if (this.ctx && this.ctx.state === 'suspended') await this.ctx.resume();
+    if (this.runtime?.ctx.state === 'suspended') await this.runtime.ctx.resume();
+  }
+
+  /** 页面卸载/测试清理；生产中通常由单例随页面存活。 */
+  async dispose(): Promise<void> {
+    if (this.diagnosticsTimer !== null) {
+      window.clearInterval(this.diagnosticsTimer);
+      this.diagnosticsTimer = null;
+    }
+    this.stopSource();
+    const runtime = this.runtime;
+    this.runtime = null;
+    if (runtime) await this.disposeRuntime(runtime);
+    this.longTasks.disconnect();
+    this.runtimeVersion++;
+    this.diagnostics = { ...emptyDiagnostics(this.profile), runtimeVersion: this.runtimeVersion };
+    this.emitDiagnostics();
+  }
+
+  private async registerWorklets(ctx: AudioContext, strict: boolean): Promise<Set<string>> {
+    const loaded = new Set<string>();
+    const failures: Error[] = [];
+    for (const entry of WORKLETS) {
+      try {
+        await entry.load(ctx);
+        loaded.add(entry.label);
+      } catch (cause) {
+        const error = new Error(`${entry.label} Worklet 加载失败`, { cause });
+        failures.push(error);
+        console.warn(`${entry.label} Worklet 加载失败，将使用模块兜底:`, cause);
+      }
+    }
+    if (strict && failures.length > 0) throw new AggregateError(failures, '新 AudioContext 未能完整加载 Worklet');
+    return loaded;
+  }
+
+  private async prepareRuntime(
+    profile: AudioProfile,
+    suspend: boolean,
+    strictWorklets: boolean,
+  ): Promise<AudioRuntime> {
+    const ctx = this.createContext(audioContextOptions(profile));
+    try {
+      if (suspend && ctx.state === 'running') await ctx.suspend();
+
+      const inputGain = ctx.createGain();
+      inputGain.gain.value = this.inputGainValue;
+      const inputAnalyser = ctx.createAnalyser();
+      inputAnalyser.fftSize = 2048;
+      const outputAnalyser = ctx.createAnalyser();
+      outputAnalyser.fftSize = 2048;
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = this.masterVolumeValue;
+      const limiter = ctx.createDynamicsCompressor();
+      limiter.threshold.value = -1;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.001;
+      limiter.release.value = 0.05;
+
+      inputGain.connect(inputAnalyser);
+      outputAnalyser.connect(limiter);
+      limiter.connect(masterGain);
+      masterGain.connect(ctx.destination);
+      const metronomeBus = ctx.createGain();
+      metronomeBus.connect(limiter);
+      const recorderDest = ctx.createMediaStreamDestination();
+      limiter.connect(recorderDest);
+
+      const loaded = await this.registerWorklets(ctx, strictWorklets);
+      let looperNode: AudioWorkletNode | null = null;
+      if (loaded.has('Looper')) {
+        try {
+          looperNode = new AudioWorkletNode(ctx, 'single-track-looper', {
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+            outputChannelCount: [2],
+            channelCount: 2,
+            channelCountMode: 'explicit',
+          });
+          looperNode.connect(outputAnalyser);
+          looperNode.port.onmessage = (event: MessageEvent<unknown>) => this.handleLooperMessage(event.data);
+        } catch (cause) {
+          if (strictWorklets) throw cause;
+          console.warn('Looper 节点创建失败，完整 Rig 将安全直通输出:', cause);
+        }
+      }
+
+      const runtime: AudioRuntime = {
+        ctx,
+        inputGain,
+        inputAnalyser,
+        outputAnalyser,
+        masterGain,
+        limiter,
+        metronomeBus,
+        recorderDest,
+        looperNode,
+        loadedWorklets: loaded,
+        graph: emptyGraphState(),
+      };
+      const plan = planGraph(this.graphSpec(), graphPrevState(runtime.graph));
+      const artifacts = executePlan(
+        ctx,
+        { inputGain, inputAnalyser, outputAnalyser, looperNode },
+        plan,
+      );
+      if (artifacts) applyArtifacts(runtime, artifacts);
+
+      if (this.outputDeviceId !== 'default') {
+        const sinkContext = ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+        if (typeof sinkContext.setSinkId === 'function') await sinkContext.setSinkId(this.outputDeviceId);
+      }
+      return runtime;
+    } catch (error) {
+      await ctx.close().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private graphSpec() {
+    return {
+      chain: this.chain,
+      amp: this.ampSpec,
+      cab: this.cabSpec,
+      globalBypass: this.globalBypass,
+    };
+  }
+
+  private async disposeRuntime(runtime: AudioRuntime): Promise<void> {
+    const instances = new Set<EffectInstance>();
+    for (const entry of runtime.graph.instances.values()) instances.add(entry.inst);
+    if (runtime.graph.ampInstance) instances.add(runtime.graph.ampInstance);
+    if (runtime.graph.cabInstance) instances.add(runtime.graph.cabInstance);
+    for (const instance of instances) {
+      try {
+        instance.dispose();
+      } catch (error) {
+        console.warn('旧 DSP 实例清理失败:', error);
+      }
+    }
+    try {
+      runtime.looperNode?.port.postMessage({ type: 'suspend' });
+      if (runtime.looperNode) runtime.looperNode.port.onmessage = null;
+      runtime.looperNode?.disconnect();
+      runtime.inputGain.disconnect();
+      runtime.outputAnalyser.disconnect();
+      runtime.limiter.disconnect();
+      runtime.masterGain.disconnect();
+      runtime.metronomeBus.disconnect();
+    } catch {
+      /* Context 关闭过程中的重复断开可忽略 */
+    }
+    await runtime.ctx.close().catch(() => undefined);
+  }
+
+  private resetLooperForRuntime(runtime: AudioRuntime): void {
+    this.looperStatus = runtime.looperNode
+      ? { ...INITIAL_LOOPER_STATUS, available: true }
+      : { ...INITIAL_LOOPER_STATUS };
+    this.emitLooperStatus();
+  }
+
+  // ---------- 档位 / 诊断 ----------
+
+  async switchAudioProfile(profile: AudioProfile): Promise<AudioProfileSwitchResult> {
+    if (profile === this.profile) return { ok: true };
+    const blocked = profileSwitchBlock(this.recording, this.looperStatus);
+    if (blocked === 'recording') {
+      return { ok: false, reason: 'recording', message: '录音进行中，停止录音后才能切换音频档位。' };
+    }
+    if (blocked === 'looper-not-empty') {
+      return { ok: false, reason: 'looper-not-empty', message: 'Looper 非空，请先清空循环内容。' };
+    }
+    if (!this.runtime) {
+      this.profile = profile;
+      saveAudioProfile(profile);
+      this.latencyWindow.clear();
+      this.diagnostics = { ...emptyDiagnostics(profile), runtimeVersion: this.runtimeVersion };
+      this.emitDiagnostics();
+      return { ok: true };
+    }
+
+    const oldRuntime = this.runtime;
+    const oldSource = this.sourceNode;
+    const oldDescriptor = this.inputDescriptor;
+    let preparedSource: PreparedSource | null = null;
+    try {
+      await runRuntimeTransaction<AudioRuntime>({
+        prepare: async () => {
+          const candidate = await this.prepareRuntime(profile, true, true);
+          try {
+            preparedSource = await this.prepareSourceForRuntime(candidate, profile);
+            return candidate;
+          } catch (error) {
+            await this.disposeRuntime(candidate);
+            throw error;
+          }
+        },
+        activate: async (candidate) => {
+          oldSource?.disconnect();
+          await candidate.ctx.resume();
+        },
+        commit: async (candidate) => {
+          this.runtime = candidate;
+          this.profile = profile;
+          saveAudioProfile(profile);
+          this.sourceNode = preparedSource?.node ?? null;
+          if (preparedSource?.descriptor) this.inputDescriptor = preparedSource.descriptor;
+          if (preparedSource?.inputDegraded !== undefined) this.inputDegraded = preparedSource.inputDegraded;
+          if (this.testTimer !== null) {
+            window.clearInterval(this.testTimer);
+            this.testTimer = null;
+          }
+          if (preparedSource?.startTimer) this.testTimer = preparedSource.startTimer();
+          if (oldSource) this.disposeSourceNode(oldSource, false);
+          if (oldDescriptor?.type === 'mic' && oldDescriptor !== preparedSource?.descriptor) {
+            oldDescriptor.stream.getTracks().forEach((track) => track.stop());
+          }
+          this.runtimeVersion++;
+          this.calibration = loadLoopbackCalibration();
+          this.stabilityObservation = null;
+          this.latencyWindow.clear();
+          this.resetLooperForRuntime(candidate);
+          this.startDiagnostics();
+          await this.disposeRuntime(oldRuntime);
+        },
+        rollback: async (candidate) => {
+          if (preparedSource) {
+            this.disposeSourceNode(preparedSource.node, false);
+            preparedSource.cleanup?.();
+          }
+          if (candidate) await this.disposeRuntime(candidate);
+          try {
+            if (oldSource) oldSource.connect(oldRuntime.inputGain);
+          } catch {
+            /* old source 从未断开或已重新连接 */
+          }
+          this.runtime = oldRuntime;
+          this.sourceNode = oldSource;
+          this.sampleDiagnostics();
+        },
+      });
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: 'failed',
+        message: `音频档位切换失败，已保留原档位：${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  get currentDiagnostics(): AudioDiagnosticsSnapshot {
+    return {
+      ...this.diagnostics,
+      workletFailures: [...this.diagnostics.workletFailures],
+      outputEstimate: { ...this.diagnostics.outputEstimate },
+      inputSettings: this.diagnostics.inputSettings ? { ...this.diagnostics.inputSettings } : null,
+      playback: { ...this.diagnostics.playback },
+      rigLatency: this.diagnostics.rigLatency
+        ? { ...this.diagnostics.rigLatency, items: this.diagnostics.rigLatency.items.map((item) => ({ ...item })) }
+        : null,
+    };
+  }
+
+  subscribeDiagnostics(listener: (snapshot: AudioDiagnosticsSnapshot) => void): () => void {
+    this.diagnosticsListeners.add(listener);
+    listener(this.currentDiagnostics);
+    return () => this.diagnosticsListeners.delete(listener);
+  }
+
+  private emitDiagnostics(): void {
+    const snapshot = this.currentDiagnostics;
+    for (const listener of this.diagnosticsListeners) listener(snapshot);
+  }
+
+  private startDiagnostics(): void {
+    if (this.diagnosticsTimer !== null) window.clearInterval(this.diagnosticsTimer);
+    this.latencyWindow.clear();
+    this.sampleDiagnostics();
+    this.diagnosticsTimer = window.setInterval(() => this.sampleDiagnostics(), 1000);
+  }
+
+  private sampleDiagnostics(): void {
+    const runtime = this.runtime;
+    if (!runtime) {
+      this.diagnostics = { ...emptyDiagnostics(this.profile), runtimeVersion: this.runtimeVersion };
+      this.emitDiagnostics();
+      return;
+    }
+    const baseLatencyMs = finiteMs(runtime.ctx.baseLatency);
+    const outputLatencyMs = finiteMs(
+      (runtime.ctx as AudioContext & { outputLatency?: number }).outputLatency,
+    );
+    const estimateMs =
+      baseLatencyMs !== null && outputLatencyMs !== null ? baseLatencyMs + outputLatencyMs : null;
+    const outputEstimate = this.latencyWindow.push(estimateMs);
+    if (estimateMs !== null) this.profileLatencies.set(this.profile, estimateMs);
+    const profileIgnored =
+      estimateMs !== null &&
+      [...this.profileLatencies].some(
+        ([profile, value]) => profile !== this.profile && Math.abs(value - estimateMs) < 0.1,
+      );
+    const inputSettings = this.currentMicTrack()?.getSettings() ?? null;
+    const warnings: string[] = [];
+    if (this.inputDegraded) warnings.push('输入设备忽略了部分低延迟/48k/mono 请求');
+    if (runtime.ctx.sampleRate !== 48_000) warnings.push('实际采样率不是 48kHz，NAM 音色可能不准确');
+    if (profileIgnored) warnings.push('浏览器未区分该音频档位');
+    const workletFailures = WORKLETS.filter((entry) => !runtime.loadedWorklets.has(entry.label)).map((entry) => entry.label);
+    if (workletFailures.length > 0) warnings.push('部分 DSP Worklet 未加载，相关模块可能安全直通');
+    const calibrationKey = this.currentCalibrationKey();
+    this.diagnostics = {
+      ready: true,
+      runtimeVersion: this.runtimeVersion,
+      profile: this.profile,
+      profileIgnored,
+      degradedInput: this.inputDegraded,
+      workletFailures,
+      warning: warnings.length > 0 ? warnings.join('；') : null,
+      baseLatencyMs,
+      outputLatencyMs,
+      outputEstimate,
+      sampleRate: runtime.ctx.sampleRate,
+      inputSettings,
+      playback: readPlaybackStats(runtime.ctx),
+      mainThread: this.longTasks.snapshot(),
+      stabilityObservation: this.stabilityObservation,
+      rigLatency: calculateRigLatency(this.graphSpec(), runtime.ctx.sampleRate),
+      calibrationMs:
+        calibrationKey && calibrationMatches(this.calibration, calibrationKey)
+          ? this.calibration!.delayMs
+          : null,
+    };
+    this.emitDiagnostics();
+  }
+
+  /** 观察当前 Rig；长任务是代理指标，underrun 只读取浏览器明确统计。 */
+  async runStabilityObservation(durationMs = 10_000): Promise<StabilityObservation> {
+    if (!this.runtime) throw new Error('请先启动一个输入源');
+    const duration = Math.max(1_000, Math.min(30 * 60_000, durationMs));
+    const mainBefore = this.longTasks.snapshot();
+    const playbackBefore = readPlaybackStats(this.runtime.ctx);
+    await new Promise<void>((resolve) => window.setTimeout(resolve, duration));
+    const runtime = this.runtime;
+    if (!runtime) throw new Error('观察期间音频运行时已关闭');
+    const mainAfter = this.longTasks.snapshot();
+    const playbackAfter = readPlaybackStats(runtime.ctx);
+    const observation: StabilityObservation = {
+      measuredAt: new Date().toISOString(),
+      durationMs: duration,
+      longTaskCount: mainAfter.supported ? mainAfter.longTaskCount - mainBefore.longTaskCount : null,
+      longTaskDurationMs: mainAfter.supported ? mainAfter.longTaskDurationMs - mainBefore.longTaskDurationMs : null,
+      underrunEvents: playbackAfter.supported && playbackAfter.underrunEvents !== null && playbackBefore.underrunEvents !== null ? playbackAfter.underrunEvents - playbackBefore.underrunEvents : null,
+      underrunDurationMs: playbackAfter.supported && playbackAfter.underrunDurationMs !== null && playbackBefore.underrunDurationMs !== null ? playbackAfter.underrunDurationMs - playbackBefore.underrunDurationMs : null,
+    };
+    this.stabilityObservation = observation;
+    this.sampleDiagnostics();
+    return observation;
   }
 
   // ---------- 输入 / 输出 ----------
 
-  setInputGain(v: number): void {
-    if (this.ctx && this.inputGain) {
-      this.inputGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
-    }
+  setInputGain(value: number): void {
+    this.inputGainValue = value;
+    const runtime = this.runtime;
+    if (runtime) runtime.inputGain.gain.setTargetAtTime(value, runtime.ctx.currentTime, 0.02);
   }
 
-  setMasterVolume(v: number): void {
-    if (this.ctx && this.masterGain) {
-      this.masterGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02);
+  setMasterVolume(value: number): void {
+    this.masterVolumeValue = value;
+    const runtime = this.runtime;
+    if (runtime) runtime.masterGain.gain.setTargetAtTime(value, runtime.ctx.currentTime, 0.02);
+  }
+
+  private currentMicTrack(): MediaStreamTrack | null {
+    return this.inputDescriptor?.type === 'mic'
+      ? (this.inputDescriptor.stream.getAudioTracks()[0] ?? null)
+      : null;
+  }
+
+  private currentCalibrationKey(): LoopbackCalibrationKey | null {
+    const runtime = this.runtime;
+    const descriptor = this.inputDescriptor;
+    if (!runtime || descriptor?.type !== 'mic') return null;
+    return {
+      inputDeviceId:
+        this.currentMicTrack()?.getSettings().deviceId ?? descriptor.deviceId ?? 'default',
+      outputDeviceId: this.outputDeviceId,
+      sampleRate: runtime.ctx.sampleRate,
+      profile: this.profile,
+      browserMajor: browserMajor(),
+      osAudioConfig: osAudioConfig(),
+    };
+  }
+
+  private disposeSourceNode(node: AudioNode, stopTrack: boolean): void {
+    try {
+      (node as AudioBufferSourceNode).stop?.();
+    } catch {
+      /* 已停止或不是可停止节点 */
+    }
+    try {
+      node.disconnect();
+    } catch {
+      /* 已断开 */
+    }
+    if (stopTrack && this.inputDescriptor?.type === 'mic') {
+      this.inputDescriptor.stream.getTracks().forEach((track) => track.stop());
     }
   }
 
   private stopSource(): void {
     if (this.testTimer !== null) {
-      clearInterval(this.testTimer);
+      window.clearInterval(this.testTimer);
       this.testTimer = null;
     }
-    if (this.sourceNode) {
-      try {
-        (this.sourceNode as AudioBufferSourceNode).stop?.();
-      } catch {
-        /* 已停止 */
-      }
-      this.sourceNode.disconnect();
-      this.sourceNode = null;
-    }
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach((t) => t.stop());
-      this.mediaStream = null;
-    }
+    if (this.sourceNode) this.disposeSourceNode(this.sourceNode, true);
+    this.sourceNode = null;
+    this.inputDescriptor = null;
+    this.inputDegraded = false;
+    this.calibration = null;
+    this.stabilityObservation = null;
+    this.latencyWindow.clear();
+    this.profileLatencies.clear();
+    this.sampleDiagnostics();
   }
 
   async useMic(deviceId?: string): Promise<void> {
     await this.init();
+    const { stream, degraded } = await this.requestMic(this.profile, deviceId);
+    const runtime = this.runtime!;
+    let node: MediaStreamAudioSourceNode;
+    try {
+      node = runtime.ctx.createMediaStreamSource(stream);
+      node.connect(runtime.inputGain);
+    } catch (error) {
+      stream.getTracks().forEach((track) => track.stop());
+      throw error;
+    }
     this.stopSource();
-    this.mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        deviceId: deviceId ? { exact: deviceId } : undefined,
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-      },
-    });
-    this.sourceNode = this.ctx!.createMediaStreamSource(this.mediaStream);
-    this.sourceNode.connect(this.inputGain!);
+    this.inputDescriptor = { type: 'mic', ...(deviceId ? { deviceId } : {}), stream };
+    this.sourceNode = node;
+    this.inputDegraded = degraded;
+    this.calibration = loadLoopbackCalibration();
+    this.stabilityObservation = null;
+    this.latencyWindow.clear();
+    this.sampleDiagnostics();
+  }
+
+  private async requestMic(profile: AudioProfile, deviceId?: string): Promise<{ stream: MediaStream; degraded: boolean }> {
+    return openMicWithFallback(this.getUserMedia, profile, deviceId);
   }
 
   async useFile(file: File): Promise<void> {
     await this.init();
+    const runtime = this.runtime!;
+    const buffer = await runtime.ctx.decodeAudioData(await file.arrayBuffer());
+    const source = runtime.ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(runtime.inputGain);
+    source.start();
     this.stopSource();
-    const buffer = await this.ctx!.decodeAudioData(await file.arrayBuffer());
-    const src = this.ctx!.createBufferSource();
-    src.buffer = buffer;
-    src.loop = true;
-    src.connect(this.inputGain!);
-    src.start();
-    this.sourceNode = src;
+    this.inputDescriptor = { type: 'file', file };
+    this.sourceNode = source;
+    this.stabilityObservation = null;
+    this.latencyWindow.clear();
+    this.sampleDiagnostics();
   }
 
-  /** 内置测试音源:Karplus-Strong 渲染的清音电吉他 riff(public/samples),加载失败回退到合成 riff */
   async useTestTone(): Promise<void> {
     await this.init();
-    this.stopSource();
+    const runtime = this.runtime!;
     try {
       const url = `${import.meta.env.BASE_URL}samples/guitar-riff.wav`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buffer = await this.ctx!.decodeAudioData(await res.arrayBuffer());
-      const src = this.ctx!.createBufferSource();
-      src.buffer = buffer;
-      src.loop = true;
-      src.connect(this.inputGain!);
-      src.start();
-      this.sourceNode = src;
-    } catch (e) {
-      console.warn('吉他 riff 采样加载失败,回退到合成 riff:', e);
-      this.useSynthRiff();
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const buffer = await runtime.ctx.decodeAudioData(await response.arrayBuffer());
+      const source = runtime.ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(runtime.inputGain);
+      source.start();
+      this.stopSource();
+      this.inputDescriptor = { type: 'test' };
+      this.sourceNode = source;
+    } catch (error) {
+      console.warn('吉他 riff 采样加载失败，回退到合成 riff:', error);
+      this.stopSource();
+      this.inputDescriptor = { type: 'test' };
+      const prepared = this.createSynthSource(runtime);
+      this.sourceNode = prepared.node;
+      this.testTimer = prepared.startTimer!();
     }
+    this.stabilityObservation = null;
+    this.latencyWindow.clear();
+    this.sampleDiagnostics();
   }
 
-  /** 备用合成 riff:循环播放的程序合成音符 */
-  private useSynthRiff(): void {
-    const ctx = this.ctx!;
-    const bus = ctx.createGain();
-    bus.connect(this.inputGain!);
-    this.sourceNode = bus;
-
-    // A 小调五声音阶 riff
-    const notes = [110, 130.81, 146.83, 164.81, 196, 220, 196, 164.81];
-    let step = 0;
-    const playNote = () => {
-      const t = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      osc.type = 'sawtooth';
-      osc.frequency.value = notes[step % notes.length];
-      step++;
-      const lp = ctx.createBiquadFilter();
-      lp.type = 'lowpass';
-      lp.frequency.value = 1400;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.22, t + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
-      osc.connect(lp);
-      lp.connect(g);
-      g.connect(bus);
-      osc.start(t);
-      osc.stop(t + 0.28);
+  private createSynthSource(runtime: AudioRuntime): PreparedSource {
+    const bus = runtime.ctx.createGain();
+    bus.connect(runtime.inputGain);
+    return {
+      node: bus,
+      startTimer: () => {
+        const notes = [110, 130.81, 146.83, 164.81, 196, 220, 196, 164.81];
+        let step = 0;
+        const playNote = () => {
+          const time = runtime.ctx.currentTime;
+          const oscillator = runtime.ctx.createOscillator();
+          oscillator.type = 'sawtooth';
+          oscillator.frequency.value = notes[step % notes.length];
+          step++;
+          const lowpass = runtime.ctx.createBiquadFilter();
+          lowpass.type = 'lowpass';
+          lowpass.frequency.value = 1400;
+          const gain = runtime.ctx.createGain();
+          gain.gain.setValueAtTime(0.0001, time);
+          gain.gain.exponentialRampToValueAtTime(0.22, time + 0.012);
+          gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.26);
+          oscillator.connect(lowpass);
+          lowpass.connect(gain);
+          gain.connect(bus);
+          oscillator.start(time);
+          oscillator.stop(time + 0.28);
+        };
+        playNote();
+        return window.setInterval(playNote, 300);
+      },
     };
-    playNote();
-    this.testTimer = window.setInterval(playNote, 300);
+  }
+
+  private async prepareSourceForRuntime(runtime: AudioRuntime, profile: AudioProfile): Promise<PreparedSource | null> {
+    const descriptor = this.inputDescriptor;
+    if (!descriptor) return null;
+    if (descriptor.type === 'mic') {
+      const { stream, degraded } = await this.requestMic(profile, descriptor.deviceId);
+      try {
+        const node = runtime.ctx.createMediaStreamSource(stream);
+        node.connect(runtime.inputGain);
+        return {
+          node,
+          descriptor: { type: 'mic', ...(descriptor.deviceId ? { deviceId: descriptor.deviceId } : {}), stream },
+          inputDegraded: degraded,
+          cleanup: () => stream.getTracks().forEach((track) => track.stop()),
+        };
+      } catch (error) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw error;
+      }
+    }
+    if (descriptor.type === 'file') {
+      const buffer = await runtime.ctx.decodeAudioData(await descriptor.file.arrayBuffer());
+      const source = runtime.ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(runtime.inputGain);
+      source.start();
+      return { node: source };
+    }
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}samples/guitar-riff.wav`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const buffer = await runtime.ctx.decodeAudioData(await response.arrayBuffer());
+      const source = runtime.ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(runtime.inputGain);
+      source.start();
+      return { node: source };
+    } catch {
+      return this.createSynthSource(runtime);
+    }
   }
 
   stopInput(): void {
     this.stopSource();
   }
 
-  /** 选择输出设备(浏览器支持 setSinkId 时) */
   async setOutputDevice(deviceId: string): Promise<boolean> {
-    if (!this.ctx) return false;
-    const ctx = this.ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+    this.outputDeviceId = deviceId;
+    this.calibration = loadLoopbackCalibration();
+    this.stabilityObservation = null;
+    if (!this.runtime) return false;
+    const ctx = this.runtime.ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
     if (typeof ctx.setSinkId !== 'function') return false;
     await ctx.setSinkId(deviceId);
+    this.latencyWindow.clear();
+    this.profileLatencies.clear();
+    this.sampleDiagnostics();
     return true;
   }
 
   // ---------- 输出录音 ----------
 
-  /** 是否正在录音 */
   get recording(): boolean {
     return this.mediaRecorder !== null;
   }
 
-  /**
-   * 开始录音(webm/opus),返回是否成功启动。
-   * 引擎未初始化(尚无用户手势触发的 init)或已在录制时返回 false。
-   */
   startRecording(): boolean {
-    if (!this.ctx || !this.recorderDest || this.mediaRecorder) return false;
-    // 优先 webm/opus;均不支持则用浏览器默认容器
+    const recorderDest = this.runtime?.recorderDest;
+    if (!recorderDest || this.mediaRecorder) return false;
     let mimeType = '';
-    for (const t of ['audio/webm;codecs=opus', 'audio/webm']) {
-      if (MediaRecorder.isTypeSupported(t)) {
-        mimeType = t;
+    for (const type of ['audio/webm;codecs=opus', 'audio/webm']) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        mimeType = type;
         break;
       }
     }
-    const rec = new MediaRecorder(
-      this.recorderDest.stream,
-      mimeType ? { mimeType } : undefined,
-    );
+    const recorder = new MediaRecorder(recorderDest.stream, mimeType ? { mimeType } : undefined);
     this.recordChunks = [];
-    rec.ondataavailable = (e) => {
-      if (e.data.size > 0) this.recordChunks.push(e.data);
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) this.recordChunks.push(event.data);
     };
-    rec.onstop = () => {
-      const blob = new Blob(this.recordChunks, { type: rec.mimeType || 'audio/webm' });
+    recorder.onstop = () => {
+      const blob = new Blob(this.recordChunks, { type: recorder.mimeType || 'audio/webm' });
       this.recordChunks = [];
       this.mediaRecorder = null;
       this.downloadRecording(blob);
     };
-    rec.start(1000); // 每秒一个分片,长录音不必等停止才聚合数据
-    this.mediaRecorder = rec;
+    recorder.start(1000);
+    this.mediaRecorder = recorder;
     return true;
   }
 
-  /** 停止录音;停止后自动触发 .webm 文件下载 */
   stopRecording(): void {
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      this.mediaRecorder.stop();
-    }
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') this.mediaRecorder.stop();
   }
 
-  /** 生成时间戳文件名并触发浏览器下载 */
   private downloadRecording(blob: Blob): void {
     const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
+    const pad = (value: number) => String(value).padStart(2, '0');
     const stamp =
       `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
       `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `guitar-pedalboard-${stamp}.webm`;
-    a.click();
-    // 延迟回收,确保下载已开始
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `guitar-pedalboard-${stamp}.webm`;
+    link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
@@ -511,11 +1009,9 @@ class AudioEngine {
       phase !== 'overdubbing' &&
       phase !== 'stopped'
     ) return;
-    const sampleRate = this.ctx?.sampleRate ?? 48000;
-    const lengthSamples =
-      typeof message.lengthSamples === 'number' ? message.lengthSamples : 0;
-    const positionSamples =
-      typeof message.positionSamples === 'number' ? message.positionSamples : 0;
+    const sampleRate = this.runtime?.ctx.sampleRate ?? 48_000;
+    const lengthSamples = typeof message.lengthSamples === 'number' ? message.lengthSamples : 0;
+    const positionSamples = typeof message.positionSamples === 'number' ? message.positionSamples : 0;
     this.looperStatus = {
       available: true,
       phase,
@@ -528,47 +1024,100 @@ class AudioEngine {
   }
 
   private sendLooperCommand(command: LooperCommand): boolean {
-    if (!this.looperNode || !canRunLooperCommand(this.looperStatus, command)) {
-      return false;
-    }
-    this.looperNode.port.postMessage({ type: command });
+    const node = this.runtime?.looperNode;
+    if (!node || !canRunLooperCommand(this.looperStatus, command)) return false;
+    node.port.postMessage({ type: command });
     return true;
   }
 
-  startLoopRecording(): boolean {
-    return this.sendLooperCommand('record');
-  }
-
-  finishLoopRecording(): boolean {
-    return this.sendLooperCommand('finish-record');
-  }
-
-  startLoopOverdub(): boolean {
-    return this.sendLooperCommand('overdub');
-  }
-
-  finishLoopOverdub(): boolean {
-    return this.sendLooperCommand('finish-overdub');
-  }
-
-  toggleLoopPlayback(): boolean {
-    return this.sendLooperCommand('toggle-play');
-  }
-
-  undoLoopOverdub(): boolean {
-    return this.sendLooperCommand('undo');
-  }
-
-  clearLoop(): boolean {
-    return this.sendLooperCommand('clear');
-  }
+  startLoopRecording(): boolean { return this.sendLooperCommand('record'); }
+  finishLoopRecording(): boolean { return this.sendLooperCommand('finish-record'); }
+  startLoopOverdub(): boolean { return this.sendLooperCommand('overdub'); }
+  finishLoopOverdub(): boolean { return this.sendLooperCommand('finish-overdub'); }
+  toggleLoopPlayback(): boolean { return this.sendLooperCommand('toggle-play'); }
+  undoLoopOverdub(): boolean { return this.sendLooperCommand('undo'); }
+  clearLoop(): boolean { return this.sendLooperCommand('clear'); }
 
   setLoopLevel(value: number): void {
-    if (!this.looperNode) return;
-    this.looperNode.port.postMessage({
+    this.runtime?.looperNode?.port.postMessage({
       type: 'set-level',
       value: Math.max(0, Math.min(1.5, value)),
     });
+  }
+
+  // ---------- 电气回环校准 ----------
+
+  async runLoopbackCalibration(): Promise<LoopbackAnalysis> {
+    const runtime = this.runtime;
+    const descriptor = this.inputDescriptor;
+    const source = this.sourceNode;
+    if (!runtime || !source || descriptor?.type !== 'mic') {
+      return { ok: false, delaySamples: null, delayMs: null, confidence: 0, peak: 0, reason: 'invalid' };
+    }
+    if (this.recording || this.looperStatus.phase !== 'empty') {
+      return { ok: false, delaySamples: null, delayMs: null, confidence: 0, peak: 0, reason: 'invalid' };
+    }
+
+    const reference = createLoopbackSequence();
+    const leadFrames = Math.round(runtime.ctx.sampleRate * 0.25);
+    const captureFrames = Math.round(runtime.ctx.sampleRate * 1.25);
+    const probe = new AudioWorkletNode(runtime.ctx, 'loopback-probe', {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      outputChannelCount: [1],
+      channelCount: 1,
+      channelCountMode: 'explicit',
+    });
+    source.disconnect();
+    source.connect(probe);
+    probe.connect(runtime.ctx.destination);
+    try {
+      const captured = await new Promise<Float32Array>((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error('回环校准超时')), 3000);
+        probe.port.onmessage = (event: MessageEvent<unknown>) => {
+          const message = event.data as { type?: string; captured?: ArrayBuffer };
+          if (message.type !== 'complete' || !message.captured) return;
+          window.clearTimeout(timeout);
+          resolve(new Float32Array(message.captured));
+        };
+        const copy = reference.slice();
+        probe.port.postMessage(
+          {
+            type: 'start',
+            sequence: copy.buffer,
+            leadFrames,
+            captureFrames,
+            level: 10 ** (-30 / 20),
+          },
+          [copy.buffer],
+        );
+      });
+      const raw = analyzeLoopback(captured, reference, runtime.ctx.sampleRate);
+      if (!raw.ok || raw.delaySamples === null) return raw;
+      const delaySamples = raw.delaySamples - leadFrames;
+      if (delaySamples < 0) {
+        return { ok: false, delaySamples: null, delayMs: null, confidence: 0, peak: raw.peak, reason: 'ambiguous' };
+      }
+      const result: LoopbackAnalysis = {
+        ...raw,
+        delaySamples,
+        delayMs: (delaySamples / runtime.ctx.sampleRate) * 1000,
+      };
+      this.calibration = {
+        key: this.currentCalibrationKey()!,
+        delayMs: result.delayMs!,
+        confidence: result.confidence,
+        measuredAt: new Date().toISOString(),
+      };
+      saveLoopbackCalibration(this.calibration);
+      this.sampleDiagnostics();
+      return result;
+    } finally {
+      probe.port.onmessage = null;
+      probe.disconnect();
+      source.disconnect();
+      source.connect(runtime.inputGain);
+    }
   }
 
   // ---------- 效果链 ----------
@@ -578,99 +1127,65 @@ class AudioEngine {
     this.rebuildGraph();
   }
 
-  /** 整体替换链条并重建音频图(增删/排序/开关时调用) */
   setChain(chain: ChainSpec[]): void {
     this.chain = chain;
     this.rebuildGraph();
   }
 
-  /** 参数连续调整,不重建图 */
   updateParam(uid: string, key: string, value: number): void {
-    this.instances.get(uid)?.inst.update(key, value);
+    this.runtime?.graph.instances.get(uid)?.inst.update(key, value);
+    const spec = this.chain.find((item) => item.uid === uid);
+    if (spec) spec.values = { ...spec.values, [key]: value };
+    this.sampleDiagnostics();
   }
 
-  /** 某模块输出侧的电平表节点(不存在则 null) */
   getModuleAnalyser(uid: string): AnalyserNode | null {
-    return this.moduleAnalysers.get(uid) ?? null;
+    return this.runtime?.graph.moduleAnalysers.get(uid) ?? null;
   }
 
-  /** 设置/替换箱头(结构变化,重建图) */
   setAmp(spec: AmpSpec | null): void {
     this.ampSpec = spec;
     this.rebuildGraph();
   }
 
-  /** 箱头参数连续调整,不重建图 */
   updateAmpParam(key: string, value: number): void {
-    this.ampInstance?.update(key, value);
+    this.runtime?.graph.ampInstance?.update(key, value);
+    if (this.ampSpec) this.ampSpec = { ...this.ampSpec, values: { ...this.ampSpec.values, [key]: value } };
+    this.sampleDiagnostics();
   }
 
-  /** 设置/替换箱体(结构变化,重建图) */
   setCab(spec: AmpSpec | null): void {
     this.cabSpec = spec;
     this.rebuildGraph();
   }
 
-  /** 箱体参数连续调整,不重建图 */
   updateCabParam(key: string, value: number): void {
-    this.cabInstance?.update(key, value);
+    this.runtime?.graph.cabInstance?.update(key, value);
+    if (this.cabSpec) this.cabSpec = { ...this.cabSpec, values: { ...this.cabSpec.values, [key]: value } };
+    this.sampleDiagnostics();
   }
 
-  /**
-   * 图谱编译(ADR-0005):决策全部在 planGraph(纯函数,见 graphBuilder.ts),
-   * 这里只负责喂 spec/上次产物、调用 executePlan、整体替换 artifacts 字段。
-   * 空 plan(spec 无结构变化)直接 no-op,不触碰任何状态。
-   */
   private rebuildGraph(): void {
-    const ctx = this.ctx;
-    if (!ctx || !this.inputGain || !this.inputAnalyser || !this.outputAnalyser) return;
-
-    const plan = planGraph(
-      {
-        chain: this.chain,
-        amp: this.ampSpec,
-        cab: this.cabSpec,
-        globalBypass: this.globalBypass,
-      },
-      {
-        instances: this.instances,
-        ampInstance: this.ampInstance,
-        ampInstanceDef: this.ampInstanceDef,
-        ampInstanceKey: this.ampInstanceKey,
-        cabInstance: this.cabInstance,
-        cabInstanceDef: this.cabInstanceDef,
-        globalBypass: this.graphGlobalBypass,
-      },
-    );
+    const runtime = this.runtime;
+    if (!runtime) return;
+    const plan = planGraph(this.graphSpec(), graphPrevState(runtime.graph));
     const artifacts = executePlan(
-      ctx,
+      runtime.ctx,
       {
-        inputGain: this.inputGain,
-        inputAnalyser: this.inputAnalyser,
-        outputAnalyser: this.outputAnalyser,
-        looperNode: this.looperNode,
+        inputGain: runtime.inputGain,
+        inputAnalyser: runtime.inputAnalyser,
+        outputAnalyser: runtime.outputAnalyser,
+        looperNode: runtime.looperNode,
       },
       plan,
     );
-    if (!artifacts) return;
-
-    this.instances = artifacts.instances;
-    this.moduleAnalysers = artifacts.moduleAnalysers;
-    this.ampInstance = artifacts.ampInstance;
-    this.ampInstanceDef = artifacts.ampInstanceDef;
-    this.ampInstanceKey = artifacts.ampInstanceKey;
-    this.cabInstance = artifacts.cabInstance;
-    this.cabInstanceDef = artifacts.cabInstanceDef;
-    this.preAmpAnalyser = artifacts.preAmpAnalyser;
-    this.ampAnalyser = artifacts.ampAnalyser;
-    this.cabAnalyser = artifacts.cabAnalyser;
-    this.graphGlobalBypass = artifacts.globalBypass;
+    if (artifacts) applyArtifacts(runtime, artifacts);
+    this.sampleDiagnostics();
   }
 }
 
-export const audioEngine = AudioEngine.instance;
+export const audioEngine = new AudioEngine();
 
-// 开发调试:允许通过 window.__audioEngine 检查引擎状态(CDP 调试用)
 if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__audioEngine = audioEngine;
 }

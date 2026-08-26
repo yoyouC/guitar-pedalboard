@@ -5,6 +5,7 @@ import { createToneStack } from './toneStack';
 import { wdfTwinDef } from './wdf/twinAmpDef';
 import { wdfAc30Def } from './wdf/ac30AmpDef';
 import { wdfJc120Def } from './wdf/jc120AmpDef';
+import { WDF_4X_FIR_LATENCY } from './latency';
 
 const CURVE_LENGTH = 1024;
 const SMOOTH = 0.03;
@@ -364,6 +365,7 @@ export function getNamWasmAmpDef(model: NamModelSelection): EffectDefinition {
  */
 function wdfChampDef(): EffectDefinition {
   return {
+    latency: WDF_4X_FIR_LATENCY,
     id: 'wdfchamp',
     name: 'WDF Champ ⚗',
     color: '#7d3c98',
@@ -419,6 +421,7 @@ export function getAmpDef(id: string): EffectDefinition {
 function wdfBognerDef(): EffectDefinition {
   const DEFAULTS = { gain: 55, bass: 50, mid: 60, treble: 60, presence: 55, master: -6 };
   return {
+    latency: WDF_4X_FIR_LATENCY,
     id: 'wdfbogner',
     name: 'WDF Bogner ⚗',
     color: '#1c1c1e',

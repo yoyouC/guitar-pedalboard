@@ -1,4 +1,4 @@
-import type { EffectDefinition, EffectInstance, ParamDef } from './types';
+import type { EffectDefinition, EffectInstance, EffectLatency, ParamDef } from './types';
 
 /**
  * 直通 worklet 效果的数据化工厂(issue #4)。
@@ -43,6 +43,8 @@ export interface WorkletEffectSpec {
   outputGain?: number;
   /** 自定义 UI 键 → (参数名, 值) 映射;缺省同名直通 */
   mapParam?: (key: string, value: number) => ParamMapping;
+  /** 当前模块直接监听路径的确定性时延；缺省为零。 */
+  latency?: EffectLatency | ((values: Record<string, number>, sampleRate: number) => EffectLatency);
 }
 
 /**
@@ -64,6 +66,7 @@ export function defineWorkletEffect(spec: WorkletEffectSpec): EffectDefinition {
     name: spec.name,
     color: spec.color,
     params: spec.params,
+    ...(spec.latency ? { latency: spec.latency } : {}),
     create(ctx: AudioContext): EffectInstance {
       const input = ctx.createGain();
       const output = ctx.createGain();

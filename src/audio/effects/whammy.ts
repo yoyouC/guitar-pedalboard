@@ -14,6 +14,7 @@ export const whammyEffect: EffectDefinition = {
   id: 'whammy',
   name: 'Whammy',
   color: '#c0392b',
+  latency: (_values, sampleRate) => ({ processingSamples: 0, designSamples: Math.round(sampleRate * 0.007) }),
   params: [
     { key: 'position', label: 'TREADLE', min: 0, max: 100, step: 1, defaultValue: 0, unit: '%' },
     { key: 'range', label: 'RANGE', min: -2, max: 2, step: 1, defaultValue: 2, unit: 'st' },

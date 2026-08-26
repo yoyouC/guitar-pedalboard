@@ -7,12 +7,14 @@
  */
 import type { EffectDefinition, EffectInstance } from '../effects/types';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
+import { WDF_4X_FIR_LATENCY } from '../latency';
 
 export function wdfTwinDef(): EffectDefinition {
   const DEFAULTS = {
     gain: 40, bass: 55, mid: 40, treble: 60, presence: 50, master: -6, bright: 20,
   };
   return {
+    latency: WDF_4X_FIR_LATENCY,
     id: 'wdftwin',
     name: 'WDF Twin ⚗',
     color: '#3d6e9e',

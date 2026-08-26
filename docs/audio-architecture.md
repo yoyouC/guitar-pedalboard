@@ -6,22 +6,26 @@
 
 ### 1.1 单例与固定主链路
 
-`AudioEngine` 是单例,对外导出 `audioEngine`。它持有唯一的 `AudioContext` 和一条**固定不变的主链路**:
+`AudioEngine` 对外导出默认单例 `audioEngine`，同时可通过 Context/Media factory seam 构造测试实例。它持有当前已提交的音频 runtime 和一条固定主链路：
 
 ```
 [输入源] → inputGain → inputAnalyser(仅测量)
         → [效果链 → 箱头 → 箱体]      ← rebuildGraph() 动态拼装的部分
-        → outputAnalyser(仅测量) → masterGain → limiter → ctx.destination
+        → Looper → outputAnalyser(仅测量) → limiter → masterGain → ctx.destination
+                                               └──────→ recorderDest
+        metronomeBus ───────────────────────→ limiter
 ```
 
 - `inputAnalyser` / `outputAnalyser`:`fftSize 2048`,只用于示波器/电平表/流体背景取波形,不影响音频。
-- `limiter`:`DynamicsCompressorNode`(threshold `-12dB`、knee `0`、ratio `20:1`、attack `3ms`、release `100ms`),作为输出保护天花板。
-- 两个 `AnalyserNode` 暴露为公开字段,UI 组件直接读取。
+- `limiter`:`DynamicsCompressorNode`(threshold `-1dB`、knee `0`、ratio `20:1`、attack `1ms`、release `50ms`),位于 MASTER 之前并同时馈送录音输出。
+- Analyser getter 始终指向当前已提交 runtime；Context 事务提交后 UI 以 `runtimeVersion` 重建持有节点的组件。
 
 ### 1.2 生命周期
 
-- `init()`:**懒初始化、幂等**。首次选择输入源时才创建 `AudioContext`(满足浏览器自动播放策略),并在此加载噪声门与 NAM 两个 AudioWorklet、构建一次 `rebuildGraph()`。之后调用只 `resume()`。
-- 没有 `destroy()` —— 引擎随页面存活。
+- `init()`:懒初始化、幂等。首次选择输入源时按本机音频档位创建 `AudioContext`，重新注册全部 Worklet 并编译当前 Rig；之后调用只 `resume()`。
+- `switchAudioProfile()`:在 suspended 候选 runtime 中准备全部 Worklet、固定链路、Rig、输入与输出；成功后原子提交，失败回滚旧 runtime。录音中或 Looper 非空时拒绝切换。
+- `dispose()`:停止诊断与输入，处置全部 DSP/Looper 节点并关闭 Context，作为生命周期和测试 seam。
+- 三档均请求 48kHz/mono 并关闭 EC/NS/AGC；可选输入约束失败时移除 latency/rate/channel 后重试，但绝不重新开启语音处理。
 
 ### 1.3 输入源(互斥切换)
 
@@ -92,9 +96,12 @@ interface EffectDefinition {   // "目录项":描述 + 工厂
   name: string;                // 显示名
   color: string;               // 单块外壳颜色(--pedal-color)
   params: ParamDef[];
+  latency?: EffectLatency | ((values, sampleRate) => EffectLatency);
   create(ctx: AudioContext): EffectInstance;
 }
 ```
+
+`latency` 以 sample 声明当前直接监听/主路径的处理时延与设计时延。纯计算器按实际 enabled、前后置、Amp、Cab 和 globalBypass 合成 Rig 链路时延；并联干湿模块由 definition 报告最早直接路径，不能把音乐性 delay time 直接串行求和。
 
 ### 实现约定(所有内置效果器都遵守)
 

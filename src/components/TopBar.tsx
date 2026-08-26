@@ -8,6 +8,8 @@ import { MetronomePanel } from './MetronomePanel';
 import { LooperPanel } from './LooperPanel';
 import { MidiStatus, type MidiLearnProps } from './MidiStatus';
 import type { MidiState } from '../midi/useMidi';
+import type { AudioDiagnosticsSnapshot } from '../audio/audioDiagnostics';
+import { AudioDiagnosticsPanel } from './AudioDiagnosticsPanel';
 
 interface TopBarProps {
   inputType: InputSourceType | null;
@@ -34,6 +36,9 @@ interface TopBarProps {
   outputAnalyser: AnalyserNode | null;
   /** 引擎已初始化(用户手势后),录音按钮才可用 */
   engineReady: boolean;
+  diagnostics: AudioDiagnosticsSnapshot;
+  reduceVisualLoad: boolean;
+  onReduceVisualLoadChange: (enabled: boolean) => void;
 }
 
 /** 录音时长 mm:ss */
@@ -190,16 +195,27 @@ export function TopBar(props: TopBarProps) {
             />
           </label>
           <LevelMeter analyser={props.showMeters ? props.outputAnalyser : null} label="OUT" />
+          <AudioDiagnosticsPanel
+            diagnostics={props.diagnostics}
+            engineReady={props.engineReady}
+            inputType={props.inputType}
+            inputDeviceLabel={props.micDevices.find((device) => device.deviceId === props.micId)?.label}
+            outputDeviceLabel={props.outputDevices.find((device) => device.deviceId === props.outputId)?.label}
+            reduceVisualLoad={props.reduceVisualLoad}
+            onReduceVisualLoadChange={props.onReduceVisualLoadChange}
+          />
           <button
             className={props.showMeters ? 'active' : ''}
-            title="显示/隐藏各级电平表"
+            disabled={props.reduceVisualLoad}
+            title={props.reduceVisualLoad ? '已启用降低视觉负载' : '显示/隐藏各级电平表'}
             onClick={props.onToggleMeters}
           >
             电平表
           </button>
           <button
             className={props.showTuner ? 'active' : ''}
-            title="显示/隐藏调音表"
+            disabled={props.reduceVisualLoad}
+            title={props.reduceVisualLoad ? '已启用降低视觉负载' : '显示/隐藏调音表'}
             onClick={props.onToggleTuner}
           >
             调音表
@@ -247,7 +263,7 @@ export function TopBar(props: TopBarProps) {
 
       <div className="console-divider" />
 
-      <MetronomePanel engineReady={props.engineReady} />
+      <MetronomePanel key={props.diagnostics.runtimeVersion} engineReady={props.engineReady} />
 
       {props.midi.supported && (
         <>

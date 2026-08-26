@@ -2749,3 +2749,117 @@ body.midi-learn-mode input:disabled {
   font-size: 10px;
   cursor: pointer;
 }
+
+/* 音频时延胶囊与诊断面板 */
+.latency-pill {
+  white-space: nowrap;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: rgba(0, 0, 0, 0.24);
+  font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: pointer;
+}
+
+.latency-good, .latency-text-good { color: #69d48a; }
+.latency-warn, .latency-text-warn { color: #f0bd55; }
+.latency-bad, .latency-text-bad { color: #ff7373; }
+.latency-unknown, .latency-text-unknown { color: #a8adb5; }
+
+.audio-diagnostics-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.74);
+}
+
+.audio-diagnostics-modal {
+  position: relative;
+  width: min(680px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid rgba(105, 212, 138, 0.42);
+  border-radius: 12px;
+  background: #1b1e23;
+  color: #eef1f4;
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.72);
+}
+
+.audio-diagnostics-modal h2 { margin: 0 38px 8px 0; }
+
+.audio-diagnostics-close {
+  position: absolute;
+  top: 9px;
+  right: 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.diagnostics-note {
+  color: #b7bdc6;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.diagnostics-profile {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+  font-weight: 700;
+}
+
+.diagnostics-profile select { width: 100%; }
+
+.diagnostics-warning {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(240, 189, 85, 0.12);
+  color: #f0bd55;
+}
+
+.diagnostics-grid {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(170px, 1.3fr);
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.diagnostics-grid dt,
+.diagnostics-grid dd {
+  margin: 0;
+  padding: 7px 9px;
+  background: #20242a;
+}
+
+.diagnostics-grid dd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.diagnostics-actions,
+.diagnostics-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.diagnostics-message {
+  margin-bottom: 0;
+  color: #8dc7ff;
+}
+
+@media (max-width: 560px) {
+  .diagnostics-grid { grid-template-columns: 1fr; }
+  .diagnostics-grid dt { padding-bottom: 2px; }
+  .diagnostics-grid dd { padding-top: 2px; }
+}

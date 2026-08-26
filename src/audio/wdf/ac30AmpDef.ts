@@ -6,6 +6,7 @@
  */
 import type { EffectDefinition, EffectInstance } from '../effects/types';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
+import { WDF_4X_FIR_LATENCY } from '../latency';
 
 // 默认位小信号链增益实测 −1.0dB(scripts/wdf-ac30-eval.ts L2),master 取 0dB → 接通≈旁通
 const DEFAULTS = { gain: 30, bass: 50, mid: 55, treble: 60, presence: 55, master: 0 };
@@ -13,6 +14,7 @@ const TONE_KEYS = ['gain', 'bass', 'mid', 'treble', 'presence'] as const;
 
 export function wdfAc30Def(): EffectDefinition {
   return {
+    latency: WDF_4X_FIR_LATENCY,
     id: 'wdfac30',
     name: 'WDF AC30 ⚗',
     color: '#8c5a2b', // Vox 棕

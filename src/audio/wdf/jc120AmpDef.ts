@@ -7,11 +7,13 @@
 import type { EffectDefinition, EffectInstance } from '../effects/types';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
 import { createToneStack } from '../toneStack';
+import { WDF_4X_FIR_LATENCY } from '../latency';
 
 const DEFAULTS = { gain: 40, bass: 50, mid: 50, treble: 60, presence: 60, master: -6 };
 
 export function wdfJc120Def(): EffectDefinition {
   return {
+    latency: WDF_4X_FIR_LATENCY,
     id: 'wdfjc120',
     name: 'WDF JC-120 ⚗',
     color: '#a8b0b8',

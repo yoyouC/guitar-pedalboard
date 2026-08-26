@@ -1,4 +1,5 @@
 import { LEVEL_DB_MAX, LEVEL_DB_MIN, levelDbToGain } from '../level';
+import { WDF_4X_FIR_LATENCY } from '../latency';
 import { defineWorkletEffect, withDbParam } from './workletEffect';
 
 /**
@@ -9,6 +10,7 @@ import { defineWorkletEffect, withDbParam } from './workletEffect';
  * LEVEL 为 dB 域补偿(-30~+6),update 时经 levelDbToGain 转线性增益。
  */
 export const fet1176Effect = defineWorkletEffect({
+  latency: WDF_4X_FIR_LATENCY,
   id: 'fet1176',
   name: '1176 FET 压缩 ⚗',
   color: '#31405c',
