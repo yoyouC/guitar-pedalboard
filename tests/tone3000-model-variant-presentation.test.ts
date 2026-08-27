@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   filterTone3000ModelVariants,
+  orderTone3000ModelVariantArchitectures,
   tone3000ModelVariantLabel,
 } from '../src/tone3000/modelVariantPresentation.ts';
 import type { Tone3000ModelInfo } from '../src/tone3000/client.ts';
@@ -43,5 +44,20 @@ test('model variant presentation combines architecture and size filters', () => 
       size: 'lite',
     }).map((modelVariant) => modelVariant.id),
     ['102'],
+  );
+});
+
+test('model variant presentation puts the current model architecture first', () => {
+  assert.deepEqual(
+    orderTone3000ModelVariantArchitectures(modelVariants, '101'),
+    ['1', '2', 'custom'],
+  );
+  assert.deepEqual(
+    orderTone3000ModelVariantArchitectures(modelVariants, '103'),
+    ['custom', '2', '1'],
+  );
+  assert.deepEqual(
+    orderTone3000ModelVariantArchitectures(modelVariants, 'missing'),
+    ['2', '1', 'custom'],
   );
 });

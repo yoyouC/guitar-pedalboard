@@ -484,6 +484,31 @@ test('getModelText: exact model 必须属于所存 tone 且为 NAM', async () =>
   });
 });
 
+test('getModelText: exact model response id must match the requested modelId', async () => {
+  const { fetchFn, requests } = mockFetch((req) => {
+    assert.equal(req.url, 'https://www.tone3000.com/api/v1/models/9003');
+    return {
+      status: 200,
+      body: {
+        id: 9004,
+        tone_id: 42,
+        format: 'nam',
+        size: 'standard',
+        architecture_version: '2',
+        model_url: 'https://cdn.example.com/wrong-id.nam',
+      },
+    };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+
+  await assert.rejects(makeClient(fetchFn, storage).getModelText('42', '9003'), (error: unknown) => {
+    assert.equal((error as { reason?: string }).reason, 'tone-unavailable');
+    return true;
+  });
+  assert.equal(requests.length, 1, '身份不匹配时不得下载模型文件');
+});
+
 test('getModelText: 只有 A2 模型也可装载(wasm 含 SlimmableWavenet)', async () => {
   const { fetchFn } = mockFetch((req) => {
     if (req.url.includes('/api/v1/models?tone_id=') && !req.url.includes('architecture=2')) {

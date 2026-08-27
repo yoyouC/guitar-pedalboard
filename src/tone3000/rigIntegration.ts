@@ -565,6 +565,13 @@ export function createTone3000RigIntegration({
               ? 'pedal'
               : tone3000GearForIntent(intent);
         const tone = await port.getTone(toneId);
+        if (generation !== selectionGeneration) {
+          return {
+            ok: false,
+            reason: 'tone-unavailable',
+            message: '采样列表请求已被更新',
+          };
+        }
         if (tone.gear !== expectedGear || tone.format !== 'nam') {
           return {
             ok: false,

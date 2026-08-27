@@ -458,6 +458,7 @@ test('prepareSelection ignores a model variant list that finishes after a newer 
   };
   const integration = createTone3000RigIntegration({ rig: createRigStore(stubEngine()), port });
   const older = integration.prepareSelection('51', undefined, { kind: 'amp', architecture: '2' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
   const newer = integration.prepareSelection('52', undefined, { kind: 'amp', architecture: '2' });
   await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -472,6 +473,52 @@ test('prepareSelection ignores a model variant list that finishes after a newer 
   ]);
   assert.equal((await older).ok, false);
   assert.equal(integration.getState().selection?.toneId, '52');
+});
+
+test('prepareSelection ignores stale tone metadata before it can replace newer list progress', async () => {
+  const olderTone = deferred<{
+    id: number;
+    title: string;
+    username: string;
+    license: string;
+    url: string;
+    gear: string;
+    format: string;
+  }>();
+  const listedToneIds: string[] = [];
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) =>
+      toneId === '54'
+        ? olderTone.promise
+        : {
+            id: 55, title: 'Newer', username: 'alice', license: 't3k',
+            url: 'https://www.tone3000.com/tones/55', gear: 'amp', format: 'nam',
+          },
+    listModels: async (toneId) => {
+      listedToneIds.push(toneId);
+      return [
+        { id: `${toneId}01`, toneId, name: 'A', size: 'standard', architecture: '2' },
+        { id: `${toneId}02`, toneId, name: 'B', size: 'lite', architecture: '2' },
+      ];
+    },
+    loadModelText: async () => '{}',
+  };
+  const integration = createTone3000RigIntegration({ rig: createRigStore(stubEngine()), port });
+
+  const older = integration.prepareSelection('54', undefined, { kind: 'amp', architecture: '2' });
+  assert.deepEqual(
+    await integration.prepareSelection('55', undefined, { kind: 'amp', architecture: '2' }),
+    { ok: true, status: 'choose' },
+  );
+  olderTone.resolve({
+    id: 54, title: 'Older', username: 'alice', license: 't3k',
+    url: 'https://www.tone3000.com/tones/54', gear: 'amp', format: 'nam',
+  });
+
+  assert.equal((await older).ok, false);
+  assert.deepEqual(listedToneIds, ['55']);
+  assert.equal(integration.getState().selection?.toneId, '55');
+  assert.equal(integration.getState().modelListProgress, undefined);
 });
 
 test('prepareSelection deduplicates concurrent model-list requests for the active tone', async () => {

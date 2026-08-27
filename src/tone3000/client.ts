@@ -466,6 +466,7 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     const model = (await res.json()) as ApiModel;
     const supportedArchitecture = ['1', '2', 'custom'].includes(model.architecture_version);
     if (
+      String(model.id) !== modelId ||
       String(model.tone_id ?? toneId) !== toneId ||
       (model.format !== undefined && model.format !== 'nam') ||
       !supportedArchitecture ||

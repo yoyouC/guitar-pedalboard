@@ -8,6 +8,7 @@ import {
 import type { Tone3000ModelVariantSelection } from '../tone3000/rigIntegration';
 import {
   filterTone3000ModelVariants,
+  orderTone3000ModelVariantArchitectures,
   tone3000ModelVariantLabel,
 } from '../tone3000/modelVariantPresentation';
 
@@ -17,8 +18,6 @@ interface Tone3000ModelVariantPickerProps {
   onClose(): void;
   onApplied?(): void;
 }
-
-const ARCHITECTURES: Tone3000ModelArchitecture[] = ['2', '1', 'custom'];
 
 /** 只负责展示并确认已经由集成层完成分页、校验和排序的采样列表。 */
 export function Tone3000ModelVariantPicker({
@@ -53,6 +52,14 @@ export function Tone3000ModelVariantPicker({
   const sizes = useMemo(
     () => [...new Set(selection.modelVariants.map((modelVariant) => modelVariant.size))].sort(),
     [selection.modelVariants],
+  );
+  const architectureOrder = useMemo(
+    () =>
+      orderTone3000ModelVariantArchitectures(
+        selection.modelVariants,
+        selection.currentModelId,
+      ),
+    [selection.currentModelId, selection.modelVariants],
   );
   const filtered = useMemo(() => {
     return filterTone3000ModelVariants(selection.modelVariants, {
@@ -141,7 +148,7 @@ export function Tone3000ModelVariantPicker({
       )}
 
       <div className="tone3000-model-variant-groups">
-        {ARCHITECTURES.map((candidateArchitecture) => {
+        {architectureOrder.map((candidateArchitecture) => {
           const group = filtered.filter(
             (modelVariant) => modelVariant.architecture === candidateArchitecture,
           );
