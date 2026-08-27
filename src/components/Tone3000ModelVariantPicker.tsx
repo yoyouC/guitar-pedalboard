@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
   Tone3000ModelArchitecture,
-  Tone3000ModelInfo,
 } from '../tone3000/client';
 import {
   tone3000Rig,
 } from '../tone3000/useTone3000Rig';
-import type { Tone3000SampleSelection } from '../tone3000/rigIntegration';
+import type { Tone3000ModelVariantSelection } from '../tone3000/rigIntegration';
+import {
+  filterTone3000ModelVariants,
+  tone3000ModelVariantLabel,
+} from '../tone3000/modelVariantPresentation';
 
-interface Tone3000SamplePickerProps {
-  selection: Tone3000SampleSelection;
+interface Tone3000ModelVariantPickerProps {
+  selection: Tone3000ModelVariantSelection;
   onBack?: () => void;
   onClose(): void;
   onApplied?(): void;
@@ -17,25 +20,21 @@ interface Tone3000SamplePickerProps {
 
 const ARCHITECTURES: Tone3000ModelArchitecture[] = ['2', '1', 'custom'];
 
-function sampleLabel(sample: Tone3000ModelInfo): string {
-  return sample.name || `采样 #${sample.id}`;
-}
-
 /** 只负责展示并确认已经由集成层完成分页、校验和排序的采样列表。 */
-export function Tone3000SamplePicker({
+export function Tone3000ModelVariantPicker({
   selection,
   onBack,
   onClose,
   onApplied,
-}: Tone3000SamplePickerProps) {
+}: Tone3000ModelVariantPickerProps) {
   const initialModelId =
     selection.preferredModelId &&
-    selection.samples.some((sample) => sample.id === selection.preferredModelId)
+    selection.modelVariants.some((modelVariant) => modelVariant.id === selection.preferredModelId)
       ? selection.preferredModelId
       : selection.currentModelId &&
-          selection.samples.some((sample) => sample.id === selection.currentModelId)
+          selection.modelVariants.some((modelVariant) => modelVariant.id === selection.currentModelId)
         ? selection.currentModelId
-        : selection.samples[0]?.id ?? '';
+        : selection.modelVariants[0]?.id ?? '';
   const [selectedModelId, setSelectedModelId] = useState(initialModelId);
   const [query, setQuery] = useState('');
   const [architecture, setArchitecture] = useState<'all' | Tone3000ModelArchitecture>('all');
@@ -52,21 +51,16 @@ export function Tone3000SamplePicker({
   }, [initialModelId, selection.toneId]);
 
   const sizes = useMemo(
-    () => [...new Set(selection.samples.map((sample) => sample.size))].sort(),
-    [selection.samples],
+    () => [...new Set(selection.modelVariants.map((modelVariant) => modelVariant.size))].sort(),
+    [selection.modelVariants],
   );
   const filtered = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase();
-    return selection.samples.filter((sample) => {
-      if (architecture !== 'all' && sample.architecture !== architecture) return false;
-      if (size !== 'all' && sample.size !== size) return false;
-      return (
-        !normalizedQuery ||
-        sampleLabel(sample).toLocaleLowerCase().includes(normalizedQuery) ||
-        sample.id.includes(normalizedQuery)
-      );
+    return filterTone3000ModelVariants(selection.modelVariants, {
+      query,
+      architecture,
+      size,
     });
-  }, [architecture, query, selection.samples, size]);
+  }, [architecture, query, selection.modelVariants, size]);
 
   const confirm = async () => {
     if (!selectedModelId) return;
@@ -90,7 +84,7 @@ export function Tone3000SamplePicker({
 
   return (
     <>
-      <div className="tone3000-sample-heading">
+      <div className="tone3000-model-variant-heading">
         {onBack && (
           <button
             className="tone3000-logout"
@@ -107,7 +101,7 @@ export function Tone3000SamplePicker({
         <span className="tone3000-byline">Tone #{selection.toneId}</span>
       </div>
 
-      <div className="tone3000-sample-filters">
+      <div className="tone3000-model-variant-filters">
         <input
           className="tone3000-paste-input"
           type="search"
@@ -140,42 +134,42 @@ export function Tone3000SamplePicker({
       </div>
 
       {selection.currentModelUnavailable && selection.currentModelId && (
-        <div className="tone3000-sample-unavailable" aria-disabled="true">
+        <div className="tone3000-model-variant-unavailable" aria-disabled="true">
           <strong>当前采样 #{selection.currentModelId}</strong>
           <span>当前账号无法访问；请选择替代采样</span>
         </div>
       )}
 
-      <div className="tone3000-sample-groups">
+      <div className="tone3000-model-variant-groups">
         {ARCHITECTURES.map((candidateArchitecture) => {
           const group = filtered.filter(
-            (sample) => sample.architecture === candidateArchitecture,
+            (modelVariant) => modelVariant.architecture === candidateArchitecture,
           );
           if (group.length === 0) return null;
           return (
-            <section key={candidateArchitecture} className="tone3000-sample-group">
+            <section key={candidateArchitecture} className="tone3000-model-variant-group">
               <h4>{candidateArchitecture === 'custom' ? 'Custom' : `A${candidateArchitecture}`}</h4>
-              {group.map((sample) => (
+              {group.map((modelVariant) => (
                 <label
-                  key={sample.id}
-                  className={`tone3000-sample-item ${selectedModelId === sample.id ? 'active' : ''}`}
+                  key={modelVariant.id}
+                  className={`tone3000-model-variant-item ${selectedModelId === modelVariant.id ? 'active' : ''}`}
                 >
                   <input
                     type="radio"
-                    name="tone3000-sample"
-                    value={sample.id}
-                    checked={selectedModelId === sample.id}
-                    onChange={() => setSelectedModelId(sample.id)}
+                    name="tone3000-model-variant"
+                    value={modelVariant.id}
+                    checked={selectedModelId === modelVariant.id}
+                    onChange={() => setSelectedModelId(modelVariant.id)}
                   />
-                  <span className="tone3000-sample-copy">
-                    <strong>{sampleLabel(sample)}</strong>
+                  <span className="tone3000-model-variant-copy">
+                    <strong>{tone3000ModelVariantLabel(modelVariant)}</strong>
                     <span>
-                      {sample.architecture === 'custom' ? 'Custom' : `A${sample.architecture}`}
-                      {' · '}{sample.size}{' · '}model #{sample.id}
+                      {modelVariant.architecture === 'custom' ? 'Custom' : `A${modelVariant.architecture}`}
+                      {' · '}{modelVariant.size}{' · '}model #{modelVariant.id}
                     </span>
                   </span>
-                  {sample.id === selection.currentModelId && (
-                    <span className="tone3000-sample-current">当前</span>
+                  {modelVariant.id === selection.currentModelId && (
+                    <span className="tone3000-model-variant-current">当前</span>
                   )}
                 </label>
               ))}
@@ -188,7 +182,7 @@ export function Tone3000SamplePicker({
       </div>
 
       {error && <div className="tone3000-notice" role="alert">{error}</div>}
-      <div className="tone3000-sample-actions">
+      <div className="tone3000-model-variant-actions">
         <button className="tone3000-logout" disabled={busy} onClick={cancel}>取消</button>
         <button
           className="nam-load-btn"

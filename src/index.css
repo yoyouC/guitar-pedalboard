@@ -2690,7 +2690,7 @@ body.midi-learn-mode input:disabled {
   margin: 12px 0;
 }
 
-.tone3000-sample-heading {
+.tone3000-model-variant-heading {
   display: flex;
   align-items: baseline;
   gap: 10px;
@@ -2698,18 +2698,18 @@ body.midi-learn-mode input:disabled {
   margin-bottom: 12px;
 }
 
-.tone3000-sample-heading h3 {
+.tone3000-model-variant-heading h3 {
   margin: 0;
 }
 
-.tone3000-sample-filters {
+.tone3000-model-variant-filters {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto auto;
   gap: 8px;
   margin-bottom: 12px;
 }
 
-.tone3000-sample-filters select {
+.tone3000-model-variant-filters select {
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 4px;
   background: #292f36;
@@ -2718,7 +2718,7 @@ body.midi-learn-mode input:disabled {
   padding: 4px 8px;
 }
 
-.tone3000-sample-groups {
+.tone3000-model-variant-groups {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2727,13 +2727,13 @@ body.midi-learn-mode input:disabled {
   padding-right: 3px;
 }
 
-.tone3000-sample-group h4 {
+.tone3000-model-variant-group h4 {
   margin: 0 0 5px;
   color: #9fc8ee;
   font-size: 12px;
 }
 
-.tone3000-sample-item {
+.tone3000-model-variant-item {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -2745,13 +2745,13 @@ body.midi-learn-mode input:disabled {
   cursor: pointer;
 }
 
-.tone3000-sample-item:hover,
-.tone3000-sample-item.active {
+.tone3000-model-variant-item:hover,
+.tone3000-model-variant-item.active {
   border-color: #7fb3e8;
   background: rgba(127, 179, 232, 0.1);
 }
 
-.tone3000-sample-copy {
+.tone3000-model-variant-copy {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -2760,18 +2760,18 @@ body.midi-learn-mode input:disabled {
   font-size: 11px;
 }
 
-.tone3000-sample-copy strong {
+.tone3000-model-variant-copy strong {
   overflow-wrap: anywhere;
   font-size: 12px;
 }
 
-.tone3000-sample-copy span,
-.tone3000-sample-summary {
+.tone3000-model-variant-copy span,
+.tone3000-model-variant-summary {
   font-size: 10px;
   opacity: 0.72;
 }
 
-.tone3000-sample-current {
+.tone3000-model-variant-current {
   border-radius: 999px;
   padding: 2px 7px;
   background: rgba(128, 217, 155, 0.16);
@@ -2779,7 +2779,7 @@ body.midi-learn-mode input:disabled {
   font-size: 10px;
 }
 
-.tone3000-sample-unavailable {
+.tone3000-model-variant-unavailable {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2791,7 +2791,7 @@ body.midi-learn-mode input:disabled {
   font-size: 11px;
 }
 
-.tone3000-sample-actions {
+.tone3000-model-variant-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -2799,7 +2799,7 @@ body.midi-learn-mode input:disabled {
 }
 
 @media (max-width: 620px) {
-  .tone3000-sample-filters {
+  .tone3000-model-variant-filters {
     grid-template-columns: 1fr;
   }
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Tone3000TargetIntent } from '../tone3000/rigIntegration';
 import { tone3000Rig, useTone3000Rig } from '../tone3000/useTone3000Rig';
-import { Tone3000SamplePicker } from './Tone3000SamplePicker';
+import { Tone3000ModelVariantPicker } from './Tone3000ModelVariantPicker';
 
 /** popup 被阻挡后的整页回跳宿主：React 挂载后继续未完成的采样确认。 */
 export function Tone3000RedirectSelection() {
@@ -50,7 +50,7 @@ export function Tone3000RedirectSelection() {
         >
           ×
         </button>
-        <Tone3000SamplePicker
+        <Tone3000ModelVariantPicker
           selection={selection}
           onBack={targetIntent ? () => void chooseAnotherTone() : undefined}
           onClose={() => {}}

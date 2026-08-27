@@ -74,7 +74,10 @@ export interface Tone3000Client {
    */
   getModelText(toneId: string, modelId?: string): Promise<string>;
   /** 列出 tone 下全部兼容 NAM 模型变体；仅返回身份/展示字段，不下载模型。 */
-  listModels(toneId: string): Promise<Tone3000ModelInfo[]>;
+  listModels(
+    toneId: string,
+    onProgress?: (progress: Tone3000ModelListProgress) => void,
+  ): Promise<Tone3000ModelInfo[]>;
   /** 获取一个精确模型的身份/展示字段；与精确下载共享本次会话元数据。 */
   getModelInfo(toneId: string, modelId: string): Promise<Tone3000ModelInfo>;
   /** 获取 tone 元数据(归属展示:标题/作者/许可/链接,ToS 要求展示) */
@@ -127,6 +130,11 @@ export interface Tone3000ModelInfo {
   name: string;
   size: string;
   architecture: Tone3000ModelArchitecture;
+}
+
+export interface Tone3000ModelListProgress {
+  completedPages: number;
+  totalPages?: number;
 }
 
 // ---------- PKCE ----------
@@ -337,6 +345,7 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
   async function listModelPages(
     toneId: string,
     architecture?: '2',
+    onPage?: (completedPages: number, totalPages: number) => void,
   ): Promise<ApiModel[]> {
     const models: ApiModel[] = [];
     let page = 1;
@@ -360,19 +369,38 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
         Number.isInteger(payload.total_pages) && (payload.total_pages ?? 0) > 0
           ? payload.total_pages!
           : 1;
+      onPage?.(page, totalPages);
       if (page >= totalPages) break;
       page += 1;
     }
     return models;
   }
 
-  async function listModels(toneId: string): Promise<Tone3000ModelInfo[]> {
+  async function listModels(
+    toneId: string,
+    onProgress?: (progress: Tone3000ModelListProgress) => void,
+  ): Promise<Tone3000ModelInfo[]> {
     if (!/^\d+$/.test(toneId)) {
       throw new Tone3000Error('tone-unavailable', `tone ${toneId} 格式无效`);
     }
+    const pageState = {
+      legacy: { completed: 0, total: undefined as number | undefined },
+      a2: { completed: 0, total: undefined as number | undefined },
+    };
+    const report = (lane: keyof typeof pageState, completed: number, total: number) => {
+      pageState[lane] = { completed, total };
+      const totalPages =
+        pageState.legacy.total !== undefined && pageState.a2.total !== undefined
+          ? pageState.legacy.total + pageState.a2.total
+          : undefined;
+      onProgress?.({
+        completedPages: pageState.legacy.completed + pageState.a2.completed,
+        ...(totalPages !== undefined ? { totalPages } : {}),
+      });
+    };
     const [legacy, a2] = await Promise.all([
-      listModelPages(toneId),
-      listModelPages(toneId, '2'),
+      listModelPages(toneId, undefined, (completed, total) => report('legacy', completed, total)),
+      listModelPages(toneId, '2', (completed, total) => report('a2', completed, total)),
     ]);
     const unique = new Map<string, Tone3000ModelInfo>();
     for (const model of [...legacy, ...a2]) {
@@ -388,6 +416,7 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     if (
       !/^\d+$/.test(id) ||
       modelToneId !== toneId ||
+      (model.format !== undefined && model.format !== 'nam') ||
       !['1', '2', 'custom'].includes(model.architecture_version) ||
       typeof model.size !== 'string' ||
       !model.size
@@ -415,20 +444,12 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
    * (本仓 wasm 构建含 SlimmableWavenet,A2 在支持范围内)。
    */
   async function listModelsForTone(toneId: string): Promise<ApiModel[]> {
-    const query = `tone_id=${encodeURIComponent(toneId)}`;
-    const [a1Res, a2Res] = await Promise.all([
-      apiFetch(`/api/v1/models?${query}`),
-      apiFetch(`/api/v1/models?${query}&architecture=2`),
+    const [legacy, a2] = await Promise.all([
+      listModelPages(toneId),
+      // 历史 tone-only 恢复保留旧语义：A2 目录独立不可用时仍可从 legacy 列表 fallback。
+      listModelPages(toneId, '2').catch(() => []),
     ]);
-    if (a1Res.status === 404 || a1Res.status === 403) {
-      throw new Tone3000Error('tone-unavailable', `tone ${toneId} 不可访问(已删除/转私有)`, a1Res.status);
-    }
-    if (!a1Res.ok) {
-      throw new Tone3000Error('http', `模型列表获取失败 HTTP ${a1Res.status}`, a1Res.status);
-    }
-    const a1 = ((await a1Res.json()) as { data?: ApiModel[] }).data ?? [];
-    const a2 = a2Res.ok ? (((await a2Res.json()) as { data?: ApiModel[] }).data ?? []) : [];
-    return [...a1, ...a2];
+    return [...legacy, ...a2];
   }
 
   const exactModelInfo = new Map<string, ApiModel>();

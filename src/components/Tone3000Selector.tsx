@@ -14,7 +14,8 @@ import type { ToneInfo } from '../tone3000/client';
 import { putCachedToneInfo } from '../tone3000/toneInfoCache';
 import { Tone3000Discover } from './Tone3000Discover';
 import { Tone3000Account } from './Tone3000Display';
-import { Tone3000SamplePicker } from './Tone3000SamplePicker';
+import { Tone3000ModelVariantPicker } from './Tone3000ModelVariantPicker';
+import { Tone3000ModelListProgress } from './Tone3000ModelListProgress';
 
 interface Tone3000SelectorProps {
   intent: Tone3000TargetIntent;
@@ -35,50 +36,50 @@ export function Tone3000Selector({
   const authed = useSyncExternalStore(subscribeTone3000Auth, getTone3000Authenticated);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryAction, setRetryAction] = useState<(() => Promise<void>) | null>(null);
   const selection = useTone3000Rig((state) => state.selection);
+  const modelListProgress = useTone3000Rig((state) => state.modelListProgress);
 
   const pendingIntent = (architecture: '2' | 'legacy' = '2'): Tone3000PendingIntent =>
-    intent.kind === 'replace-pedal'
-      ? { ...intent, architecture }
-      : { ...intent, architecture };
+    ({ ...intent, architecture });
 
   const close = () => {
     tone3000Rig.cancelSelection();
     onClose();
   };
 
-  const browse = async (architecture: '2' | 'legacy') => {
+  const run = async (action: () => Promise<void>) => {
     setBusy(true);
     setError(null);
     try {
-      const result = await tone3000Rig.selectHosted(intent, architecture, loadToneId);
-      if (result && !result.ok) throw new Error(result.message);
-      if (result?.ok && result.status === 'applied') onClose();
+      await action();
+      setRetryAction(null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
+      setRetryAction(() => action);
     } finally {
       setBusy(false);
     }
   };
 
-  const select = async (selection: Tone3000Selection, info?: ToneInfo) => {
-    setBusy(true);
-    setError(null);
-    try {
+  const browse = (architecture: '2' | 'legacy') =>
+    run(async () => {
+      const result = await tone3000Rig.selectHosted(intent, architecture, loadToneId);
+      if (result && !result.ok) throw new Error(result.message);
+      if (result?.ok && result.status === 'applied') onClose();
+    });
+
+  const select = (nextSelection: Tone3000Selection, info?: ToneInfo) =>
+    run(async () => {
       if (info) putCachedToneInfo(info, window.localStorage);
       const result = await tone3000Rig.prepareSelection(
-        selection.toneId,
-        selection.modelId,
+        nextSelection.toneId,
+        nextSelection.modelId,
         pendingIntent(),
       );
       if (!result.ok) throw new Error(result.message);
       if (result.status === 'applied') onClose();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(false);
-    }
-  };
+    });
 
   return (
     <div className="tone3000-modal-backdrop" role="presentation" onMouseDown={close}>
@@ -91,7 +92,7 @@ export function Tone3000Selector({
       >
         <button className="tone3000-modal-close" onClick={close} aria-label="关闭">×</button>
         {selection && !selection.resumed ? (
-          <Tone3000SamplePicker
+          <Tone3000ModelVariantPicker
             selection={selection}
             onBack={() => {}}
             onClose={onClose}
@@ -109,7 +110,31 @@ export function Tone3000Selector({
                 浏览 A1 / Custom Tone…
               </button>
             </div>
-            {error && <div className="tone3000-notice" role="alert">{error}</div>}
+            {modelListProgress && <Tone3000ModelListProgress progress={modelListProgress} />}
+            {error && (
+              <div className="tone3000-notice" role="alert">
+                <span>{error}</span>
+                <div className="tone3000-browser-actions">
+                  {retryAction && (
+                    <button className="nam-load-btn" disabled={busy} onClick={() => void run(retryAction)}>
+                      重试加载采样列表
+                    </button>
+                  )}
+                  <button
+                    className="tone3000-logout"
+                    disabled={busy}
+                    onClick={() => {
+                      tone3000Rig.cancelSelection();
+                      setError(null);
+                      setRetryAction(null);
+                    }}
+                  >
+                    返回选择 Tone
+                  </button>
+                  <button className="tone3000-logout" disabled={busy} onClick={close}>取消</button>
+                </div>
+              </div>
+            )}
             {authed && (
               <Tone3000Discover
                 currentToneId={currentToneId}

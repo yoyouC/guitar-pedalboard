@@ -21,10 +21,11 @@ export function ChainView({ showMeters }: { showMeters: boolean }) {
   const [selector, setSelector] = useState<
     | { kind: 'add' }
     | { kind: 'replace'; uid: string; repair?: boolean }
-    | { kind: 'sample'; uid: string }
+    | { kind: 'model-variant'; uid: string }
     | null
   >(null);
   const toneTargets = useTone3000Rig((state) => state.targets);
+  const modelListProgress = useTone3000Rig((state) => state.modelListProgress);
 
   const preItems = items.filter((i) => !i.post);
   const postItems = items.filter((i) => i.post);
@@ -78,13 +79,18 @@ export function ChainView({ showMeters }: { showMeters: boolean }) {
         onParam={rigStore.setPedalParam}
         onToggleSlot={rigStore.setPedalPost}
         tone3000State={tone3000State}
+        tone3000ModelListProgress={
+          modelListProgress?.toneId === item.modelRef?.slice('tone3000:'.length)
+            ? modelListProgress
+            : undefined
+        }
         onReplaceTone3000={(uid) => setSelector({ kind: 'replace', uid })}
-        onSwitchTone3000Sample={(uid) => {
-          void tone3000Rig.preparePedalSampleSwitch(uid).then((result) => {
+        onSwitchTone3000ModelVariant={(uid) => {
+          void tone3000Rig.preparePedalModelVariantSwitch(uid).then((result) => {
             if (!result.ok) {
               window.alert(`TONE3000 采样列表加载失败：${result.message}`);
             } else if (result.status === 'choose') {
-              setSelector({ kind: 'sample', uid });
+              setSelector({ kind: 'model-variant', uid });
             }
           });
         }}

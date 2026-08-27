@@ -4,7 +4,9 @@ import { Knob } from './Knob';
 import { MiniMeter } from './MiniMeter';
 import { WahTreadle } from './WahTreadle';
 import type { Tone3000TargetState } from '../tone3000/rigIntegration';
+import type { Tone3000ModelListProgress } from '../tone3000/client';
 import { Tone3000ModelAttribution } from './Tone3000Display';
+import { tone3000ModelListProgressText } from '../tone3000/modelListProgressPresentation';
 
 /** 用摇杆(WahTreadle)代替 position 旋钮的效果器 */
 const TREADLE_EFFECT_IDS = new Set(['wahpedal', 'crybabywdf', 'whammy']);
@@ -21,13 +23,14 @@ interface PedalCardProps {
   onParam: (uid: string, key: string, value: number) => void;
   onToggleSlot: (uid: string) => void;
   tone3000State?: Tone3000TargetState;
+  tone3000ModelListProgress?: Tone3000ModelListProgress;
   onReplaceTone3000?: (uid: string) => void;
-  onSwitchTone3000Sample?: (uid: string) => void;
+  onSwitchTone3000ModelVariant?: (uid: string) => void;
   onRepairTone3000?: (uid: string) => void;
 }
 
 /** 拟物单块效果器:金属外壳 + 旋钮 + 脚踏开关 */
-export function PedalCard({ item, def, index, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot, tone3000State, onReplaceTone3000, onSwitchTone3000Sample, onRepairTone3000 }: PedalCardProps) {
+export function PedalCard({ item, def, index, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot, tone3000State, tone3000ModelListProgress, onReplaceTone3000, onSwitchTone3000ModelVariant, onRepairTone3000 }: PedalCardProps) {
   return (
     <div
       className={`pedal skin-${def.id} ${item.enabled ? 'pedal-on' : 'pedal-off'}`}
@@ -98,10 +101,10 @@ export function PedalCard({ item, def, index, analyser, showMeters, onToggle, on
                 : '加载中，当前直通…'}
           </span>
           {item.modelId && (
-            <span className="tone3000-sample-summary" title={`model #${item.modelId}`}>
-              {tone3000State?.sample?.name || `采样 #${item.modelId}`}
-              {tone3000State?.sample
-                ? ` · ${tone3000State.sample.architecture === 'custom' ? 'Custom' : `A${tone3000State.sample.architecture}`} · ${tone3000State.sample.size}`
+            <span className="tone3000-model-variant-summary" title={`model #${item.modelId}`}>
+              {tone3000State?.modelVariant?.name || `采样 #${item.modelId}`}
+              {tone3000State?.modelVariant
+                ? ` · ${tone3000State.modelVariant.architecture === 'custom' ? 'Custom' : `A${tone3000State.modelVariant.architecture}`} · ${tone3000State.modelVariant.size}`
                 : ''}
             </span>
           )}
@@ -117,9 +120,12 @@ export function PedalCard({ item, def, index, analyser, showMeters, onToggle, on
           {item.modelRef && (
             <button
               className="tone3000-pedal-replace"
-              onClick={() => onSwitchTone3000Sample?.(item.uid)}
+              disabled={Boolean(tone3000ModelListProgress)}
+              onClick={() => onSwitchTone3000ModelVariant?.(item.uid)}
             >
-              切换采样…
+              {tone3000ModelListProgress
+                ? tone3000ModelListProgressText(tone3000ModelListProgress)
+                : '切换采样…'}
             </button>
           )}
           <button className="tone3000-pedal-replace" onClick={() => onReplaceTone3000?.(item.uid)}>

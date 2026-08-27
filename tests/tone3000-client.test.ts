@@ -319,6 +319,59 @@ test('listModels: 拉取 legacy 与 A2 全部分页并返回可展示的精确�
   assert.equal(requests.length, 3);
 });
 
+test('listModels: reports aggregate page progress and excludes non-NAM model records', async () => {
+  const { fetchFn } = mockFetch((req) => {
+    const url = new URL(req.url);
+    const architecture = url.searchParams.get('architecture');
+    const page = Number(url.searchParams.get('page'));
+    if (architecture === '2') {
+      return {
+        status: 200,
+        body: {
+          data: [{
+            id: 303,
+            tone_id: 43,
+            name: 'IR must not be selectable',
+            size: 'standard',
+            architecture_version: '2',
+            format: 'ir',
+            model_url: 'https://cdn.example.com/303.wav',
+          }],
+          total_pages: 1,
+        },
+      };
+    }
+    return {
+      status: 200,
+      body: {
+        data: [{
+          id: 300 + page,
+          tone_id: 43,
+          name: `NAM page ${page}`,
+          size: 'standard',
+          architecture_version: '1',
+          format: 'nam',
+          model_url: `https://cdn.example.com/${300 + page}.nam`,
+        }],
+        total_pages: 2,
+      },
+    };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  const progress: Array<{ completedPages: number; totalPages?: number }> = [];
+
+  const models = await makeClient(fetchFn, storage).listModels(
+    '43',
+    (next) => progress.push(next),
+  );
+
+  assert.deepEqual(models.map((model) => model.id), ['301', '302']);
+  assert.equal(progress.at(-1)?.completedPages, 3);
+  assert.equal(progress.at(-1)?.totalPages, 3);
+  assert.ok(progress.some((next) => next.completedPages < (next.totalPages ?? Infinity)));
+});
+
 test('getModelText: 双架构列表合并,优先 standard 尺寸(不分架构)', async () => {
   const { fetchFn } = mockFetch((req) => {
     if (req.url.includes('/api/v1/models?tone_id=') && !req.url.includes('architecture=2')) {

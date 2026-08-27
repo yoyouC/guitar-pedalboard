@@ -10,6 +10,7 @@ import { tone3000Rig, useTone3000Rig } from '../tone3000/useTone3000Rig';
 import type { ToneInfo } from '../tone3000/client';
 import { Tone3000Selector } from './Tone3000Selector';
 import { Tone3000Account, Tone3000ModelAttribution } from './Tone3000Display';
+import { tone3000ModelListProgressText } from '../tone3000/modelListProgressPresentation';
 
 /** TONE3000 箱头入口；与 NAM 单块共用选择器、精确变体与运行状态。 */
 export function Tone3000Panel() {
@@ -21,10 +22,13 @@ export function Tone3000Panel() {
   const modelId = useRig((state) => state.ampTone3000ModelId);
   const toneId = modelKey ? parseTone3000Key(modelKey) : null;
   const runtime = useTone3000Rig((state) => state.targets.amp);
-  const [selectorMode, setSelectorMode] = useState<'select' | 'repair' | 'sample' | null>(null);
+  const modelListProgress = useTone3000Rig((state) => state.modelListProgress);
+  const [selectorMode, setSelectorMode] = useState<
+    'select' | 'repair' | 'model-variant' | null
+  >(null);
   const [cachedInfo, setCachedInfo] = useState<ToneInfo | null>(null);
-  const [sampleBusy, setSampleBusy] = useState(false);
-  const [sampleError, setSampleError] = useState<string | null>(null);
+  const [modelVariantBusy, setModelVariantBusy] = useState(false);
+  const [modelVariantError, setModelVariantError] = useState<string | null>(null);
 
   useEffect(() => {
     setCachedInfo(toneId ? getCachedToneInfo(toneId, window.localStorage) : null);
@@ -40,17 +44,17 @@ export function Tone3000Panel() {
     await tone3000Rig.login();
   };
 
-  const openSampleSwitch = async () => {
-    setSampleBusy(true);
-    setSampleError(null);
+  const openModelVariantSwitch = async () => {
+    setModelVariantBusy(true);
+    setModelVariantError(null);
     try {
-      const result = await tone3000Rig.prepareAmpSampleSwitch();
+      const result = await tone3000Rig.prepareAmpModelVariantSwitch();
       if (!result.ok) throw new Error(result.message);
-      if (result.status === 'choose') setSelectorMode('sample');
+      if (result.status === 'choose') setSelectorMode('model-variant');
     } catch (cause) {
-      setSampleError(cause instanceof Error ? cause.message : String(cause));
+      setModelVariantError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setSampleBusy(false);
+      setModelVariantBusy(false);
     }
   };
 
@@ -62,10 +66,14 @@ export function Tone3000Panel() {
       {toneId && (
         <button
           className="tone3000-logout"
-          disabled={sampleBusy}
-          onClick={() => void openSampleSwitch()}
+          disabled={modelVariantBusy}
+          onClick={() => void openModelVariantSwitch()}
         >
-          {sampleBusy ? '正在加载采样…' : '切换采样…'}
+          {modelVariantBusy && modelListProgress?.toneId === toneId
+            ? tone3000ModelListProgressText(modelListProgress)
+            : modelVariantBusy
+              ? '正在加载采样…'
+              : '切换采样…'}
         </button>
       )}
       {!authenticated && (
@@ -97,17 +105,17 @@ export function Tone3000Panel() {
                 : '加载中…'}
           </span>
           {modelId && (
-            <span className="tone3000-sample-summary" title={`model #${modelId}`}>
-              {runtime?.sample?.name || `采样 #${modelId}`}
-              {runtime?.sample
-                ? ` · ${runtime.sample.architecture === 'custom' ? 'Custom' : `A${runtime.sample.architecture}`} · ${runtime.sample.size}`
+            <span className="tone3000-model-variant-summary" title={`model #${modelId}`}>
+              {runtime?.modelVariant?.name || `采样 #${modelId}`}
+              {runtime?.modelVariant
+                ? ` · ${runtime.modelVariant.architecture === 'custom' ? 'Custom' : `A${runtime.modelVariant.architecture}`} · ${runtime.modelVariant.size}`
                 : ''}
             </span>
           )}
         </div>
       )}
 
-      {sampleError && <div className="tone3000-notice" role="alert">{sampleError}</div>}
+      {modelVariantError && <div className="tone3000-notice" role="alert">{modelVariantError}</div>}
 
       {runtime?.phase === 'error' && (
         <div className="tone3000-notice" role="alert">

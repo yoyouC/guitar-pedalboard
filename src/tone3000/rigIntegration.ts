@@ -1,5 +1,10 @@
 import type { RigStore } from '../state/rigStore';
-import type { Tone3000ErrorReason, Tone3000ModelInfo, ToneInfo } from './client';
+import type {
+  Tone3000ErrorReason,
+  Tone3000ModelInfo,
+  Tone3000ModelListProgress,
+  ToneInfo,
+} from './client';
 import { buildTone3000Key, parseTone3000Key } from '../audio/namWasm';
 import {
   resolvePendingReplaceUid,
@@ -12,10 +17,10 @@ export type Tone3000TargetIntent =
   | { kind: 'add-pedal' }
   | { kind: 'replace-pedal'; uid: string };
 
-export type Tone3000SampleIntent =
+export type Tone3000ModelVariantIntent =
   | Tone3000PendingIntent
-  | { kind: 'switch-amp-sample' }
-  | { kind: 'switch-pedal-sample'; uid: string };
+  | { kind: 'switch-amp-model-variant' }
+  | { kind: 'switch-pedal-model-variant'; uid: string };
 
 export interface Tone3000HostedSelectionRequest {
   intent: Tone3000PendingIntent;
@@ -26,7 +31,10 @@ export interface Tone3000HostedSelectionRequest {
 
 export interface Tone3000RigPort {
   getTone(toneId: string): Promise<ToneInfo>;
-  listModels?(toneId: string): Promise<Tone3000ModelInfo[]>;
+  listModels?(
+    toneId: string,
+    onProgress?: (progress: Tone3000ModelListProgress) => void,
+  ): Promise<Tone3000ModelInfo[]>;
   getModelInfo?(toneId: string, modelId: string): Promise<Tone3000ModelInfo>;
   loadModelText(modelRef: string, modelId?: string): Promise<string>;
   selectTone?(
@@ -44,21 +52,22 @@ export interface Tone3000TargetState {
   toneId: string;
   modelId?: string;
   info?: ToneInfo;
-  sample?: Tone3000ModelInfo;
+  modelVariant?: Tone3000ModelInfo;
   reason?: Tone3000ErrorReason;
   message?: string;
 }
 
 export interface Tone3000RigIntegrationState {
   targets: Record<string, Tone3000TargetState>;
-  selection?: Tone3000SampleSelection;
+  selection?: Tone3000ModelVariantSelection;
+  modelListProgress?: Tone3000ModelListProgress & { toneId: string };
 }
 
-export interface Tone3000SampleSelection {
+export interface Tone3000ModelVariantSelection {
   toneId: string;
   preferredModelId?: string;
-  samples: Tone3000ModelInfo[];
-  intent: Tone3000SampleIntent;
+  modelVariants: Tone3000ModelInfo[];
+  intent: Tone3000ModelVariantIntent;
   currentModelId?: string;
   currentModelUnavailable: boolean;
   resumed?: boolean;
@@ -88,7 +97,7 @@ export interface Tone3000RigIntegration {
   prepareSelection(
     toneId: string,
     preferredModelId: string | undefined,
-    intent: Tone3000SampleIntent,
+    intent: Tone3000ModelVariantIntent,
     resumed?: boolean,
   ): Promise<Tone3000PrepareSelectionResult>;
   prepareRedirectSelection(
@@ -96,14 +105,14 @@ export interface Tone3000RigIntegration {
     preferredModelId: string | undefined,
     intent: Tone3000PendingIntent | null,
   ): Promise<Tone3000PrepareSelectionResult>;
-  prepareAmpSampleSwitch(): Promise<Tone3000PrepareSelectionResult>;
-  preparePedalSampleSwitch(uid: string): Promise<Tone3000PrepareSelectionResult>;
+  prepareAmpModelVariantSwitch(): Promise<Tone3000PrepareSelectionResult>;
+  preparePedalModelVariantSwitch(uid: string): Promise<Tone3000PrepareSelectionResult>;
   confirmSelection(modelId: string): Promise<Tone3000RigResult>;
   cancelSelection(): void;
   applySelection(
     toneId: string,
     modelId: string | undefined,
-    intent: Tone3000SampleIntent | null,
+    intent: Tone3000ModelVariantIntent | null,
   ): Promise<Tone3000RigResult>;
   login(): Promise<boolean>;
   restoreAll(): Promise<void>;
@@ -151,18 +160,79 @@ export function createTone3000RigIntegration({
     state = { ...state, targets: { ...state.targets, [key]: target } };
     emit();
   };
-  const setSelection = (selection?: Tone3000SampleSelection) => {
+  const setSelection = (selection?: Tone3000ModelVariantSelection) => {
     state = { ...state, ...(selection ? { selection } : { selection: undefined }) };
     emit();
   };
-  const attachSample = (result: Tone3000RigResult, sample: Tone3000ModelInfo) => {
+  const setModelListProgress = (
+    progress?: Tone3000ModelListProgress & { toneId: string },
+  ) => {
+    state = {
+      ...state,
+      ...(progress ? { modelListProgress: progress } : { modelListProgress: undefined }),
+    };
+    emit();
+  };
+  const attachModelVariant = (
+    result: Tone3000RigResult,
+    modelVariant: Tone3000ModelInfo,
+  ) => {
     if (!result.ok) return;
     const key = result.uid === 'amp' ? 'amp' : `pedal:${result.uid}`;
     const target = state.targets[key];
-    if (target) setTarget(key, { ...target, sample });
+    if (target) setTarget(key, { ...target, modelVariant });
   };
   const requestGenerations = new Map<string, number>();
   let selectionGeneration = 0;
+  const modelListSessions = new Map<
+    string,
+    {
+      promise: Promise<Tone3000ModelInfo[]>;
+      listeners: Set<(progress: Tone3000ModelListProgress) => void>;
+      progress?: Tone3000ModelListProgress;
+    }
+  >();
+  const clearModelListSessions = () => {
+    for (const session of modelListSessions.values()) session.listeners.clear();
+    modelListSessions.clear();
+  };
+  const releaseModelListSession = (toneId: string) => {
+    const session = modelListSessions.get(toneId);
+    session?.listeners.clear();
+    modelListSessions.delete(toneId);
+  };
+  const listModelVariants = (
+    toneId: string,
+    onProgress: (progress: Tone3000ModelListProgress) => void,
+  ): Promise<Tone3000ModelInfo[]> => {
+    for (const activeToneId of modelListSessions.keys()) {
+      if (activeToneId !== toneId) releaseModelListSession(activeToneId);
+    }
+    let session = modelListSessions.get(toneId);
+    if (!session) {
+      let resolve!: (modelVariants: Tone3000ModelInfo[]) => void;
+      let reject!: (error: unknown) => void;
+      session = {
+        promise: new Promise<Tone3000ModelInfo[]>((yes, no) => {
+          resolve = yes;
+          reject = no;
+        }),
+        listeners: new Set(),
+      };
+      session.listeners.add(onProgress);
+      modelListSessions.set(toneId, session);
+      void port.listModels!(toneId, (progress) => {
+        const currentSession = modelListSessions.get(toneId);
+        if (currentSession !== session) return;
+        session!.progress = progress;
+        for (const listener of session!.listeners) listener(progress);
+      }).then(resolve, reject);
+    } else {
+      session.listeners.add(onProgress);
+      if (session.progress) onProgress(session.progress);
+    }
+    return session.promise.finally(() => session!.listeners.delete(onProgress));
+  };
   const beginRequest = (key: string) => {
     const generation = (requestGenerations.get(key) ?? 0) + 1;
     requestGenerations.set(key, generation);
@@ -209,6 +279,48 @@ export function createTone3000RigIntegration({
     return item?.modelRef === modelRef && item.modelId === modelId;
   };
 
+  const switchModelVariant = async ({
+    key,
+    toneId,
+    modelRef,
+    modelId,
+    uid,
+    isCandidateStillCurrent,
+    commit,
+    staleMessage,
+  }: {
+    key: string;
+    toneId: string;
+    modelRef: string;
+    modelId: string;
+    uid: string;
+    isCandidateStillCurrent(): boolean;
+    commit(): boolean;
+    staleMessage: string;
+  }): Promise<Tone3000RigResult> => {
+    const generation = beginRequest(key);
+    try {
+      await loadModelText(modelRef, modelId);
+      if (
+        !isLatestRequest(key, generation) ||
+        !isCandidateStillCurrent() ||
+        !commit()
+      ) {
+        return { ok: false, reason: 'tone-unavailable', message: staleMessage };
+      }
+      const info = await port.getTone(toneId).catch(() => undefined);
+      setTarget(key, {
+        phase: 'ready',
+        toneId,
+        modelId,
+        ...(info ? { info } : {}),
+      });
+      return { ok: true, uid };
+    } catch (error) {
+      return { ok: false, ...failure(error) };
+    }
+  };
+
   const loadCurrentTarget = async (
     key: string,
     toneId: string,
@@ -224,7 +336,7 @@ export function createTone3000RigIntegration({
         ? rig.reloadTone3000Pedal(key.slice('pedal:'.length))
         : rig.reloadTone3000Amp(modelRef, modelId);
       if (!stillCurrent) return;
-      const [info, sample] = await Promise.all([
+      const [info, modelVariant] = await Promise.all([
         port.getTone(toneId).catch(() => undefined),
         modelId && port.getModelInfo
           ? port.getModelInfo(toneId, modelId).catch(() => undefined)
@@ -236,7 +348,7 @@ export function createTone3000RigIntegration({
         toneId,
         ...(modelId ? { modelId } : {}),
         ...(info ? { info } : {}),
-        ...(sample ? { sample } : {}),
+        ...(modelVariant ? { modelVariant } : {}),
       });
     } catch (error) {
       if (!isLatestRequest(key, generation) || !isCurrentTarget(key, modelRef, modelId)) return;
@@ -446,6 +558,20 @@ export function createTone3000RigIntegration({
       }
       const generation = ++selectionGeneration;
       try {
+        const expectedGear =
+          intent.kind === 'switch-amp-model-variant'
+            ? 'amp'
+            : intent.kind === 'switch-pedal-model-variant'
+              ? 'pedal'
+              : tone3000GearForIntent(intent);
+        const tone = await port.getTone(toneId);
+        if (tone.gear !== expectedGear || tone.format !== 'nam') {
+          return {
+            ok: false,
+            reason: 'tone-unavailable',
+            message: `所选 TONE3000 tone 不是 NAM ${expectedGear} capture`,
+          };
+        }
         const architectureOrder: Record<Tone3000ModelInfo['architecture'], number> = {
           '2': 0,
           '1': 1,
@@ -454,20 +580,30 @@ export function createTone3000RigIntegration({
         const current = rig.getState();
         const currentModelId = (() => {
           if (
-            intent.kind === 'switch-amp-sample' &&
+            (intent.kind === 'switch-amp-model-variant' || intent.kind === 'amp') &&
             current.ampCategoryId === 'tone3000' &&
             current.ampModelKeys.tone3000 === buildTone3000Key(toneId)
           ) {
             return current.ampTone3000ModelId ?? undefined;
           }
-          if (intent.kind === 'switch-pedal-sample') {
+          if (intent.kind === 'switch-pedal-model-variant') {
             const item = current.chain.find((candidate) => candidate.uid === intent.uid);
+            return item?.modelRef === buildTone3000Key(toneId) ? item.modelId : undefined;
+          }
+          if (intent.kind === 'replace-pedal') {
+            const uid = resolvePendingReplaceUid(intent, current.chain) ?? intent.uid;
+            const item = current.chain.find((candidate) => candidate.uid === uid);
             return item?.modelRef === buildTone3000Key(toneId) ? item.modelId : undefined;
           }
           return undefined;
         })();
-        const firstModelId = currentModelId ?? preferredModelId;
-        const listedSamples = await port.listModels(toneId);
+        const prioritizedModelId = currentModelId ?? preferredModelId;
+        setModelListProgress({ toneId, completedPages: 0 });
+        const listedModelVariants = await listModelVariants(toneId, (progress) => {
+          if (generation === selectionGeneration) {
+            setModelListProgress({ toneId, ...progress });
+          }
+        });
         if (generation !== selectionGeneration) {
           return {
             ok: false,
@@ -475,11 +611,11 @@ export function createTone3000RigIntegration({
             message: '采样列表请求已被更新',
           };
         }
-        const samples = listedSamples
-          .filter((sample) => sample.toneId === toneId && /^\d+$/.test(sample.id))
+        const modelVariants = listedModelVariants
+          .filter((modelVariant) => modelVariant.toneId === toneId && /^\d+$/.test(modelVariant.id))
           .sort((left, right) => {
-            if (left.id === firstModelId) return -1;
-            if (right.id === firstModelId) return 1;
+            if (left.id === prioritizedModelId) return -1;
+            if (right.id === prioritizedModelId) return 1;
             return (
               architectureOrder[left.architecture] - architectureOrder[right.architecture] ||
               left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' }) ||
@@ -487,31 +623,39 @@ export function createTone3000RigIntegration({
               Number(left.id) - Number(right.id)
             );
           });
-        if (samples.length === 0) {
+        setModelListProgress(undefined);
+        if (modelVariants.length === 0) {
+          releaseModelListSession(toneId);
           return {
             ok: false,
             reason: 'tone-unavailable',
             message: '此 TONE3000 Tone 没有兼容采样',
           };
         }
-        if (samples.length === 1) {
+        const currentModelUnavailable =
+          currentModelId !== undefined && !modelVariants.some((modelVariant) => modelVariant.id === currentModelId);
+        if (modelVariants.length === 1 && !currentModelUnavailable) {
+          releaseModelListSession(toneId);
           setSelection(undefined);
-          const result = await integration.applySelection(toneId, samples[0].id, intent);
-          attachSample(result, samples[0]);
+          const result = await integration.applySelection(toneId, modelVariants[0].id, intent);
+          attachModelVariant(result, modelVariants[0]);
           return result.ok ? { ok: true, status: 'applied', result } : result;
         }
         setSelection({
           toneId,
           ...(preferredModelId ? { preferredModelId } : {}),
-          samples,
+          modelVariants,
           intent,
           ...(currentModelId ? { currentModelId } : {}),
-          currentModelUnavailable:
-            currentModelId !== undefined && !samples.some((sample) => sample.id === currentModelId),
+          currentModelUnavailable,
           ...(resumed ? { resumed: true } : {}),
         });
         return { ok: true, status: 'choose' };
       } catch (error) {
+        if (generation === selectionGeneration) {
+          releaseModelListSession(toneId);
+          setModelListProgress(undefined);
+        }
         return { ok: false, ...failure(error) };
       }
     },
@@ -523,7 +667,7 @@ export function createTone3000RigIntegration({
         true,
       );
     },
-    async prepareAmpSampleSwitch() {
+    async prepareAmpModelVariantSwitch() {
       const current = rig.getState();
       const modelRef = current.ampModelKeys[current.ampCategoryId];
       const toneId =
@@ -540,10 +684,10 @@ export function createTone3000RigIntegration({
       return integration.prepareSelection(
         toneId,
         current.ampTone3000ModelId ?? undefined,
-        { kind: 'switch-amp-sample' },
+        { kind: 'switch-amp-model-variant' },
       );
     },
-    async preparePedalSampleSwitch(uid) {
+    async preparePedalModelVariantSwitch(uid) {
       const item = rig.getState().chain.find((candidate) => candidate.uid === uid);
       const toneId = item?.modelRef ? parseTone3000Key(item.modelRef) : null;
       if (toneId === null) {
@@ -554,13 +698,13 @@ export function createTone3000RigIntegration({
         };
       }
       return integration.prepareSelection(toneId, item?.modelId, {
-        kind: 'switch-pedal-sample',
+        kind: 'switch-pedal-model-variant',
         uid,
       });
     },
     async confirmSelection(modelId) {
       const selection = state.selection;
-      if (!selection || !selection.samples.some((sample) => sample.id === modelId)) {
+      if (!selection || !selection.modelVariants.some((modelVariant) => modelVariant.id === modelId)) {
         return {
           ok: false,
           reason: 'tone-unavailable',
@@ -573,13 +717,19 @@ export function createTone3000RigIntegration({
         selection.intent,
       );
       if (result.ok) {
-        attachSample(result, selection.samples.find((sample) => sample.id === modelId)!);
+        attachModelVariant(
+          result,
+          selection.modelVariants.find((modelVariant) => modelVariant.id === modelId)!,
+        );
+        clearModelListSessions();
         setSelection(undefined);
       }
       return result;
     },
     cancelSelection() {
       selectionGeneration += 1;
+      clearModelListSessions();
+      setModelListProgress(undefined);
       setSelection(undefined);
     },
     async selectHosted(targetIntent, architecture, loadToneId, resumed = false) {
@@ -615,7 +765,7 @@ export function createTone3000RigIntegration({
     },
     async applySelection(toneId, modelId, intent) {
       let result: Tone3000RigResult;
-      if (intent?.kind === 'switch-amp-sample') {
+      if (intent?.kind === 'switch-amp-model-variant') {
         if (!modelId) {
           return { ok: false, reason: 'tone-unavailable', message: '切换采样需要精确 model id' };
         }
@@ -628,31 +778,24 @@ export function createTone3000RigIntegration({
         ) {
           return { ok: false, reason: 'tone-unavailable', message: '当前箱头 Tone 已改变' };
         }
-        const generation = beginRequest('amp');
-        try {
-          await loadModelText(modelRef, modelId);
-          const latest = rig.getState();
-          if (
-            !isLatestRequest('amp', generation) ||
-            latest.ampCategoryId !== 'tone3000' ||
-            latest.ampModelKeys.tone3000 !== modelRef ||
-            (latest.ampTone3000ModelId ?? undefined) !== previousModelId ||
-            !rig.reloadTone3000Amp(modelRef, modelId)
-          ) {
-            return { ok: false, reason: 'tone-unavailable', message: '箱头采样切换请求已被更新' };
-          }
-          const info = await port.getTone(toneId).catch(() => undefined);
-          setTarget('amp', {
-            phase: 'ready',
-            toneId,
-            modelId,
-            ...(info ? { info } : {}),
-          });
-          result = { ok: true, uid: 'amp' };
-        } catch (error) {
-          result = { ok: false, ...failure(error) };
-        }
-      } else if (intent?.kind === 'switch-pedal-sample') {
+        result = await switchModelVariant({
+          key: 'amp',
+          toneId,
+          modelRef,
+          modelId,
+          uid: 'amp',
+          isCandidateStillCurrent: () => {
+            const latest = rig.getState();
+            return (
+              latest.ampCategoryId === 'tone3000' &&
+              latest.ampModelKeys.tone3000 === modelRef &&
+              (latest.ampTone3000ModelId ?? undefined) === previousModelId
+            );
+          },
+          commit: () => rig.reloadTone3000Amp(modelRef, modelId),
+          staleMessage: '箱头采样切换请求已被更新',
+        });
+      } else if (intent?.kind === 'switch-pedal-model-variant') {
         if (!modelId) {
           return { ok: false, reason: 'tone-unavailable', message: '切换采样需要精确 model id' };
         }
@@ -665,31 +808,21 @@ export function createTone3000RigIntegration({
         }
         const previousModelId = currentItem.modelId;
         const key = `pedal:${intent.uid}`;
-        const generation = beginRequest(key);
-        try {
-          await loadModelText(modelRef, modelId);
-          const latest = rig
-            .getState()
-            .chain.find((candidate) => candidate.uid === intent.uid);
-          if (
-            !isLatestRequest(key, generation) ||
-            latest?.modelRef !== modelRef ||
-            latest.modelId !== previousModelId ||
-            !rig.replaceTone3000Pedal(intent.uid, modelRef, modelId)
-          ) {
-            return { ok: false, reason: 'tone-unavailable', message: '单块采样切换请求已被更新' };
-          }
-          const info = await port.getTone(toneId).catch(() => undefined);
-          setTarget(key, {
-            phase: 'ready',
-            toneId,
-            modelId,
-            ...(info ? { info } : {}),
-          });
-          result = { ok: true, uid: intent.uid };
-        } catch (error) {
-          result = { ok: false, ...failure(error) };
-        }
+        result = await switchModelVariant({
+          key,
+          toneId,
+          modelRef,
+          modelId,
+          uid: intent.uid,
+          isCandidateStillCurrent: () => {
+            const latest = rig
+              .getState()
+              .chain.find((candidate) => candidate.uid === intent.uid);
+            return latest?.modelRef === modelRef && latest.modelId === previousModelId;
+          },
+          commit: () => rig.replaceTone3000Pedal(intent.uid, modelRef, modelId),
+          staleMessage: '单块采样切换请求已被更新',
+        });
       } else if (intent?.kind === 'add-pedal') {
         result = await integration.addPedal(toneId, modelId);
       } else if (intent?.kind === 'replace-pedal') {
@@ -715,6 +848,8 @@ export function createTone3000RigIntegration({
     logout() {
       port.logout?.();
       port.clearModelCache?.();
+      clearModelListSessions();
+      setModelListProgress(undefined);
       setSelection(undefined);
     },
   };
