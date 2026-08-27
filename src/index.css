@@ -2690,6 +2690,120 @@ body.midi-learn-mode input:disabled {
   margin: 12px 0;
 }
 
+.tone3000-sample-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.tone3000-sample-heading h3 {
+  margin: 0;
+}
+
+.tone3000-sample-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tone3000-sample-filters select {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  background: #292f36;
+  color: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.tone3000-sample-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(420px, 50vh);
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.tone3000-sample-group h4 {
+  margin: 0 0 5px;
+  color: #9fc8ee;
+  font-size: 12px;
+}
+
+.tone3000-sample-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 4px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+  cursor: pointer;
+}
+
+.tone3000-sample-item:hover,
+.tone3000-sample-item.active {
+  border-color: #7fb3e8;
+  background: rgba(127, 179, 232, 0.1);
+}
+
+.tone3000-sample-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.tone3000-sample-copy strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.tone3000-sample-copy span,
+.tone3000-sample-summary {
+  font-size: 10px;
+  opacity: 0.72;
+}
+
+.tone3000-sample-current {
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: rgba(128, 217, 155, 0.16);
+  color: #80d99b;
+  font-size: 10px;
+}
+
+.tone3000-sample-unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px dashed rgba(255, 189, 106, 0.55);
+  border-radius: 6px;
+  color: #ffbd6a;
+  font-size: 11px;
+}
+
+.tone3000-sample-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+@media (max-width: 620px) {
+  .tone3000-sample-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
 .tone3000-pedal-meta {
   width: 100%;
   display: flex;

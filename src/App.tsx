@@ -31,6 +31,7 @@ import { PrismBackground } from './components/PrismBackground';
 import { MeddleBackground } from './components/MeddleBackground';
 import { YouTubeBackground } from './components/YouTubeBackground';
 import { RigFooter } from './components/RigFooter';
+import { Tone3000RedirectSelection } from './components/Tone3000RedirectSelection';
 import { Analytics } from '@vercel/analytics/react';
 import type { AudioDiagnosticsSnapshot } from './audio/audioDiagnostics';
 
@@ -422,6 +423,7 @@ export default function App() {
       />}
 
       <RigFooter inputType={inputType} />
+      <Tone3000RedirectSelection />
     </div>
   );
 }

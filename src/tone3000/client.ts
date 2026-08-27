@@ -73,6 +73,10 @@ export interface Tone3000Client {
    * → Bearer 下载。未登录抛 not-authenticated;tone 失效抛 tone-unavailable。
    */
   getModelText(toneId: string, modelId?: string): Promise<string>;
+  /** 列出 tone 下全部兼容 NAM 模型变体；仅返回身份/展示字段，不下载模型。 */
+  listModels(toneId: string): Promise<Tone3000ModelInfo[]>;
+  /** 获取一个精确模型的身份/展示字段；与精确下载共享本次会话元数据。 */
+  getModelInfo(toneId: string, modelId: string): Promise<Tone3000ModelInfo>;
   /** 获取 tone 元数据(归属展示:标题/作者/许可/链接,ToS 要求展示) */
   getTone(toneId: string): Promise<ToneInfo>;
   /** trending/latest 有限列表(免费层条款允许的有界端点;需登录态) */
@@ -113,6 +117,16 @@ export interface ToneInfo {
   format?: string;
   imageUrl?: string;
   avatarUrl?: string;
+}
+
+export type Tone3000ModelArchitecture = '1' | '2' | 'custom';
+
+export interface Tone3000ModelInfo {
+  id: string;
+  toneId: string;
+  name: string;
+  size: string;
+  architecture: Tone3000ModelArchitecture;
 }
 
 // ---------- PKCE ----------
@@ -308,9 +322,85 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     id: number;
     tone_id?: number;
     model_url: string;
+    name?: string;
     size: string;
-    architecture_version: '1' | '2' | 'custom';
+    architecture_version: Tone3000ModelArchitecture;
     format?: string;
+  }
+
+  interface ApiModelPage {
+    data?: ApiModel[];
+    page?: number;
+    total_pages?: number;
+  }
+
+  async function listModelPages(
+    toneId: string,
+    architecture?: '2',
+  ): Promise<ApiModel[]> {
+    const models: ApiModel[] = [];
+    let page = 1;
+    while (true) {
+      const params = new URLSearchParams({ tone_id: toneId, page: String(page), page_size: '100' });
+      if (architecture) params.set('architecture', architecture);
+      const res = await apiFetch(`/api/v1/models?${params}`);
+      if (res.status === 404 || res.status === 403) {
+        throw new Tone3000Error(
+          'tone-unavailable',
+          `tone ${toneId} 不可访问(已删除/转私有)`,
+          res.status,
+        );
+      }
+      if (!res.ok) {
+        throw new Tone3000Error('http', `模型列表获取失败 HTTP ${res.status}`, res.status);
+      }
+      const payload = (await res.json()) as ApiModelPage;
+      models.push(...(Array.isArray(payload.data) ? payload.data : []));
+      const totalPages =
+        Number.isInteger(payload.total_pages) && (payload.total_pages ?? 0) > 0
+          ? payload.total_pages!
+          : 1;
+      if (page >= totalPages) break;
+      page += 1;
+    }
+    return models;
+  }
+
+  async function listModels(toneId: string): Promise<Tone3000ModelInfo[]> {
+    if (!/^\d+$/.test(toneId)) {
+      throw new Tone3000Error('tone-unavailable', `tone ${toneId} 格式无效`);
+    }
+    const [legacy, a2] = await Promise.all([
+      listModelPages(toneId),
+      listModelPages(toneId, '2'),
+    ]);
+    const unique = new Map<string, Tone3000ModelInfo>();
+    for (const model of [...legacy, ...a2]) {
+      const info = modelInfo(model, toneId);
+      if (info) unique.set(info.id, info);
+    }
+    return [...unique.values()];
+  }
+
+  function modelInfo(model: ApiModel, toneId: string): Tone3000ModelInfo | null {
+    const id = String(model.id);
+    const modelToneId = String(model.tone_id ?? toneId);
+    if (
+      !/^\d+$/.test(id) ||
+      modelToneId !== toneId ||
+      !['1', '2', 'custom'].includes(model.architecture_version) ||
+      typeof model.size !== 'string' ||
+      !model.size
+    ) {
+      return null;
+    }
+    return {
+      id,
+      toneId,
+      name: typeof model.name === 'string' ? model.name.trim() : '',
+      size: model.size,
+      architecture: model.architecture_version,
+    };
   }
 
   /** 选装载目标:优先 standard 尺寸,否则列表第一个(A1/Custom/A2 均支持) */
@@ -341,7 +431,12 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     return [...a1, ...a2];
   }
 
+  const exactModelInfo = new Map<string, ApiModel>();
+
   async function getExactModel(toneId: string, modelId: string): Promise<ApiModel> {
+    const cacheKey = `${toneId}:${modelId}`;
+    const cached = exactModelInfo.get(cacheKey);
+    if (cached) return cached;
     const res = await apiFetch(`/api/v1/models/${encodeURIComponent(modelId)}`);
     if (res.status === 404 || res.status === 403) {
       throw new Tone3000Error('tone-unavailable', `model ${modelId} 不可访问`, res.status);
@@ -357,7 +452,19 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     ) {
       throw new Tone3000Error('tone-unavailable', `model ${modelId} 与 tone ${toneId} 不兼容`);
     }
+    exactModelInfo.set(cacheKey, model);
     return model;
+  }
+
+  async function getModelInfo(toneId: string, modelId: string): Promise<Tone3000ModelInfo> {
+    if (!/^\d+$/.test(toneId) || !/^\d+$/.test(modelId)) {
+      throw new Tone3000Error('tone-unavailable', 'TONE3000 tone/model id 格式无效');
+    }
+    const info = modelInfo(await getExactModel(toneId, modelId), toneId);
+    if (!info) {
+      throw new Tone3000Error('tone-unavailable', `model ${modelId} 与 tone ${toneId} 不兼容`);
+    }
+    return info;
   }
 
   async function getModelText(toneId: string, modelId?: string): Promise<string> {
@@ -454,9 +561,14 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     buildAuthorizeUrl,
     handleCallback,
     isAuthenticated: () => getTokens() !== null,
-    logout: clearTokens,
+    logout: () => {
+      clearTokens();
+      exactModelInfo.clear();
+    },
     getCurrentUser,
     getModelText,
+    listModels,
+    getModelInfo,
     getTone,
     listTones,
   };

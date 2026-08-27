@@ -4,7 +4,6 @@ import { parseTone3000Key } from '../audio/namWasm';
 import {
   getTone3000Authenticated,
   subscribeTone3000Auth,
-  type Tone3000Selection,
 } from '../tone3000/instance';
 import { getCachedToneInfo, putCachedToneInfo } from '../tone3000/toneInfoCache';
 import { tone3000Rig, useTone3000Rig } from '../tone3000/useTone3000Rig';
@@ -19,10 +18,13 @@ export function Tone3000Panel() {
     getTone3000Authenticated,
   );
   const modelKey = useRig((state) => state.ampModelKeys[state.ampCategoryId]);
+  const modelId = useRig((state) => state.ampTone3000ModelId);
   const toneId = modelKey ? parseTone3000Key(modelKey) : null;
   const runtime = useTone3000Rig((state) => state.targets.amp);
-  const [selectorMode, setSelectorMode] = useState<'select' | 'repair' | null>(null);
+  const [selectorMode, setSelectorMode] = useState<'select' | 'repair' | 'sample' | null>(null);
   const [cachedInfo, setCachedInfo] = useState<ToneInfo | null>(null);
+  const [sampleBusy, setSampleBusy] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
 
   useEffect(() => {
     setCachedInfo(toneId ? getCachedToneInfo(toneId, window.localStorage) : null);
@@ -38,11 +40,34 @@ export function Tone3000Panel() {
     await tone3000Rig.login();
   };
 
+  const openSampleSwitch = async () => {
+    setSampleBusy(true);
+    setSampleError(null);
+    try {
+      const result = await tone3000Rig.prepareAmpSampleSwitch();
+      if (!result.ok) throw new Error(result.message);
+      if (result.status === 'choose') setSelectorMode('sample');
+    } catch (cause) {
+      setSampleError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setSampleBusy(false);
+    }
+  };
+
   return (
     <div className="tone3000-panel">
       <button className="nam-load-btn" onClick={() => setSelectorMode('select')}>
-        {toneId ? '更换 TONE3000 箱头…' : '浏览 TONE3000 箱头…'}
+        {toneId ? '更换 Tone…' : '浏览 TONE3000 箱头…'}
       </button>
+      {toneId && (
+        <button
+          className="tone3000-logout"
+          disabled={sampleBusy}
+          onClick={() => void openSampleSwitch()}
+        >
+          {sampleBusy ? '正在加载采样…' : '切换采样…'}
+        </button>
+      )}
       {!authenticated && (
         <button className="tone3000-logout" onClick={() => void loginAndRetry()}>
           登录
@@ -71,8 +96,18 @@ export function Tone3000Panel() {
                 ? runtime.message ?? '模型不可用'
                 : '加载中…'}
           </span>
+          {modelId && (
+            <span className="tone3000-sample-summary" title={`model #${modelId}`}>
+              {runtime?.sample?.name || `采样 #${modelId}`}
+              {runtime?.sample
+                ? ` · ${runtime.sample.architecture === 'custom' ? 'Custom' : `A${runtime.sample.architecture}`} · ${runtime.sample.size}`
+                : ''}
+            </span>
+          )}
         </div>
       )}
+
+      {sampleError && <div className="tone3000-notice" role="alert">{sampleError}</div>}
 
       {runtime?.phase === 'error' && (
         <div className="tone3000-notice" role="alert">
@@ -99,12 +134,6 @@ export function Tone3000Panel() {
           currentToneId={toneId}
           loadToneId={selectorMode === 'repair' ? toneId ?? undefined : undefined}
           onClose={() => setSelectorMode(null)}
-          onSelect={async (selection: Tone3000Selection, info?: ToneInfo) => {
-            if (info) putCachedToneInfo(info, window.localStorage);
-            const result = await tone3000Rig.selectAmp(selection.toneId, selection.modelId);
-            if (!result.ok) throw new Error(result.message);
-            setSelectorMode(null);
-          }}
         />
       )}
     </div>

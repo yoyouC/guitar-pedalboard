@@ -276,6 +276,36 @@ test('restoreAll isolates failures and retryAll recovers every current Tone3000 
   assert.equal(rig.getState().ampValues.gain, 33);
 });
 
+test('restoreAll projects exact sample metadata for the current Amp summary', async () => {
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: 'Restored Amp', username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'amp', format: 'nam',
+    }),
+    getModelInfo: async (toneId, modelId) => ({
+      id: modelId,
+      toneId,
+      name: 'Restored Drive',
+      size: 'feather',
+      architecture: '2',
+    }),
+    loadModelText: async () => '{}',
+  };
+  const rig = createRigStore(stubEngine());
+  rig.setAmpModel('tone3000', 'tone3000:64', '6402');
+  const integration = createTone3000RigIntegration({ rig, port });
+
+  await integration.restoreAll();
+
+  assert.deepEqual(integration.getState().targets.amp?.sample, {
+    id: '6402',
+    toneId: '64',
+    name: 'Restored Drive',
+    size: 'feather',
+    architecture: '2',
+  });
+});
+
 test('restoreAll limits concurrent model downloads to two', async () => {
   let active = 0;
   let peak = 0;
@@ -373,13 +403,213 @@ test('selectAmp accepts only Amp gear and retains exact modelId', async () => {
   assert.equal(rig.getState().ampTone3000ModelId, '301');
 });
 
-test('selectHosted owns OAuth gear/architecture intent and applies the returned selection', async () => {
+test('prepareSelection keeps a multi-sample tone pending with hosted model preselected', async () => {
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: 'Multi capture', username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'amp', format: 'nam',
+    }),
+    listModels: async () => [
+      { id: '4203', toneId: '42', name: 'Crunch 10', size: 'lite', architecture: '2' },
+      { id: '4201', toneId: '42', name: 'Clean', size: 'standard', architecture: '1' },
+      { id: '4202', toneId: '42', name: 'Crunch 2', size: 'standard', architecture: '2' },
+    ],
+    loadModelText: async () => {
+      throw new Error('选择确认前不得下载模型');
+    },
+  };
+  const rig = createRigStore(stubEngine());
+  const integration = createTone3000RigIntegration({ rig, port });
+
+  const result = await integration.prepareSelection(
+    '42',
+    '4202',
+    { kind: 'amp', architecture: '2' },
+  );
+
+  assert.deepEqual(result, { ok: true, status: 'choose' });
+  assert.deepEqual(integration.getState().selection, {
+    toneId: '42',
+    preferredModelId: '4202',
+    samples: [
+      { id: '4202', toneId: '42', name: 'Crunch 2', size: 'standard', architecture: '2' },
+      { id: '4203', toneId: '42', name: 'Crunch 10', size: 'lite', architecture: '2' },
+      { id: '4201', toneId: '42', name: 'Clean', size: 'standard', architecture: '1' },
+    ],
+    intent: { kind: 'amp', architecture: '2' },
+    currentModelUnavailable: false,
+  });
+  assert.equal(rig.getState().ampCategoryId, 'crunch');
+});
+
+test('prepareSelection ignores a sample list that finishes after a newer tone choice', async () => {
+  const lists = new Map<string, ReturnType<typeof deferred<Awaited<ReturnType<NonNullable<Tone3000RigPort['listModels']>>>>>>();
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: `Tone ${toneId}`, username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'amp', format: 'nam',
+    }),
+    listModels: async (toneId) => {
+      const list = deferred<Awaited<ReturnType<NonNullable<Tone3000RigPort['listModels']>>>>();
+      lists.set(toneId, list);
+      return list.promise;
+    },
+    loadModelText: async () => '{}',
+  };
+  const integration = createTone3000RigIntegration({ rig: createRigStore(stubEngine()), port });
+  const older = integration.prepareSelection('51', undefined, { kind: 'amp', architecture: '2' });
+  const newer = integration.prepareSelection('52', undefined, { kind: 'amp', architecture: '2' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  lists.get('52')!.resolve([
+    { id: '5201', toneId: '52', name: 'A', size: 'standard', architecture: '2' },
+    { id: '5202', toneId: '52', name: 'B', size: 'lite', architecture: '2' },
+  ]);
+  assert.deepEqual(await newer, { ok: true, status: 'choose' });
+  lists.get('51')!.resolve([
+    { id: '5101', toneId: '51', name: 'A', size: 'standard', architecture: '2' },
+    { id: '5102', toneId: '51', name: 'B', size: 'lite', architecture: '2' },
+  ]);
+  assert.equal((await older).ok, false);
+  assert.equal(integration.getState().selection?.toneId, '52');
+});
+
+test('prepareSelection applies the only sample with its exact modelId', async () => {
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: 'Only capture', username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'pedal', format: 'nam',
+    }),
+    listModels: async () => [
+      { id: '4301', toneId: '43', name: 'Only', size: 'standard', architecture: '2' },
+    ],
+    loadModelText: async (_modelRef, modelId) => {
+      assert.equal(modelId, '4301');
+      return '{}';
+    },
+  };
+  const rig = createRigStore(stubEngine());
+  const integration = createTone3000RigIntegration({ rig, port });
+
+  const result = await integration.prepareSelection(
+    '43',
+    undefined,
+    { kind: 'add-pedal', architecture: '2' },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.status, 'applied');
+  const item = rig.getState().chain.find((candidate) => candidate.modelRef === 'tone3000:43');
+  assert.equal(item?.modelId, '4301');
+  assert.equal(integration.getState().selection, undefined);
+});
+
+test('confirmSelection applies an offered sample and clears the pending choice', async () => {
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: 'Amp pack', username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'amp', format: 'nam',
+    }),
+    listModels: async () => [
+      { id: '4401', toneId: '44', name: 'Clean', size: 'standard', architecture: '1' },
+      { id: '4402', toneId: '44', name: 'Drive', size: 'standard', architecture: '2' },
+    ],
+    loadModelText: async (_modelRef, modelId) => {
+      assert.equal(modelId, '4401');
+      return '{}';
+    },
+  };
+  const rig = createRigStore(stubEngine());
+  const integration = createTone3000RigIntegration({ rig, port });
+  await integration.prepareSelection('44', '4402', { kind: 'amp', architecture: '2' });
+
+  const result = await integration.confirmSelection('4401');
+
+  assert.deepEqual(result, { ok: true, uid: 'amp' });
+  assert.equal(rig.getState().ampModelKeys.tone3000, 'tone3000:44');
+  assert.equal(rig.getState().ampTone3000ModelId, '4401');
+  assert.equal(integration.getState().selection, undefined);
+});
+
+test('Amp sample switch keeps the current tone and Amp parameters until exact download succeeds', async () => {
+  const model = deferred<string>();
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: 'Amp pack', username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'amp', format: 'nam',
+    }),
+    listModels: async () => [
+      { id: '4502', toneId: '45', name: 'Drive', size: 'standard', architecture: '2' },
+      { id: '4501', toneId: '45', name: 'Clean', size: 'standard', architecture: '2' },
+    ],
+    loadModelText: async (_modelRef, modelId) => {
+      assert.equal(modelId, '4502');
+      return model.promise;
+    },
+  };
+  const rig = createRigStore(stubEngine());
+  rig.setAmpModel('tone3000', 'tone3000:45', '4501');
+  rig.setAmpParam('gain', 77);
+  const integration = createTone3000RigIntegration({ rig, port });
+
+  assert.deepEqual(await integration.prepareAmpSampleSwitch(), { ok: true, status: 'choose' });
+  assert.equal(integration.getState().selection?.samples[0].id, '4501', '当前采样置顶');
+  const switching = integration.confirmSelection('4502');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(rig.getState().ampTone3000ModelId, '4501');
+  assert.equal(rig.getState().ampValues.gain, 77);
+
+  model.resolve('{}');
+  assert.deepEqual(await switching, { ok: true, uid: 'amp' });
+  assert.equal(rig.getState().ampModelKeys.tone3000, 'tone3000:45');
+  assert.equal(rig.getState().ampTone3000ModelId, '4502');
+  assert.equal(rig.getState().ampValues.gain, 77);
+});
+
+test('Pedal sample switch preserves uid, placement, enabled state, and LEVEL', async () => {
+  const port: Tone3000RigPort = {
+    getTone: async (toneId) => ({
+      id: Number(toneId), title: 'Drive pack', username: 'alice', license: 't3k',
+      url: `https://www.tone3000.com/tones/${toneId}`, gear: 'pedal', format: 'nam',
+    }),
+    listModels: async () => [
+      { id: '4601', toneId: '46', name: 'Low', size: 'standard', architecture: '2' },
+      { id: '4602', toneId: '46', name: 'High', size: 'lite', architecture: '2' },
+    ],
+    loadModelText: async (_modelRef, modelId) => {
+      assert.equal(modelId, '4602');
+      return '{}';
+    },
+  };
+  const rig = createRigStore(stubEngine());
+  const uid = rig.addTone3000Pedal('tone3000:46', '4601');
+  rig.setPedalParam(uid, 'level', -7);
+  rig.setPedalPost(uid);
+  rig.setPedalEnabled(uid, false);
+  const integration = createTone3000RigIntegration({ rig, port });
+
+  assert.deepEqual(await integration.preparePedalSampleSwitch(uid), { ok: true, status: 'choose' });
+  assert.deepEqual(await integration.confirmSelection('4602'), { ok: true, uid });
+
+  const item = rig.getState().chain.find((candidate) => candidate.uid === uid)!;
+  assert.equal(item.modelRef, 'tone3000:46');
+  assert.equal(item.modelId, '4602');
+  assert.equal(item.values.level, -7);
+  assert.equal(item.post, true);
+  assert.equal(item.enabled, false);
+});
+
+test('selectHosted owns OAuth intent and resolves the returned tone through sample choice', async () => {
   let request: Parameters<NonNullable<Tone3000RigPort['selectTone']>>[0] | undefined;
   const port: Tone3000RigPort = {
     getTone: async (toneId) => ({
       id: Number(toneId), title: 'Hosted pedal', username: 'alice', license: 't3k',
       url: `https://www.tone3000.com/tones/${toneId}`, gear: 'pedal', format: 'nam',
     }),
+    listModels: async () => [
+      { id: '880', toneId: '88', name: 'Hosted', size: 'standard', architecture: '2' },
+      { id: '881', toneId: '88', name: 'Hosted Lite', size: 'lite', architecture: '2' },
+    ],
     loadModelText: async () => '{}',
     selectTone: async (next) => {
       request = next;
@@ -389,13 +619,14 @@ test('selectHosted owns OAuth gear/architecture intent and applies the returned 
   const rig = createRigStore(stubEngine());
   const integration = createTone3000RigIntegration({ rig, port });
   const result = await integration.selectHosted({ kind: 'add-pedal' }, '2');
-  assert.equal(result?.ok, true);
+  assert.deepEqual(result, { ok: true, status: 'choose' });
   assert.deepEqual(request, {
     intent: { kind: 'add-pedal', architecture: '2' },
     gear: 'pedal',
     architecture: '2',
   });
-  assert.equal(rig.getState().chain.some((item) => item.modelRef === 'tone3000:88'), true);
+  assert.equal(integration.getState().selection?.preferredModelId, '880');
+  assert.equal(rig.getState().chain.some((item) => item.modelRef === 'tone3000:88'), false);
 });
 
 test('applySelection owns redirect replace remapping after Share regenerated the uid', async () => {

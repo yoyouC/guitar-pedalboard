@@ -25,6 +25,8 @@ export const tone3000Rig = createTone3000RigIntegration({
       putCachedToneInfo(info, window.localStorage);
       return info;
     },
+    listModels: (toneId) => tone3000.listModels(toneId),
+    getModelInfo: (toneId, modelId) => tone3000.getModelInfo(toneId, modelId),
     loadModelText,
     selectTone: ({ intent, gear, architecture, loadToneId }) => {
       const encodedRig = () => encodeShareState(rigToShareState(rigStore.getState()));

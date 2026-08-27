@@ -32,7 +32,7 @@ if (relay && window.opener) {
       if (share) rigStore.applyRig(rigFromShare(share))
     },
     applyTone: async (toneId, modelId, intent) => {
-      const result = await tone3000Rig.applySelection(toneId, modelId, intent)
+      const result = await tone3000Rig.prepareRedirectSelection(toneId, modelId, intent)
       if (!result.ok) throw new Error(result.message)
     },
     onSettled: () => {

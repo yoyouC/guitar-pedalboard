@@ -22,11 +22,12 @@ interface PedalCardProps {
   onToggleSlot: (uid: string) => void;
   tone3000State?: Tone3000TargetState;
   onReplaceTone3000?: (uid: string) => void;
+  onSwitchTone3000Sample?: (uid: string) => void;
   onRepairTone3000?: (uid: string) => void;
 }
 
 /** 拟物单块效果器:金属外壳 + 旋钮 + 脚踏开关 */
-export function PedalCard({ item, def, index, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot, tone3000State, onReplaceTone3000, onRepairTone3000 }: PedalCardProps) {
+export function PedalCard({ item, def, index, analyser, showMeters, onToggle, onRemove, onParam, onToggleSlot, tone3000State, onReplaceTone3000, onSwitchTone3000Sample, onRepairTone3000 }: PedalCardProps) {
   return (
     <div
       className={`pedal skin-${def.id} ${item.enabled ? 'pedal-on' : 'pedal-off'}`}
@@ -96,6 +97,14 @@ export function PedalCard({ item, def, index, analyser, showMeters, onToggle, on
                 ? tone3000State.message ?? '模型不可用，当前直通'
                 : '加载中，当前直通…'}
           </span>
+          {item.modelId && (
+            <span className="tone3000-sample-summary" title={`model #${item.modelId}`}>
+              {tone3000State?.sample?.name || `采样 #${item.modelId}`}
+              {tone3000State?.sample
+                ? ` · ${tone3000State.sample.architecture === 'custom' ? 'Custom' : `A${tone3000State.sample.architecture}`} · ${tone3000State.sample.size}`
+                : ''}
+            </span>
+          )}
           {tone3000State?.phase === 'error' && (
             <button className="tone3000-pedal-repair" onClick={() => onRepairTone3000?.(item.uid)}>
               {tone3000State.reason === 'not-authenticated'
@@ -105,8 +114,16 @@ export function PedalCard({ item, def, index, analyser, showMeters, onToggle, on
                   : '重试'}
             </button>
           )}
+          {item.modelRef && (
+            <button
+              className="tone3000-pedal-replace"
+              onClick={() => onSwitchTone3000Sample?.(item.uid)}
+            >
+              切换采样…
+            </button>
+          )}
           <button className="tone3000-pedal-replace" onClick={() => onReplaceTone3000?.(item.uid)}>
-            换模型…
+            更换 Tone…
           </button>
         </div>
       )}

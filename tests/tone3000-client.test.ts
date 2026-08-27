@@ -263,6 +263,62 @@ test('getModelText: 未登录直接抛 not-authenticated,不发请求', async ()
 
 // ---------- 模型选取与失效语义 ----------
 
+test('listModels: 拉取 legacy 与 A2 全部分页并返回可展示的精确采样身份', async () => {
+  const { fetchFn, requests } = mockFetch((req) => {
+    const url = new URL(req.url);
+    assert.equal(url.pathname, '/api/v1/models');
+    assert.equal(url.searchParams.get('tone_id'), '42');
+    assert.equal(url.searchParams.get('page_size'), '100');
+    const architecture = url.searchParams.get('architecture');
+    const page = Number(url.searchParams.get('page'));
+    if (architecture === '2') {
+      return {
+        status: 200,
+        body: {
+          data: [{
+            id: 203,
+            tone_id: 42,
+            name: 'A2 High Gain',
+            size: 'lite',
+            architecture_version: '2',
+            model_url: 'https://cdn.example.com/203.nam',
+          }],
+          page: 1,
+          page_size: 100,
+          total: 1,
+          total_pages: 1,
+        },
+      };
+    }
+    return {
+      status: 200,
+      body: {
+        data: [{
+          id: page === 1 ? 201 : 202,
+          tone_id: 42,
+          name: page === 1 ? 'Clean' : 'Crunch',
+          size: 'standard',
+          architecture_version: page === 1 ? '1' : 'custom',
+          model_url: `https://cdn.example.com/${page === 1 ? 201 : 202}.nam`,
+        }],
+        page,
+        page_size: 100,
+        total: 2,
+        total_pages: 2,
+      },
+    };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+
+  assert.deepEqual(await makeClient(fetchFn, storage).listModels('42'), [
+    { id: '201', toneId: '42', name: 'Clean', size: 'standard', architecture: '1' },
+    { id: '202', toneId: '42', name: 'Crunch', size: 'standard', architecture: 'custom' },
+    { id: '203', toneId: '42', name: 'A2 High Gain', size: 'lite', architecture: '2' },
+  ]);
+  assert.equal(requests.length, 3);
+});
+
 test('getModelText: 双架构列表合并,优先 standard 尺寸(不分架构)', async () => {
   const { fetchFn } = mockFetch((req) => {
     if (req.url.includes('/api/v1/models?tone_id=') && !req.url.includes('architecture=2')) {
@@ -317,6 +373,40 @@ test('getModelText: modelId 存在时精确下载该变体而不重新挑选', a
     '{"metadata":{"name":"Exact"}}',
   );
   assert.equal(requests.length, 2, '精确变体不走 tone 模型列表');
+});
+
+test('getModelInfo: 精确模型下载后复用元数据并返回当前采样展示字段', async () => {
+  const { fetchFn, requests } = mockFetch((req) => {
+    if (req.url === 'https://www.tone3000.com/api/v1/models/9001') {
+      return {
+        status: 200,
+        body: {
+          id: 9001,
+          tone_id: 42,
+          name: 'Exact Drive',
+          model_url: 'https://cdn.example.com/exact.nam',
+          size: 'feather',
+          architecture_version: '2',
+          format: 'nam',
+        },
+      };
+    }
+    assert.equal(req.url, 'https://cdn.example.com/exact.nam');
+    return { status: 200, body: '{}' };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+  const client = makeClient(fetchFn, storage);
+
+  await client.getModelText('42', '9001');
+  assert.deepEqual(await client.getModelInfo('42', '9001'), {
+    id: '9001',
+    toneId: '42',
+    name: 'Exact Drive',
+    size: 'feather',
+    architecture: '2',
+  });
+  assert.equal(requests.length, 2, '精确元数据与下载共享同一会话记录');
 });
 
 test('getModelText: exact model 必须属于所存 tone 且为 NAM', async () => {

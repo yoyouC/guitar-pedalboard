@@ -64,7 +64,7 @@ export function Tone3000Discover({
         <input
           className="tone3000-paste-input"
           type="text"
-          placeholder="粘贴 TONE3000 模型链接,回车装载…"
+          placeholder="粘贴 TONE3000 Tone 链接，回车选择采样…"
           value={pasteValue}
           onChange={(e) => {
             setPasteValue(e.target.value);
@@ -75,7 +75,7 @@ export function Tone3000Discover({
           }}
         />
         <button className="nam-load-btn" onClick={submitPaste}>
-          装载
+          选择
         </button>
       </div>
       {pasteError && <div className="tone3000-paste-error">{pasteError}</div>}
