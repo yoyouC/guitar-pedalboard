@@ -2718,6 +2718,12 @@ body.midi-learn-mode input:disabled {
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
 }
 
+.tone3000-model-variant-modal {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .tone3000-modal h3 {
   margin: 0 34px 12px 0;
 }
@@ -2769,11 +2775,14 @@ body.midi-learn-mode input:disabled {
 
 .tone3000-model-variant-groups {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
-  max-height: min(420px, 50vh);
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding-right: 3px;
+  scrollbar-gutter: stable;
 }
 
 .tone3000-model-variant-group h4 {
@@ -2842,9 +2851,16 @@ body.midi-learn-mode input:disabled {
 
 .tone3000-model-variant-actions {
   display: flex;
+  flex: 0 0 auto;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 14px;
+}
+
+.tone3000-model-variant-modal .tone3000-model-variant-actions {
+  margin-top: 0;
+  padding-top: 12px;
+  border-top: 1px solid rgba(127, 179, 232, 0.18);
 }
 
 @media (max-width: 620px) {

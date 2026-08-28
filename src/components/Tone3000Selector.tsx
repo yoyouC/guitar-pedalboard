@@ -39,6 +39,7 @@ export function Tone3000Selector({
   const [retryAction, setRetryAction] = useState<(() => Promise<void>) | null>(null);
   const selection = useTone3000Rig((state) => state.selection);
   const modelListProgress = useTone3000Rig((state) => state.modelListProgress);
+  const choosingModelVariant = Boolean(selection && !selection.resumed);
 
   const pendingIntent = (architecture: '2' | 'legacy' = '2'): Tone3000PendingIntent =>
     ({ ...intent, architecture });
@@ -84,14 +85,14 @@ export function Tone3000Selector({
   return (
     <div className="tone3000-modal-backdrop" role="presentation" onMouseDown={close}>
       <section
-        className="tone3000-modal"
+        className={`tone3000-modal${choosingModelVariant ? ' tone3000-model-variant-modal' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={`选择 TONE3000 ${gear}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button className="tone3000-modal-close" onClick={close} aria-label="关闭">×</button>
-        {selection && !selection.resumed ? (
+        {choosingModelVariant && selection ? (
           <Tone3000ModelVariantPicker
             selection={selection}
             onBack={() => {}}

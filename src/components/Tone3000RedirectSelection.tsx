@@ -37,7 +37,7 @@ export function Tone3000RedirectSelection() {
       onMouseDown={() => tone3000Rig.cancelSelection()}
     >
       <section
-        className="tone3000-modal"
+        className="tone3000-modal tone3000-model-variant-modal"
         role="dialog"
         aria-modal="true"
         aria-label="继续选择 TONE3000 采样"
