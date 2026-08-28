@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import {
   getTone3000Authenticated,
   subscribeTone3000Auth,
@@ -82,7 +83,7 @@ export function Tone3000Selector({
       if (result.status === 'applied') onClose();
     });
 
-  return (
+  return createPortal(
     <div className="tone3000-modal-backdrop" role="presentation" onMouseDown={close}>
       <section
         className={`tone3000-modal${choosingModelVariant ? ' tone3000-model-variant-modal' : ''}`}
@@ -150,6 +151,7 @@ export function Tone3000Selector({
           </>
         )}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

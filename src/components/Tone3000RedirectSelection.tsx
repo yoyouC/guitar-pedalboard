@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Tone3000TargetIntent } from '../tone3000/rigIntegration';
 import { tone3000Rig, useTone3000Rig } from '../tone3000/useTone3000Rig';
 import { Tone3000ModelVariantPicker } from './Tone3000ModelVariantPicker';
@@ -30,7 +31,7 @@ export function Tone3000RedirectSelection() {
     if (result && !result.ok) setError(result.message);
   };
 
-  return (
+  return createPortal(
     <div
       className="tone3000-modal-backdrop"
       role="presentation"
@@ -57,6 +58,7 @@ export function Tone3000RedirectSelection() {
         />
         {error && <div className="tone3000-notice" role="alert">{error}</div>}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
