@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { profileSwitchBlock, runRuntimeTransaction } from '../src/audio/runtimeTransaction.ts';
+import {
+  assertRuntimeRevision,
+  profileSwitchBlock,
+  runRuntimeTransaction,
+} from '../src/audio/runtimeTransaction.ts';
 
 test('runtime transaction commits only after preparation and activation', async () => {
   const events: string[] = [];
@@ -70,4 +74,43 @@ test('profile switch guard blocks recording and non-empty Looper only', () => {
   assert.equal(profileSwitchBlock(true, { phase: 'empty', lengthSeconds: 0 }), 'recording');
   assert.equal(profileSwitchBlock(false, { phase: 'playing', lengthSeconds: 2 }), 'looper-not-empty');
   assert.equal(profileSwitchBlock(false, { phase: 'empty', lengthSeconds: 0 }), null);
+});
+
+test('profile candidate rolls back when an IR import commits during the switch', async () => {
+  let cabIrVersion = 4;
+  const preparedVersion = cabIrVersion;
+  const events: string[] = [];
+
+  await assert.rejects(
+    runRuntimeTransaction({
+      prepare: async () => {
+        events.push('prepare-profile-with-current-ir');
+        return { id: 'candidate-context' };
+      },
+      activate: async () => {
+        events.push('resume-candidate');
+        cabIrVersion++;
+        events.push('commit-new-ir-on-old-runtime');
+      },
+      commit: async () => {
+        assertRuntimeRevision(
+          preparedVersion,
+          cabIrVersion,
+          '箱体 IR 在音频档位切换期间已变化，请重试',
+        );
+        events.push('commit-profile');
+      },
+      rollback: async (candidate) => {
+        assert.equal(candidate?.id, 'candidate-context');
+        events.push('rollback-profile');
+      },
+    }),
+    /箱体 IR 在音频档位切换期间已变化/,
+  );
+  assert.deepEqual(events, [
+    'prepare-profile-with-current-ir',
+    'resume-candidate',
+    'commit-new-ir-on-old-runtime',
+    'rollback-profile',
+  ]);
 });

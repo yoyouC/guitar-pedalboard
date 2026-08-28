@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  RIG_PRESET_VERSION,
   createRigPreset,
   exportRigPresetsJson,
   importRigPresetsJson,
@@ -113,7 +114,7 @@ test('legacy chain-only presets migrate with safe rig defaults', () => {
     }],
   }]), catalog);
 
-  assert.equal(imported[0].version, 3);
+  assert.equal(imported[0].version, RIG_PRESET_VERSION);
   assert.equal(imported[0].rig.chain[0].post, true);
   assert.equal(imported[0].rig.chain[0].values.time, 2);
   assert.equal(imported[0].rig.amp.modelKey, 'builtin:clean');
@@ -123,6 +124,53 @@ test('legacy chain-only presets migrate with safe rig defaults', () => {
     masterVolume: 0.5,
     bypass: false,
   });
+});
+
+test('preset v4 preserves a custom IR hash without embedding its binary', () => {
+  const preset = createRigPreset('Local IR', {
+    chain: [],
+    amp: {
+      categoryId: 'clean',
+      modelKey: 'builtin:clean',
+      enabled: true,
+      values: {},
+      customName: null,
+    },
+    cab: {
+      id: 'customIr',
+      ir: { kind: 'custom', hash: 'a'.repeat(64) },
+      enabled: true,
+      values: { level: -6 },
+    },
+    globals: { inputGain: 1, masterVolume: 0.5, bypass: false },
+  }, {
+    ...catalog,
+    cabs: [...catalog.cabs, {
+      id: 'customIr',
+      params: [{ key: 'level', min: -24, max: 6, defaultValue: -6 }],
+    }],
+  });
+
+  assert.equal(preset.version, 4);
+  assert.deepEqual(preset.rig.cab.ir, { kind: 'custom', hash: 'a'.repeat(64) });
+  assert.equal(JSON.stringify(preset).includes('blob'), false);
+});
+
+test('v3 preset migrates its cab id to a builtin IR reference', () => {
+  const migrated = normalizeRigPreset({
+    version: 3,
+    name: 'Before IR',
+    rig: {
+      chain: [],
+      amp: {
+        categoryId: 'clean', modelKey: 'builtin:clean', enabled: true, values: {}, customName: null,
+      },
+      cab: { id: 'open1x12', enabled: true, values: {} },
+      globals: { inputGain: 1, masterVolume: 0.5, bypass: false },
+    },
+  }, catalog)!;
+  assert.equal(migrated.version, 4);
+  assert.deepEqual(migrated.rig.cab.ir, { kind: 'builtin', id: 'open1x12' });
 });
 
 test('preset export envelope imports again and drops unknown modules', () => {
@@ -192,7 +240,7 @@ test('tone3000 model key survives normalize (kind-prefix rule, not static table)
   assert.equal(preset.rig.amp.values.gain, 100);
 });
 
-test('v3 preset keeps Tone3000 Pedal tone and exact model variant through restore', () => {
+test('current preset keeps Tone3000 Pedal tone and exact model variant through restore', () => {
   const preset = createRigPreset('Cloud Pedal', {
     chain: [{
       effectId: 'tone3000Nam',
@@ -213,7 +261,7 @@ test('v3 preset keeps Tone3000 Pedal tone and exact model variant through restor
     globals: { inputGain: 1, masterVolume: 0.5, bypass: false },
   }, catalog);
 
-  assert.equal(preset.version, 3);
+  assert.equal(preset.version, RIG_PRESET_VERSION);
   assert.deepEqual(preset.rig.chain[0], {
     effectId: 'tone3000Nam',
     modelRef: 'tone3000:42',
@@ -228,7 +276,7 @@ test('v3 preset keeps Tone3000 Pedal tone and exact model variant through restor
   );
 });
 
-test('v2 canonical preset migrates to v3 without changing its Rig', () => {
+test('v2 canonical preset migrates to current version without changing its Rig', () => {
   const migrated = normalizeRigPreset({
     version: 2,
     name: 'Version Two',
@@ -240,7 +288,7 @@ test('v2 canonical preset migrates to v3 without changing its Rig', () => {
     },
   }, catalog)!;
 
-  assert.equal(migrated.version, 3);
+  assert.equal(migrated.version, RIG_PRESET_VERSION);
   assert.equal(migrated.rig.chain[0].effectId, 'drive');
   assert.equal(migrated.rig.amp.modelKey, 'builtin:clean');
   assert.equal(migrated.rig.cab.values.level, -3);

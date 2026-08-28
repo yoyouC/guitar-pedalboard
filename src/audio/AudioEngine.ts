@@ -64,11 +64,24 @@ import {
   type LoopbackCalibrationKey,
   type StoredLoopbackCalibration,
 } from './loopbackCalibration';
-import { profileSwitchBlock, runRuntimeTransaction } from './runtimeTransaction';
+import { assertRuntimeRevision, profileSwitchBlock, runRuntimeTransaction } from './runtimeTransaction';
 import { LongTaskTracker, type StabilityObservation } from './performanceDiagnostics';
+import { cabIrRefKey, type CabIrRef } from './cabIrTypes';
+import {
+  CAB_IR_RUNTIME_DEF,
+  CabIrBufferResolver,
+  cabIrCalibrationDb,
+  isCabIrEffectInstance,
+  stageInitialCabIrBuffer,
+  type PreparedCabIrBuffer,
+} from './cabIrRuntime';
 
 /** 引擎重建链条所需的快照(定义在 graphBuilder,此处 re-export 保持既有 import 路径) */
 export type { ChainSpec, AmpSpec } from './graphBuilder';
+
+export interface CabSpec extends AmpSpec {
+  irRef?: CabIrRef;
+}
 
 export type InputSourceType = 'mic' | 'file' | 'test';
 
@@ -80,6 +93,7 @@ interface RuntimeGraphState {
   ampInstanceKey: string | null;
   cabInstance: EffectInstance | null;
   cabInstanceDef: EffectDefinition | null;
+  cabInstanceKey: string | null;
   preAmpAnalyser: AnalyserNode | null;
   ampAnalyser: AnalyserNode | null;
   cabAnalyser: AnalyserNode | null;
@@ -98,6 +112,7 @@ interface AudioRuntime {
   looperNode: AudioWorkletNode | null;
   loadedWorklets: Set<string>;
   graph: RuntimeGraphState;
+  cabIrFallbackActive: boolean;
 }
 
 type InputDescriptor =
@@ -116,6 +131,7 @@ interface PreparedSource {
 export interface AudioEngineOptions {
   createContext?: (options: AudioContextOptions) => AudioContext;
   getUserMedia?: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
+  cabIrResolver?: CabIrBufferResolver;
 }
 
 export type AudioProfileSwitchResult =
@@ -166,6 +182,7 @@ function emptyGraphState(): RuntimeGraphState {
     ampInstanceKey: null,
     cabInstance: null,
     cabInstanceDef: null,
+    cabInstanceKey: null,
     preAmpAnalyser: null,
     ampAnalyser: null,
     cabAnalyser: null,
@@ -181,6 +198,7 @@ function graphPrevState(graph: RuntimeGraphState): GraphPrevState {
     ampInstanceKey: graph.ampInstanceKey,
     cabInstance: graph.cabInstance,
     cabInstanceDef: graph.cabInstanceDef,
+    cabInstanceKey: graph.cabInstanceKey,
     globalBypass: graph.globalBypass,
   };
 }
@@ -194,6 +212,7 @@ function applyArtifacts(runtime: AudioRuntime, artifacts: GraphArtifacts): void 
     ampInstanceKey: artifacts.ampInstanceKey,
     cabInstance: artifacts.cabInstance,
     cabInstanceDef: artifacts.cabInstanceDef,
+    cabInstanceKey: artifacts.cabInstanceKey,
     preAmpAnalyser: artifacts.preAmpAnalyser,
     ampAnalyser: artifacts.ampAnalyser,
     cabAnalyser: artifacts.cabAnalyser,
@@ -256,6 +275,7 @@ function emptyDiagnostics(profile: AudioProfile): AudioDiagnosticsSnapshot {
 export class AudioEngine {
   private readonly createContext: (options: AudioContextOptions) => AudioContext;
   private readonly getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;
+  private readonly cabIrResolver: CabIrBufferResolver;
   private runtime: AudioRuntime | null = null;
   private profile: AudioProfile = loadAudioProfile();
   private outputDeviceId = 'default';
@@ -274,7 +294,10 @@ export class AudioEngine {
 
   private chain: ChainSpec[] = [];
   private ampSpec: AmpSpec | null = null;
-  private cabSpec: AmpSpec | null = null;
+  private cabSpec: CabSpec | null = null;
+  private cabIrRef: CabIrRef = { kind: 'builtin', id: 'gb4x12' };
+  /** 使候选 AudioContext 无法提交在 prepare 期间已经过期的 IR。 */
+  private cabIrVersion = 0;
   private globalBypass = false;
 
   private diagnostics = emptyDiagnostics(this.profile);
@@ -290,6 +313,7 @@ export class AudioEngine {
   constructor(options: AudioEngineOptions = {}) {
     this.createContext = options.createContext ?? ((contextOptions) => new AudioContext(contextOptions));
     this.getUserMedia = options.getUserMedia ?? ((constraints) => navigator.mediaDevices.getUserMedia(constraints));
+    this.cabIrResolver = options.cabIrResolver ?? new CabIrBufferResolver();
   }
 
   get ctx(): AudioContext | null {
@@ -436,7 +460,22 @@ export class AudioEngine {
         looperNode,
         loadedWorklets: loaded,
         graph: emptyGraphState(),
+        cabIrFallbackActive: false,
       };
+      if (this.cabSpec?.def === CAB_IR_RUNTIME_DEF) {
+        let activeIr: AudioBuffer;
+        let audibleRef = this.cabIrRef;
+        try {
+          activeIr = await this.cabIrResolver.resolve(ctx, this.cabIrRef);
+          runtime.cabIrFallbackActive = false;
+        } catch (error) {
+          if (this.cabIrRef.kind !== 'custom') throw error;
+          audibleRef = { kind: 'builtin', id: 'gb4x12' };
+          activeIr = await this.cabIrResolver.resolve(ctx, audibleRef);
+          runtime.cabIrFallbackActive = true;
+        }
+        stageInitialCabIrBuffer(ctx, activeIr, cabIrCalibrationDb(audibleRef));
+      }
       const plan = planGraph(this.graphSpec(), graphPrevState(runtime.graph));
       const artifacts = executePlan(
         ctx,
@@ -520,6 +559,7 @@ export class AudioEngine {
     }
 
     const oldRuntime = this.runtime;
+    const cabIrVersionAtStart = this.cabIrVersion;
     const oldSource = this.sourceNode;
     const oldDescriptor = this.inputDescriptor;
     let preparedSource: PreparedSource | null = null;
@@ -540,6 +580,11 @@ export class AudioEngine {
           await candidate.ctx.resume();
         },
         commit: async (candidate) => {
+          assertRuntimeRevision(
+            cabIrVersionAtStart,
+            this.cabIrVersion,
+            '箱体 IR 在音频档位切换期间已变化，请重试',
+          );
           this.runtime = candidate;
           this.profile = profile;
           saveAudioProfile(profile);
@@ -1154,9 +1199,42 @@ export class AudioEngine {
     this.sampleDiagnostics();
   }
 
-  setCab(spec: AmpSpec | null): void {
+  setCab(spec: CabSpec | null): void {
     this.cabSpec = spec;
+    if (spec?.irRef && cabIrRefKey(spec.irRef) !== cabIrRefKey(this.cabIrRef)) {
+      this.cabIrRef = spec.irRef;
+      this.cabIrVersion++;
+    }
     this.rebuildGraph();
+  }
+
+  /** 为当前 context 解码/缓存候选 IR，不改变当前听感或 canonical Rig。 */
+  async prepareCabIr(ref: CabIrRef, source?: unknown): Promise<PreparedCabIrBuffer> {
+    const runtime = this.runtime;
+    if (!runtime) throw new Error('请先启动音频输入');
+    const buffer = await this.cabIrResolver.resolve(runtime.ctx, ref, source);
+    return { context: runtime.ctx, ref, buffer, calibrationDb: cabIrCalibrationDb(ref) };
+  }
+
+  setCabIrCustomLoader(loader: (hash: string) => Promise<import('./cabIrCoordinator').StoredCabIr | null>): void {
+    this.cabIrResolver.setCustomLoader(loader);
+  }
+
+  get isCabIrFallbackActive(): boolean {
+    return this.runtime?.cabIrFallbackActive ?? false;
+  }
+
+  /** prepare 成功后的同步提交；迟到的旧 context 候选不会覆盖新 Runtime。 */
+  activatePreparedCabIr(prepared: PreparedCabIrBuffer, canonicalRef = prepared.ref): void {
+    const runtime = this.runtime;
+    if (!runtime || runtime.ctx !== prepared.context) throw new Error('音频 Runtime 已变化，请重试');
+    const instance = runtime.graph.cabInstance;
+    stageInitialCabIrBuffer(runtime.ctx, prepared.buffer, prepared.calibrationDb);
+    if (instance && !isCabIrEffectInstance(instance)) throw new Error('箱体 IR Runtime 类型无效');
+    if (isCabIrEffectInstance(instance)) instance.switchBuffer(prepared.buffer, prepared.calibrationDb);
+    this.cabIrRef = canonicalRef;
+    this.cabIrVersion++;
+    runtime.cabIrFallbackActive = cabIrRefKey(canonicalRef) !== cabIrRefKey(prepared.ref);
   }
 
   updateCabParam(key: string, value: number): void {

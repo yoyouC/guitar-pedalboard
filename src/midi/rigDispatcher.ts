@@ -73,7 +73,7 @@ export function createRigDispatcher(deps: RigDispatcherDeps): (action: RigAction
         return;
       }
       case 'recall-snapshot':
-        store.recallSnapshot(action.slot);
+        void store.recallSnapshot(action.slot);
         return;
       case 'toggle-bypass':
         store.setGlobalBypass(!store.getState().globalBypass);

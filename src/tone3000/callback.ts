@@ -162,7 +162,7 @@ export interface OAuthBootDeps {
   };
   storage: KeyValueStorage;
   /** 恢复跳转前暂存的 rig(分享编码) */
-  applyShareRig(encoded: string): void;
+  applyShareRig(encoded: string): void | Promise<void>;
   /** 装载选中的 tone(setAmpModel('tone3000', buildTone3000Key(toneId))) */
   applyTone(
     toneId: string,
@@ -188,7 +188,7 @@ export async function handleOAuthCallbackBoot(
   const stashed = popReturnRig(deps.storage);
   const intent = popPendingIntent(deps.storage);
   try {
-    if (stashed) deps.applyShareRig(stashed);
+    if (stashed) await deps.applyShareRig(stashed);
     if (outcome.toneId) {
       await deps.applyTone(outcome.toneId, outcome.modelId, intent);
     } else if (outcome.error && !outcome.canceled) {

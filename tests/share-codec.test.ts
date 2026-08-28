@@ -122,7 +122,7 @@ test('encode/decode round-trip 保持链、型号与参数', () => {
   assert.equal(roundTripped.cabEnabled, original.cabEnabled);
 });
 
-test('v2 share round-trip keeps Tone3000 Pedal and Amp exact model variants', () => {
+test('current share round-trip keeps Tone3000 Pedal and Amp exact model variants', () => {
   const encoded = encodeShareState({
     chain: [{
       uid: 'cloud-pedal',
@@ -143,10 +143,29 @@ test('v2 share round-trip keeps Tone3000 Pedal and Amp exact model variants', ()
     cabValues: { level: -6 },
   });
   const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
-  assert.equal(payload.v, 2);
+  assert.equal(payload.v, 3);
 
   const restored = decodeShareState(encoded)!;
   assert.equal(restored.chain[0].modelRef, 'tone3000:42');
   assert.equal(restored.chain[0].modelId, '9001');
   assert.equal(restored.ampModelId, '7007');
+});
+
+test('v3 share preserves custom IR identity without binary data', () => {
+  const hash = 'b'.repeat(64);
+  const encoded = encodeShareState({
+    chain: [],
+    ampCategoryId: 'clean',
+    ampModelKey: 'builtin:clean',
+    ampEnabled: true,
+    ampValues: {},
+    cabId: 'customIr',
+    cabIrRef: { kind: 'custom', hash },
+    cabEnabled: true,
+    cabValues: { level: -6 },
+  });
+  const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+  assert.equal(payload.v, 3);
+  assert.deepEqual(payload.b.r, { k: 'c', h: hash });
+  assert.deepEqual(decodeShareState(encoded)?.cabIrRef, { kind: 'custom', hash });
 });

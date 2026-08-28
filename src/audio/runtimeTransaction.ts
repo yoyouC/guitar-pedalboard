@@ -11,6 +11,14 @@ export interface RuntimeTransaction<Runtime> {
 
 export type ProfileSwitchBlock = 'recording' | 'looper-not-empty' | null;
 
+export function assertRuntimeRevision(
+  expected: number,
+  current: number,
+  message: string,
+): void {
+  if (current !== expected) throw new Error(message);
+}
+
 export function profileSwitchBlock(
   recording: boolean,
   looper: { phase: string; lengthSeconds: number },

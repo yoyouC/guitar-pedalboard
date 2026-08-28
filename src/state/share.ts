@@ -1,6 +1,8 @@
 import type { ChainItem } from './store';
 import { RIG_PRESET_CATALOG } from './store';
 import { normalizeRig } from './presetCodec';
+import type { CabIrRef } from '../audio/cabIrTypes';
+import { isBuiltinCabId } from '../audio/cabIrTypes';
 
 /**
  * 效果链/箱头/箱体配置的 URL 分享编码。
@@ -18,15 +20,21 @@ export interface ShareState {
   ampEnabled: boolean;
   ampValues: Record<string, number>;
   cabId: string;
+  cabIrRef?: CabIrRef;
   cabEnabled: boolean;
   cabValues: Record<string, number>;
 }
 
 interface SharePayload {
-  v: 1 | 2;
+  v: 1 | 2 | 3;
   c: { id: string; e: 0 | 1; v: Record<string, number>; p?: 0 | 1; r?: string; m?: string }[];
   a?: { cat: string; key: string; on: 0 | 1; v: Record<string, number>; m?: string };
-  b?: { id: string; on: 0 | 1; v: Record<string, number> };
+  b?: {
+    id: string;
+    on: 0 | 1;
+    v: Record<string, number>;
+    r?: { k: 'b'; i: string } | { k: 'c'; h: string };
+  };
 }
 
 function base64urlEncode(text: string): string {
@@ -47,15 +55,15 @@ function base64urlDecode(s: string): string {
 export function decodeShareState(encoded: string): ShareState | null {
   try {
     const payload = JSON.parse(base64urlDecode(encoded)) as SharePayload;
-    if ((payload?.v !== 1 && payload?.v !== 2) || !Array.isArray(payload.c)) return null;
+    if ((payload?.v !== 1 && payload?.v !== 2 && payload?.v !== 3) || !Array.isArray(payload.c)) return null;
 
     // payload → canonical 形状的原始输入,交给 presetCodec 统一规范化
     const rig = normalizeRig(
       {
         chain: payload.c.map((item) => ({
           effectId: item?.id,
-          modelRef: payload.v === 2 ? item?.r : undefined,
-          modelId: payload.v === 2 ? item?.m : undefined,
+          modelRef: payload.v >= 2 ? item?.r : undefined,
+          modelId: payload.v >= 2 ? item?.m : undefined,
           enabled: typeof item?.e === 'number' ? item.e !== 0 : undefined,
           values: item?.v,
           post: typeof item?.p === 'number' ? item.p === 1 : undefined,
@@ -67,11 +75,20 @@ export function decodeShareState(encoded: string): ShareState | null {
               enabled: payload.a.on !== 0,
               values: payload.a.v,
               customName: null,
-              modelId: payload.v === 2 ? payload.a.m : undefined,
+              modelId: payload.v >= 2 ? payload.a.m : undefined,
             }
           : undefined,
         cab: payload.b
-          ? { id: payload.b.id, enabled: payload.b.on !== 0, values: payload.b.v }
+          ? {
+              id: payload.b.id,
+              ir: payload.v === 3 && payload.b.r
+                ? payload.b.r.k === 'c'
+                  ? { kind: 'custom', hash: payload.b.r.h }
+                  : { kind: 'builtin', id: payload.b.r.i }
+                : undefined,
+              enabled: payload.b.on !== 0,
+              values: payload.b.v,
+            }
           : undefined,
         globals: undefined,
       },
@@ -86,6 +103,7 @@ export function decodeShareState(encoded: string): ShareState | null {
       ampEnabled: rig.amp.enabled,
       ampValues: rig.amp.values,
       cabId: rig.cab.id,
+      cabIrRef: rig.cab.ir,
       cabEnabled: rig.cab.enabled,
       cabValues: rig.cab.values,
     };
@@ -96,7 +114,7 @@ export function decodeShareState(encoded: string): ShareState | null {
 
 export function encodeShareState(state: ShareState): string {
   const payload: SharePayload = {
-    v: 2,
+    v: 3,
     c: state.chain.map((i) => ({
       id: i.effectId,
       e: i.enabled ? 1 : 0,
@@ -116,6 +134,14 @@ export function encodeShareState(state: ShareState): string {
       id: state.cabId,
       on: state.cabEnabled ? 1 : 0,
       v: state.cabValues,
+      r: state.cabIrRef?.kind === 'custom'
+        ? { k: 'c', h: state.cabIrRef.hash }
+        : {
+            k: 'b',
+            i: state.cabIrRef?.kind === 'builtin'
+              ? state.cabIrRef.id
+              : isBuiltinCabId(state.cabId) ? state.cabId : 'gb4x12',
+          },
     },
   };
   return base64urlEncode(JSON.stringify(payload));

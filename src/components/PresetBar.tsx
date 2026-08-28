@@ -12,8 +12,8 @@ export function PresetBar() {
   const [shared, setShared] = useState(false);
   const [transferStatus, setTransferStatus] = useState('');
 
-  const handleLoad = (presetName: string) => {
-    const result = rigStore.loadPreset(presetName);
+  const handleLoad = async (presetName: string) => {
+    const result = await rigStore.loadPreset(presetName);
     if (!result.ok && result.message) alert(result.message);
   };
 
@@ -74,7 +74,7 @@ export function PresetBar() {
           </option>
         ))}
       </select>
-      <button disabled={!selected} onClick={() => handleLoad(selected)}>
+      <button disabled={!selected} onClick={() => void handleLoad(selected)}>
         加载
       </button>
       <button disabled={!selected} onClick={() => { rigStore.deletePreset(selected); setSelected(''); }}>

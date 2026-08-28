@@ -74,6 +74,7 @@ function emptyPrev(overrides: Partial<GraphPrevState> = {}): GraphPrevState {
     ampInstanceKey: null,
     cabInstance: null,
     cabInstanceDef: null,
+    cabInstanceKey: null,
     globalBypass: false,
     ...overrides,
   };
@@ -229,9 +230,9 @@ test('箱头被禁用 → 存活实例销毁,plan.amp 为 null', () => {
   assert.equal(plan.amp, null);
 });
 
-// ---------- 箱体:从不复用 ----------
+// ---------- 箱体稳定 Runtime:def+key 复用 ----------
 
-test('箱体从不复用:结构变化时旧箱体进 dispose,plan.cab 无实例可复用', () => {
+test('箱体 def+key 不变:其他结构变化时复用稳定 Runtime', () => {
   const cabDef = fakeDef('gb4x12');
   const cab = fakeInst('cab-1');
   const prev = emptyPrev({ cabInstance: cab, cabInstanceDef: cabDef });
@@ -242,10 +243,10 @@ test('箱体从不复用:结构变化时旧箱体进 dispose,plan.cab 无实例�
   );
 
   assert.equal(plan.empty, false);
-  assert.deepEqual(plan.dispose, [cab], '箱体必销毁');
+  assert.deepEqual(plan.dispose, []);
   assert.ok(plan.cab, '箱体启用时 plan.cab 存在');
   assert.equal(plan.cab?.def, cabDef);
-  assert.equal('inst' in (plan.cab ?? {}), false, '箱体 plan 不携带实例,永远新建');
+  assert.equal(plan.cab?.inst, cab);
 });
 
 test('箱体 def 变化 → 非空 plan(箱体无法靠实例判定 def,由 prevState 记录)', () => {
@@ -287,7 +288,7 @@ test('dispose 清单按 单块 → 箱头 → 箱体 排序,与创建/接线清�
   );
 
   assert.deepEqual(plan.dispose, [od, amp, cab], 'dispose 顺序:单块 → 箱头 → 箱体');
-  // 创建决策独立于 dispose:新单块/箱头 inst=null,箱体无 inst 字段
+  // 创建决策独立于 dispose:三个角色都用 inst=null 表示新建
   assert.equal(plan.pedals[0].inst, null);
   assert.equal(plan.amp?.inst, null);
   assert.ok(plan.cab);
@@ -408,7 +409,7 @@ test('spec 里的 disabled 单块本来就不占实例:不影响空 plan 判定'
 
 // ---------- globalBypass ----------
 
-test('globalBypass → 保留复用实例 + 直连计划(不接线、不新建、箱体销毁)', () => {
+test('globalBypass → 保留复用实例 + 直连计划(不接线、不新建)', () => {
   const odDef = fakeDef('overdrive');
   const ampDef = fakeDef('nam-wasm');
   const cabDef = fakeDef('gb4x12');
@@ -438,8 +439,8 @@ test('globalBypass → 保留复用实例 + 直连计划(不接线、不新建�
   assert.equal(plan.pedals.length, 1);
   assert.equal(plan.pedals[0].inst, od, 'bypass 保留单块实例');
   assert.equal(plan.amp?.inst, amp, 'bypass 保留箱头实例(def+key 命中)');
-  assert.equal(plan.cab, null, 'bypass 下无箱体');
-  assert.deepEqual(plan.dispose, [cab], '箱体在 bypass 时销毁(从不复用)');
+  assert.equal(plan.cab?.inst, cab, 'bypass 保留箱体 Runtime');
+  assert.deepEqual(plan.dispose, []);
 });
 
 test('bypass 期间新增单块不新建实例;解除 bypass 后才创建', () => {

@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createRigStore,
+  customIrReferenceLabels,
   rigFromPreset,
   rigFromShare,
   rigFromSnapshot,
   rigToShareState,
   toSnapshot,
   isSnapshotDirty,
+  referencedCustomIrHashes,
   type RigEngine,
   type RigStoreState,
 } from '../src/state/rigStore.ts';
@@ -67,7 +69,8 @@ function installLocalStorage() {
 
 /** 结构性 verb / applyRig 的固定引擎写序列(结构四连 + 全局两连) */
 const STRUCTURE_SEQUENCE = ['setGlobalBypass', 'setChain', 'setAmp', 'setCab'];
-const APPLY_SEQUENCE = [...STRUCTURE_SEQUENCE, 'setInputGain', 'setMasterVolume'];
+const CAB_COMMIT_SEQUENCE = [...STRUCTURE_SEQUENCE, 'updateCabParam'];
+const APPLY_SEQUENCE = [...CAB_COMMIT_SEQUENCE, 'setInputGain', 'setMasterVolume'];
 
 /** 比较用的链摘要(uid 各路径重新生成,不参与比较) */
 function chainSummary(state: RigStoreState) {
@@ -87,6 +90,7 @@ function rigSummary(state: RigStoreState) {
     ampEnabled: state.ampEnabled,
     ampValues: state.ampValues,
     cabId: state.cabId,
+    cabIrRef: state.cabIrRef,
     cabEnabled: state.cabEnabled,
     cabValues: state.cabValues,
     inputGain: state.inputGain,
@@ -202,12 +206,50 @@ test('structural verbs rebuild graph (fixed sequence) and bump graphVersion', ()
   store.setCab('blue2x12');
   assert.equal(store.getState().cabId, 'blue2x12');
   assert.equal(store.getState().graphVersion, 5);
+  const cabSpec = calls.find((call) => call.method === 'setCab')!.args[0] as {
+    def: { id: string };
+    key: string;
+    irRef: unknown;
+  };
+  assert.equal(cabSpec.def.id, 'cabIrRuntime');
+  assert.equal(cabSpec.key, 'cab-ir-runtime:v1');
+  assert.deepEqual(cabSpec.irRef, { kind: 'builtin', id: 'blue2x12' });
 
   calls.length = 0;
   store.setAmpEnabled(false);
   assert.equal(store.getState().ampEnabled, false);
   assert.deepEqual(methods(), STRUCTURE_SEQUENCE);
   assert.equal(store.getState().graphVersion, 6);
+});
+
+test('custom IR commit stores only its hash and projects the stable IR runtime', () => {
+  const { engine, calls, methods } = createStubEngine();
+  const store = createRigStore(engine);
+  const hash = 'c'.repeat(64);
+
+  store.commitCabIr({ kind: 'custom', hash });
+
+  assert.equal(store.getState().cabId, 'customIr');
+  assert.deepEqual(store.getState().cabIrRef, { kind: 'custom', hash });
+  assert.equal(store.getState().cabValues.level, -6);
+  assert.deepEqual(methods(), CAB_COMMIT_SEQUENCE);
+  const cabSpec = calls.find((call) => call.method === 'setCab')?.args[0] as {
+    def: { id: string };
+    irRef: unknown;
+  };
+  assert.equal(cabSpec.def.id, 'cabIrRuntime');
+  assert.deepEqual(cabSpec.irRef, { kind: 'custom', hash });
+  assert.deepEqual(calls.at(-1), { method: 'updateCabParam', args: ['level', -6] });
+
+  store.captureSnapshot(0);
+  store.savePreset('Pinned IR');
+  assert.deepEqual([...referencedCustomIrHashes(store.getState())], [hash]);
+  assert.deepEqual(customIrReferenceLabels(store.getState(), hash), [
+    '当前 Rig',
+    '预设“Pinned IR”',
+    '快照 A',
+  ]);
+  assert.equal(JSON.stringify(store.getState().presets).includes('Blob'), false);
 });
 
 test('addPedal inserts pre effects before the FX Loop partition', () => {
@@ -446,6 +488,7 @@ test('derivation: toSnapshot/rigToShareState are canonical minus the agreed fiel
   assert.equal(share.ampModelKey, preset.rig.amp.modelKey);
   assert.deepEqual(share.ampValues, preset.rig.amp.values);
   assert.equal(share.cabId, preset.rig.cab.id);
+  assert.deepEqual(share.cabIrRef, preset.rig.cab.ir);
   assert.deepEqual(share.cabValues, preset.rig.cab.values);
 });
 
@@ -486,7 +529,7 @@ test('snapshot capture/recall/clear with derived dirty flag', () => {
 
 // ---------- 预设:保存/加载/删除/导入导出 + 遗留迁移 ----------
 
-test('preset save/load round-trip writes engine with the fixed applyRig sequence', () => {
+test('preset save/load round-trip writes engine with the fixed applyRig sequence', async () => {
   const { engine, calls } = createStubEngine();
   const store = createRigStore(engine);
   store.setMasterVolume(0.8);
@@ -500,7 +543,7 @@ test('preset save/load round-trip writes engine with the fixed applyRig sequence
   store.removePedal(store.getState().chain.find((i) => i.effectId === 'chorus')!.uid);
 
   calls.length = 0;
-  const result = store.loadPreset('solo');
+  const result = await store.loadPreset('solo');
   assert.deepEqual(result, { ok: true });
   assert.deepEqual(calls.map((c) => c.method), APPLY_SEQUENCE);
   assert.equal(store.getState().masterVolume, 0.8);
@@ -508,14 +551,14 @@ test('preset save/load round-trip writes engine with the fixed applyRig sequence
 
   // 不存在的预设:无操作
   calls.length = 0;
-  assert.equal(store.loadPreset('nope').ok, false);
+  assert.equal((await store.loadPreset('nope')).ok, false);
   assert.equal(calls.length, 0);
 
   store.deletePreset('solo');
   assert.equal(store.getState().presets.length, 0);
 });
 
-test('loadPreset migrates legacy chain-only presets', () => {
+test('loadPreset migrates legacy chain-only presets', async () => {
   const { engine } = createStubEngine();
   const store = createRigStore(engine);
   const legacy = [
@@ -523,7 +566,7 @@ test('loadPreset migrates legacy chain-only presets', () => {
   ];
   assert.equal(store.importPresets(JSON.stringify(legacy)), 1);
 
-  const result = store.loadPreset('old');
+  const result = await store.loadPreset('old');
   assert.equal(result.ok, true);
   const state = store.getState();
   assert.deepEqual(
@@ -535,7 +578,7 @@ test('loadPreset migrates legacy chain-only presets', () => {
   assert.equal(state.ampId, 'crunch'); // 目录默认箱头
 });
 
-test('loadPreset blocks presets requiring a different custom NAM model', () => {
+test('loadPreset blocks presets requiring a different custom NAM model', async () => {
   const { engine, calls } = createStubEngine();
   const store = createRigStore(engine);
   const customNam = [
@@ -559,11 +602,36 @@ test('loadPreset blocks presets requiring a different custom NAM model', () => {
   store.importPresets(JSON.stringify(customNam));
 
   const before = store.getState().chain;
-  const result = store.loadPreset('needs-nam');
+  const result = await store.loadPreset('needs-nam');
   assert.equal(result.ok, false);
   assert.match(result.ok ? '' : (result.message ?? ''), /MyCapture/);
   assert.equal(store.getState().chain, before); // 状态未被触碰
   assert.equal(calls.length, 0); // 引擎未被触碰
+});
+
+test('preset restore does not mutate canonical rig until async IR preparation commits', async () => {
+  const { engine, calls } = createStubEngine();
+  const store = createRigStore(engine);
+  store.setCab('blue2x12');
+  store.savePreset('blue');
+  store.setCab('gb4x12');
+  calls.length = 0;
+
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  store.setRigRestoreHandler(async (_rig, commit) => {
+    await gate;
+    commit();
+    return { ok: true };
+  });
+
+  const pending = store.loadPreset('blue');
+  assert.equal(store.getState().cabId, 'gb4x12');
+  assert.equal(calls.length, 0);
+  release();
+  assert.deepEqual(await pending, { ok: true });
+  assert.equal(store.getState().cabId, 'blue2x12');
+  assert.deepEqual(calls.map((call) => call.method), APPLY_SEQUENCE);
 });
 
 test('snapshot recall restores NAM model via model mechanism (modelKey round-trip)', () => {
@@ -705,13 +773,13 @@ test('custom .nam file: setNamCustomModel 收编 file 选择;applyRig custom 保
   assert.deepEqual(store.getState().namModel, { source: 'file:mycap.nam:1234:1' });
 });
 
-test('tone3000 model reference round-trips through preset save/load', () => {
+test('tone3000 model reference round-trips through preset save/load', async () => {
   const { engine } = createStubEngine();
   const store = createRigStore(engine);
   store.setAmpModel('tone3000', 'tone3000:79103');
   store.savePreset('t3k-preset');
   store.setAmpModel('clean', 'builtin:clean');
-  const result = store.loadPreset('t3k-preset');
+  const result = await store.loadPreset('t3k-preset');
   assert.equal(result.ok, true);
   const state = store.getState();
   assert.equal(state.ampCategoryId, 'tone3000');

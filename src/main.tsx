@@ -27,9 +27,12 @@ if (relay && window.opener) {
   void handleOAuthCallbackBoot(window.location.href, {
     client: tone3000,
     storage: window.localStorage,
-    applyShareRig: (encoded) => {
+    applyShareRig: async (encoded) => {
       const share = decodeShareState(encoded)
-      if (share) rigStore.applyRig(rigFromShare(share))
+      if (share) {
+        const result = await rigStore.restoreRig(rigFromShare(share))
+        if (!result.ok) throw new Error(result.message ?? 'Rig 恢复失败')
+      }
     },
     applyTone: async (toneId, modelId, intent) => {
       const result = await tone3000Rig.prepareRedirectSelection(toneId, modelId, intent)

@@ -52,9 +52,9 @@ export const RIG_PRESET_CATALOG: RigPresetCatalog = {
     params: definition.params,
   })),
   cabs: CAB_REGISTRY.map((definition) => ({
-    id: definition.id,
-    params: definition.params,
-  })),
+      id: definition.id,
+      params: definition.params,
+    })),
   ampModels: AMP_CATEGORIES.flatMap((category) =>
     category.models.map((model) => ({
       key: model.key,

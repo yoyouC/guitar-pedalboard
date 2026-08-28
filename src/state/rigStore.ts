@@ -25,6 +25,13 @@ import {
 } from '../audio/effects/namPedal';
 import { getAmpDef, getNamWasmAmpDef } from '../audio/amps';
 import { getCabDef } from '../audio/cabs';
+import { CAB_IR_RUNTIME_DEF } from '../audio/cabIrRuntime';
+import {
+  cabIdFromRef,
+  defaultCabIrRef,
+  isBuiltinCabId,
+  type CabIrRef,
+} from '../audio/cabIrTypes';
 import {
   BUNDLED_WAVENET_MODELS,
   NAM_SWEEP_PACKS,
@@ -91,6 +98,8 @@ export interface RigStoreState {
   ampEnabled: boolean;
   ampValues: Record<string, number>;
   cabId: string;
+  /** canonical、可序列化的 IR 身份；Blob/AudioBuffer 由 IR 服务持有。 */
+  cabIrRef: CabIrRef;
   cabEnabled: boolean;
   cabValues: Record<string, number>;
   /** NAM 自定义模型名(展示用;模型选择本身在 namModel) */
@@ -128,6 +137,11 @@ export interface LoadPresetResult {
   /** ok=false 时的用户可读原因(如缺少自定义 NAM 模型) */
   message?: string;
 }
+
+export type RigRestoreHandler = (
+  rig: ApplyRigState,
+  commit: () => void,
+) => Promise<LoadPresetResult>;
 
 export interface RigStore {
   getState(): RigStoreState;
@@ -168,6 +182,10 @@ export interface RigStore {
 
   // 箱体
   setCab(id: string): void;
+  /** IR 服务完成 prepare/persist/activate 后的 canonical commit。 */
+  commitCabIr(ref: CabIrRef): void;
+  /** 注册整 Rig 恢复的异步 IR 准备事务；未注册时保持同步兼容行为。 */
+  setRigRestoreHandler(handler: RigRestoreHandler): void;
   setCabEnabled(enabled: boolean): void;
   setCabParam(key: string, value: number): void;
 
@@ -178,17 +196,19 @@ export interface RigStore {
 
   /** 整 rig 恢复:预设/快照/分享三条路径的统一入口 */
   applyRig(rig: ApplyRigState): void;
+  /** 外部恢复入口：先经过已注册的 IR prepare 事务，再调用 applyRig 提交。 */
+  restoreRig(rig: ApplyRigState): Promise<LoadPresetResult>;
 
   // 快照
   captureSnapshot(slot: number): void;
-  recallSnapshot(slot: number): void;
+  recallSnapshot(slot: number): Promise<LoadPresetResult>;
   clearSnapshot(slot: number): void;
   /** dirty 是派生判定,不是存进去的状态 */
   isSlotDirty(slot: number): boolean;
 
   // 预设
   savePreset(name: string): void;
-  loadPreset(name: string): LoadPresetResult;
+  loadPreset(name: string): Promise<LoadPresetResult>;
   deletePreset(name: string): void;
   importPresets(json: string): number;
   exportPresets(): string;
@@ -207,6 +227,7 @@ function defaultAmpValues(ampId: string): Record<string, number> {
 }
 
 function defaultCabValues(cabId: string): Record<string, number> {
+  if (cabId === 'customIr') return { level: -6 };
   const values: Record<string, number> = {};
   for (const p of getCabDef(cabId).params) values[p.key] = p.defaultValue;
   return values;
@@ -321,7 +342,14 @@ export function rigFromShare(
       enabled: share.ampEnabled,
       values: share.ampValues,
     },
-    cab: { id: share.cabId, enabled: share.cabEnabled, values: share.cabValues },
+    cab: {
+      id: share.cabId,
+      ir: share.cabIrRef ?? (isBuiltinCabId(share.cabId)
+        ? { kind: 'builtin', id: share.cabId }
+        : defaultCabIrRef()),
+      enabled: share.cabEnabled,
+      values: share.cabValues,
+    },
     globals,
   };
 }
@@ -336,6 +364,7 @@ export function rigToShareState(state: RigStoreState): ShareState {
     ampEnabled: state.ampEnabled,
     ampValues: state.ampValues,
     cabId: state.cabId,
+    cabIrRef: state.cabIrRef,
     cabEnabled: state.cabEnabled,
     cabValues: state.cabValues,
   };
@@ -361,6 +390,7 @@ export function toSnapshot(state: RigStoreState): Snapshot {
     },
     cab: {
       id: state.cabId,
+      ir: state.cabIrRef,
       enabled: state.cabEnabled,
       values: { ...state.cabValues },
     },
@@ -373,6 +403,36 @@ export function isSnapshotDirty(state: RigStoreState, slot: number): boolean {
   const snap = state.snapshots[slot];
   if (!snap) return false;
   return JSON.stringify(toSnapshot(state)) !== JSON.stringify(snap);
+}
+
+/** IR Library 容量管理所需引用集合：当前 Rig、Preset、Snapshot 都视为 pinned。 */
+export function referencedCustomIrHashes(state: RigStoreState): Set<string> {
+  const hashes = new Set<string>();
+  if (state.cabIrRef.kind === 'custom') hashes.add(state.cabIrRef.hash);
+  for (const preset of state.presets) {
+    if (preset.rig.cab.ir.kind === 'custom') hashes.add(preset.rig.cab.ir.hash);
+  }
+  for (const snapshot of state.snapshots) {
+    if (snapshot?.cab.ir.kind === 'custom') hashes.add(snapshot.cab.ir.hash);
+  }
+  return hashes;
+}
+
+/** 删除提示所需的人类可读引用位置；不包含文件名或 hash。 */
+export function customIrReferenceLabels(state: RigStoreState, hash: string): string[] {
+  const labels: string[] = [];
+  if (state.cabIrRef.kind === 'custom' && state.cabIrRef.hash === hash) labels.push('当前 Rig');
+  for (const preset of state.presets) {
+    if (preset.rig.cab.ir.kind === 'custom' && preset.rig.cab.ir.hash === hash) {
+      labels.push(`预设“${preset.name}”`);
+    }
+  }
+  state.snapshots.forEach((snapshot, index) => {
+    if (snapshot?.cab.ir.kind === 'custom' && snapshot.cab.ir.hash === hash) {
+      labels.push(`快照 ${String.fromCharCode(65 + index)}`);
+    }
+  });
+  return labels;
 }
 
 export interface RigStoreInit {
@@ -394,6 +454,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     ampEnabled: true,
     ampValues: defaultAmpValues(initialAmpId),
     cabId: RIG_PRESET_CATALOG.defaults.cabId,
+    cabIrRef: defaultCabIrRef(),
     cabEnabled: true,
     cabValues: defaultCabValues(RIG_PRESET_CATALOG.defaults.cabId),
     namCustomName: null,
@@ -410,6 +471,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
   const listeners = new Set<() => void>();
   const tone3000PedalGenerations = new Map<string, number>();
+  let rigRestoreHandler: RigRestoreHandler | null = null;
   const emit = () => {
     for (const listener of listeners) listener();
   };
@@ -467,9 +529,11 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       key: `${state.ampId}:${state.namVersion}`,
     } satisfies AmpSpec);
     engine.setCab({
-      def: getCabDef(state.cabId),
+      def: CAB_IR_RUNTIME_DEF,
       enabled: state.cabEnabled,
       values: state.cabValues,
+      key: 'cab-ir-runtime:v1',
+      irRef: state.cabIrRef,
     });
     state = { ...state, graphVersion: state.graphVersion + 1 };
   };
@@ -479,6 +543,15 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     masterVolume: state.masterVolume,
     bypass: state.globalBypass,
   });
+
+  const runRestoreTransaction = (
+    rig: ApplyRigState,
+    commit: () => void,
+  ): Promise<LoadPresetResult> => {
+    if (rigRestoreHandler) return rigRestoreHandler(rig, commit);
+    commit();
+    return Promise.resolve({ ok: true });
+  };
 
   const store: RigStore = {
     getState: () => state,
@@ -699,9 +772,29 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     // ---------- 箱体 ----------
 
     setCab(id) {
-      state = { ...state, cabId: id, cabValues: defaultCabValues(id) };
+      if (!isBuiltinCabId(id)) return;
+      const ref: CabIrRef = { kind: 'builtin', id };
+      state = { ...state, cabId: id, cabIrRef: ref, cabValues: defaultCabValues(id) };
       syncStructure();
+      for (const [key, value] of Object.entries(state.cabValues)) engine.updateCabParam(key, value);
       emit();
+    },
+
+    commitCabIr(ref) {
+      const cabId = cabIdFromRef(ref);
+      state = {
+        ...state,
+        cabId,
+        cabIrRef: ref,
+        cabValues: cabId === state.cabId ? state.cabValues : defaultCabValues(cabId),
+      };
+      syncStructure();
+      for (const [key, value] of Object.entries(state.cabValues)) engine.updateCabParam(key, value);
+      emit();
+    },
+
+    setRigRestoreHandler(handler) {
+      rigRestoreHandler = handler;
     },
 
     setCabEnabled(enabled) {
@@ -770,6 +863,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         ampEnabled: rig.amp.enabled,
         ampValues: rig.amp.values,
         cabId: rig.cab.id,
+        cabIrRef: rig.cab.ir,
         cabEnabled: rig.cab.enabled,
         cabValues: rig.cab.values,
         inputGain: rig.globals.inputGain,
@@ -778,9 +872,14 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         namVersion,
       };
       syncStructure();
+      for (const [key, value] of Object.entries(state.cabValues)) engine.updateCabParam(key, value);
       engine.setInputGain(state.inputGain);
       engine.setMasterVolume(state.masterVolume);
       emit();
+    },
+
+    restoreRig(rig) {
+      return runRestoreTransaction(rig, () => store.applyRig(rig));
     },
 
     // ---------- 快照 ----------
@@ -795,10 +894,13 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
     recallSnapshot(slot) {
       const snap = state.snapshots[slot];
-      if (!snap) return;
-      store.applyRig(rigFromSnapshot(snap, currentGlobals()));
-      state = { ...state, activeSlot: slot };
-      emit();
+      if (!snap) return Promise.resolve({ ok: false });
+      const rig = rigFromSnapshot(snap, currentGlobals());
+      return runRestoreTransaction(rig, () => {
+        store.applyRig(rig);
+        state = { ...state, activeSlot: slot };
+        emit();
+      });
     },
 
     clearSnapshot(slot) {
@@ -833,6 +935,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         },
         cab: {
           id: state.cabId,
+          ir: state.cabIrRef,
           enabled: state.cabEnabled,
           values: state.cabValues,
         },
@@ -850,21 +953,21 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
     loadPreset(name) {
       const preset = state.presets.find((candidate) => candidate.name === name);
-      if (!preset) return { ok: false };
+      if (!preset) return Promise.resolve({ ok: false });
       const rig = presetToRig(preset);
       if (
         rig.amp.modelKey === 'nam-wasm:custom' &&
         (!rig.amp.customName || rig.amp.customName !== state.namCustomName)
       ) {
-        return {
+        return Promise.resolve({
           ok: false,
           message:
             `预设需要自定义 NAM 模型“${rig.amp.customName ?? '未知模型'}”。` +
             '请先在箱头区域重新载入对应的 .nam 文件。',
-        };
+        });
       }
-      store.applyRig(rigFromPreset(preset));
-      return { ok: true };
+      const nextRig = rigFromPreset(preset);
+      return store.restoreRig(nextRig);
     },
 
     deletePreset(name) {

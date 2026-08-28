@@ -17,10 +17,9 @@ import type { EffectDefinition, EffectInstance } from './effects/types';
  * 复用契约(与旧 rebuildGraph 逐条对应,行为零变化):
  *   - 单块:uid+def 相同且启用 → 复用(保住已加载模型与 LFO/延迟状态);
  *   - 箱头:def+key 相同且启用 → 复用(避免 NAM 模型重复加载,这是契约不是优化);
- *   - 箱体:从不复用,每次非空 plan 都销毁重建;
+ *   - 箱体:def+key 相同且启用 → 复用；IR buffer 在稳定实例内部双路切换;
  *   - disabled spec 不进接线;其存活实例销毁;
- *   - globalBypass:跳过全部接线,inputGain 直连 looper/output,保留 kept 实例
- *     (箱体除外——它在 bypass 时同样销毁);
+ *   - globalBypass:跳过全部接线,inputGain 直连 looper/output,保留 kept 实例(含箱体);
  *   - 保留实例每次执行都回放 spec 参数(值可能已变);
  *   - dispose 先于一切创建与接线。
  */
@@ -77,6 +76,7 @@ export interface GraphPrevState {
   ampInstanceKey: string | null;
   cabInstance: EffectInstance | null;
   cabInstanceDef: EffectDefinition | null;
+  cabInstanceKey: string | null;
   globalBypass: boolean | null;
 }
 
@@ -99,11 +99,8 @@ export interface AmpPlan {
   values: Record<string, number>;
 }
 
-/** 箱体决策:从不复用,故无 inst 字段,永远新建 */
-export interface CabPlan {
-  def: EffectDefinition;
-  values: Record<string, number>;
-}
+/** 箱体决策；与箱头一样可按 def+key 复用稳定 Runtime。 */
+export type CabPlan = AmpPlan;
 
 /** 一次图谱编译的全部决策;empty=true 时其余字段无意义,execute 直接 no-op */
 export interface GraphPlan {
@@ -134,6 +131,7 @@ export interface GraphArtifacts {
   ampInstanceKey: string | null;
   cabInstance: EffectInstance | null;
   cabInstanceDef: EffectDefinition | null;
+  cabInstanceKey: string | null;
   preAmpAnalyser: AnalyserNode | null;
   ampAnalyser: AnalyserNode | null;
   cabAnalyser: AnalyserNode | null;
@@ -166,6 +164,16 @@ function ampMatchesPrev(amp: AmpSpec | null, prev: GraphPrevState): boolean {
   );
 }
 
+function cabMatchesPrev(cab: AmpSpec | null, prev: GraphPrevState): boolean {
+  return (
+    prev.cabInstance !== null &&
+    cab !== null &&
+    cab.enabled &&
+    prev.cabInstanceDef === cab.def &&
+    prev.cabInstanceKey === (cab.key ?? null)
+  );
+}
+
 /** 结构比对:spec 与上次建图产物是否一致(仅结构,不含参数值) */
 function isStructuralMatch(spec: GraphSpec, prev: GraphPrevState): boolean {
   if (prev.globalBypass === null || prev.globalBypass !== spec.globalBypass) return false;
@@ -195,7 +203,7 @@ function isStructuralMatch(spec: GraphSpec, prev: GraphPrevState): boolean {
   if (!spec.globalBypass) {
     const cabActive = spec.cab !== null && spec.cab.enabled;
     if (cabActive !== (prev.cabInstance !== null)) return false;
-    if (cabActive && prev.cabInstanceDef !== spec.cab!.def) return false;
+    if (cabActive && !cabMatchesPrev(spec.cab, prev)) return false;
   }
   return true;
 }
@@ -227,8 +235,11 @@ export function planGraph(spec: GraphSpec, prev: GraphPrevState): GraphPlan {
   const ampKey = ampActive ? (spec.amp!.key ?? null) : null;
   const reuseAmp = ampMatchesPrev(spec.amp, prev);
   if (prev.ampInstance && !reuseAmp) dispose.push(prev.ampInstance);
-  // 箱体从不复用
-  if (prev.cabInstance) dispose.push(prev.cabInstance);
+  // 箱体稳定 Runtime 复用；IR buffer 切换不靠重建图。
+  const cabActive = spec.cab !== null && spec.cab.enabled;
+  const cabKey = cabActive ? (spec.cab!.key ?? null) : null;
+  const reuseCab = cabMatchesPrev(spec.cab, prev);
+  if (prev.cabInstance && !reuseCab) dispose.push(prev.cabInstance);
 
   let pedals: PedalPlan[];
   let amp: AmpPlan | null = null;
@@ -251,7 +262,12 @@ export function planGraph(spec: GraphSpec, prev: GraphPrevState): GraphPlan {
       };
     }
     if (spec.cab && spec.cab.enabled) {
-      cab = { def: spec.cab.def, values: spec.cab.values };
+      cab = {
+        def: spec.cab.def,
+        key: cabKey,
+        inst: reuseCab ? prev.cabInstance : null,
+        values: spec.cab.values,
+      };
     }
   } else {
     // bypass:只保留已存活的复用实例(不接线、不新建、不回放),恢复时原样接回
@@ -268,6 +284,14 @@ export function planGraph(spec: GraphSpec, prev: GraphPrevState): GraphPlan {
         def: prev.ampInstanceDef!,
         key: prev.ampInstanceKey,
         inst: prev.ampInstance!,
+        values: {},
+      };
+    }
+    if (reuseCab) {
+      cab = {
+        def: prev.cabInstanceDef!,
+        key: prev.cabInstanceKey,
+        inst: prev.cabInstance!,
         values: {},
       };
     }
@@ -308,6 +332,7 @@ export function executePlan(
     ampInstanceKey: null,
     cabInstance: null,
     cabInstanceDef: null,
+    cabInstanceKey: null,
     preAmpAnalyser: null,
     ampAnalyser: null,
     cabAnalyser: null,
@@ -317,6 +342,7 @@ export function executePlan(
   // 2. 复用实例断开旧下游(电平抽头/下一级),稍后按新顺序重接
   for (const p of plan.pedals) p.inst?.output.disconnect();
   plan.amp?.inst?.output.disconnect();
+  plan.cab?.inst?.output.disconnect();
 
   // 3. 断开 inputGain 全部下游(含 analyser 与旧链),再按新链重连
   env.inputGain.disconnect();
@@ -353,14 +379,15 @@ export function executePlan(
     for (const p of plan.pedals) {
       if (p.post) connectPedal(p);
     }
-    // 箱体位于箱头之后、输出之前(关闭即 DI 直通);从不复用,永远新建
+    // 箱体位于箱头之后、输出之前(关闭即 DI 直通);稳定 Runtime 可复用。
     if (plan.cab) {
-      const cab = plan.cab.def.create(ctx);
+      const cab = plan.cab.inst ?? plan.cab.def.create(ctx);
       replayValues(cab, plan.cab.values);
       prev.connect(cab.input);
       prev = cab.output;
       artifacts.cabInstance = cab;
       artifacts.cabInstanceDef = plan.cab.def;
+      artifacts.cabInstanceKey = plan.cab.key;
       artifacts.cabAnalyser = createTap(ctx, cab.output);
     }
   } else {
@@ -374,6 +401,11 @@ export function executePlan(
       artifacts.ampInstance = plan.amp.inst;
       artifacts.ampInstanceDef = plan.amp.def;
       artifacts.ampInstanceKey = plan.amp.key;
+    }
+    if (plan.cab?.inst) {
+      artifacts.cabInstance = plan.cab.inst;
+      artifacts.cabInstanceDef = plan.cab.def;
+      artifacts.cabInstanceKey = plan.cab.key;
     }
   }
   // Looper 是固定输出级的一部分,不随效果链重建;若加载失败则安全直通。

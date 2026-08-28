@@ -78,7 +78,7 @@ export function SnapshotSwitches() {
                     rigStore.captureSnapshot(i);
                     return;
                   }
-                  if (filled) rigStore.recallSnapshot(i);
+                  if (filled) void rigStore.recallSnapshot(i);
                   else rigStore.captureSnapshot(i);
                 }}
               >

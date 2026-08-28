@@ -8,7 +8,7 @@
 
 `AudioEngine.rebuildGraph` 是音频子系统最微妙、bug 最多的逻辑:单块
 uid+def 复用、箱头 def+key 复用(NAM 重载极贵,这是契约不是优化)、
-箱体从不复用、dispose 必须先于接线、bypass 期间保留实例但不接线、
+箱体原先从不复用、dispose 必须先于接线、bypass 期间保留实例但不接线、
 保留实例每次重建回放 spec 参数。但它长在 AudioEngine 单例内部
 (私有构造 + 硬编码 `new AudioContext()`),零测试覆盖——任何复用
 语义的回归只能靠浏览器手动听音发现。
@@ -36,11 +36,11 @@ setChain → setAmp → setCab),每次结构 verb 触发四次全量重建,其�
   updateParam/updateAmpParam/updateCabParam 继续从 artifacts 读实例。
   私有构造与硬编码 context 不动。
 - 复用契约按现状钉死,不借重构改语义:uid+def 复用单块、def+key
-  复用箱头、箱体从不复用、disabled spec 跳过、globalBypass 跳过全部
+  复用箱头、disabled spec 跳过、globalBypass 跳过全部
   接线并保留 kept 实例、保留实例回放参数、dispose 先于接线。
 - prevState 相比 issue 草图补两个字段,都是结构判定的必要条件:
-  `cabInstanceDef`(箱体 def 无法从实例判定,否则换箱体检不出结构
-  变化)与 `globalBypass`(否则 bypass 翻转检不出;bypass 稳态下箱体
+  `cabInstanceDef`/`cabInstanceKey`(稳定 IR Runtime 同样按 def+key 复用)与
+  `globalBypass`(否则 bypass 翻转检不出;bypass 稳态下箱体
   恒不存在,不参与比对)。`globalBypass=null` 表示从未建图,首次强制
   非空 plan——否则空 rig 下 inputGain → looper/output 的直通接线永远
   不会发生。
@@ -54,7 +54,8 @@ setChain → setAmp → setCab),每次结构 verb 触发四次全量重建,其�
   各有针对性断言,回归无需浏览器。
 - 冗余消解自然达成:syncStructure 四连写不变(rigStore 地盘不动),
   结构未变的写产生空 plan → execute no-op,不再每次 verb 重建四次图
-  (尤其箱体不再被无意义地销毁重建四次,听感等价)。
+  (尤其箱体不再被无意义地销毁重建四次,听感等价)。Issue #19 后 Cab
+  Runtime 的复用从优化升级为契约：IR 变体在实例内部双路切换。
 - 语义 pinning(有意,听感零变化):"结构不变 → 空 plan"意味着仅参数
   值变化的 spec 不再触发重建回放;参数调整本就走 updateParam 系列
   (setTargetAtTime 平滑),applyRig 三条恢复路径都会重新生成 uid,

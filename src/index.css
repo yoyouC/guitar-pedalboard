@@ -1093,6 +1093,55 @@ input[type='text'] {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
+.cab-ir-library {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.cab-ir-file {
+  display: none;
+}
+
+.cab-ir-actions,
+.cab-ir-meta,
+.cab-ir-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.cab-ir-actions input {
+  min-width: 150px;
+  flex: 1;
+}
+
+.cab-ir-meta,
+.cab-ir-state {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #c7cbd1;
+}
+
+.cab-ir-state.error,
+.cab-ir-state.missing {
+  color: #ffb0a8;
+}
+
+.cab-ir-list {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.cab-ir-row > :first-child {
+  flex: 1;
+  text-align: left;
+}
+
 .cab-selector {
   display: flex;
   align-items: center;

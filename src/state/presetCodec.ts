@@ -1,4 +1,7 @@
-export const RIG_PRESET_VERSION = 3;
+import type { CabIrRef } from '../audio/cabIrTypes';
+import { isBuiltinCabId } from '../audio/cabIrTypes';
+
+export const RIG_PRESET_VERSION = 4;
 export const PRESET_EXPORT_FORMAT = 'guitar-pedalboard-presets';
 export const PRESET_EXPORT_VERSION = 1;
 
@@ -62,6 +65,7 @@ export interface RigPresetState {
   };
   cab: {
     id: string;
+    ir: CabIrRef;
     enabled: boolean;
     values: Record<string, number>;
   };
@@ -100,6 +104,7 @@ export type SnapshotAmp = SnapshotAmpRef & {
 /** 快照/恢复共用的箱体状态 */
 export interface SnapshotCab {
   id: string;
+  ir: CabIrRef;
   enabled: boolean;
   values: Record<string, number>;
 }
@@ -240,10 +245,31 @@ function normalizeCab(rawCab: unknown, catalog: RigPresetCatalog): RigPresetStat
   const fallback = catalog.cabs.find((cab) => cab.id === catalog.defaults.cabId);
   if (!fallback) throw new Error('预设目录缺少默认箱体定义');
   const source = isRecord(rawCab) ? rawCab : {};
-  const requestedId = typeof source.id === 'string' ? source.id : fallback.id;
-  const definition = catalog.cabs.find((cab) => cab.id === requestedId) ?? fallback;
+  const rawIr = isRecord(source.ir) ? source.ir : null;
+  const customHash =
+    rawIr?.kind === 'custom' &&
+    typeof rawIr.hash === 'string' &&
+    /^[a-f\d]{64}$/i.test(rawIr.hash)
+      ? rawIr.hash.toLowerCase()
+      : null;
+  const customDefinition = catalog.cabs.find((cab) => cab.id === 'customIr');
+  if (customHash && customDefinition) {
+    return {
+      id: 'customIr',
+      ir: { kind: 'custom', hash: customHash },
+      enabled: typeof source.enabled === 'boolean' ? source.enabled : true,
+      values: normalizeValues(customDefinition, source.values),
+    };
+  }
+  const irBuiltinId = rawIr?.kind === 'builtin' && isBuiltinCabId(rawIr.id) ? rawIr.id : null;
+  const requestedId = irBuiltinId ?? (typeof source.id === 'string' ? source.id : fallback.id);
+  const definition = catalog.cabs.find((cab) => cab.id === requestedId && cab.id !== 'customIr') ?? fallback;
+  const builtinId = isBuiltinCabId(definition.id)
+    ? definition.id
+    : (isBuiltinCabId(fallback.id) ? fallback.id : 'gb4x12');
   return {
     id: definition.id,
+    ir: { kind: 'builtin', id: builtinId },
     enabled: typeof source.enabled === 'boolean' ? source.enabled : true,
     values: normalizeValues(definition, source.values),
   };
@@ -339,12 +365,12 @@ function migrateLegacyPreset(
   };
 }
 
-/** v2 已是 canonical Rig，只缺动态模型字段；经当前 normalize 自然升级。 */
-function migrateV2Preset(
+/** v2/v3 已是 canonical Rig；经当前 normalize 补齐后续身份字段。 */
+function migratePreviousPreset(
   source: Record<string, unknown>,
   catalog: RigPresetCatalog,
 ): RigPreset | null {
-  if (source.version !== 2 || typeof source.name !== 'string' || !source.name.trim() || !isRecord(source.rig)) {
+  if ((source.version !== 2 && source.version !== 3) || typeof source.name !== 'string' || !source.name.trim() || !isRecord(source.rig)) {
     return null;
   }
   return {
@@ -360,7 +386,7 @@ export function normalizeRigPreset(
 ): RigPreset | null {
   if (!isRecord(value)) return null;
   if (value.version !== RIG_PRESET_VERSION) {
-    return migrateV2Preset(value, catalog) ?? migrateLegacyPreset(value, catalog);
+    return migratePreviousPreset(value, catalog) ?? migrateLegacyPreset(value, catalog);
   }
   if (typeof value.name !== 'string' || !value.name.trim() || !isRecord(value.rig)) {
     return null;

@@ -89,7 +89,7 @@ function fullPlan(overrides: Partial<GraphPlan> = {}): GraphPlan {
       { uid: 'dly', def: delayEffect, post: true, inst: null, values: { mix: 30 } },
     ],
     amp: { def: eqEffect, key: 'eq:0', inst: null, values: { low: 3 } },
-    cab: { def: volumeEffect, values: { level: -1 } },
+    cab: { def: volumeEffect, key: 'cab-runtime', inst: null, values: { level: -1 } },
     ...overrides,
   };
 }

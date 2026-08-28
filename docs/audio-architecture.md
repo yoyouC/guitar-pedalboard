@@ -54,7 +54,7 @@ rebuildGraph():
        复用或 def.create() 新建 → 一律回放全部参数值 → prev.connect(inst.input) → prev = inst.output
        并给每块输出挂一个 AnalyserNode 抽头(fftSize 1024,供单块迷你电平表)
   4. 若箱头启用:复用或新建(新建时记录 def 与 key),回放参数,接在效果链之后
-  5. 若箱体启用:接在箱头之后(关闭即 DI 直通;箱体便宜,一律重建)
+  5. 若箱体启用:接在箱头之后(关闭即 DI 直通;稳定 IR Runtime 按 def+key 复用)
   6. prev.connect(outputAnalyser)
   7. globalBypass 时跳过 3~5,输入直连输出;复用实例保留归属,恢复后原样接回
 ```
@@ -225,16 +225,26 @@ NAMKnobs(upstream_v2)的**条件化单块**——旋钮是模型的条件输入,
 - **模型**:`public/models/namknobs/`(comp/ts_full/rat/gr/ds1/ff/mxr,upstream_v2;许可未标明,仅本地评估,见 ATTRIBUTION.md)。
 - **验证**:`node scripts/verify-nam-pedal.cjs`(通道数 + 旋钮有效性 + 快照回归);CDP 步骤 8 实测浏览器内旋钮→条件通道→电平变化。
 
-## 6. 箱体(`src/audio/cabs.ts`)
+## 6. 箱体(`src/audio/cabs.ts`、`cabIr*.ts`)
 
-纯频响整形(无卷积 IR),拓扑固定:
+四个内置箱体与自定义箱体统一使用卷积 IR。旧版 Biquad 频响整形已在生产 IR
+获批后移除；迁移前的参数与响应基线保存在 `docs/research/cab-dsp-baseline.md`。
+
+Runtime 拓扑固定:
 
 ```
-input → 高通(hpHz) → 低频共振峰(lowBump) → 临场峰(peak,可调 Q)
-      → 低通 ×2(24dB/oct,lpHz) → output(LEVEL)
+                  ┌→ Convolver A → equal-power gain A ┐
+input → stable in ┤                                    ├→ output(LEVEL)
+                  └→ Convolver B → equal-power gain B ┘
 ```
 
-4 款配置:`open1x12`(开背,低频少)、`blue2x12`(Celestion Blue)、`gb4x12`(Greenback,默认)、`v304x12`(Vintage 30,攻击性上中频)。唯一参数 `level`(映射 0~1.2 增益)。关闭箱体即 DI 直通。
+canonical 型号保持 `open1x12`、`blue2x12`、`gb4x12`(默认)、`v304x12`，另有稳定的 `customIr`。目标 Runtime 使用 `ConvolverNode(normalize=false)`；切换时创建新的 Convolver lane，以约 30ms 等功率曲线交叉淡化，不修改正在发声节点的 `buffer`。关闭箱体或 global bypass 均为 DI 直通。
+
+自定义 WAV 限 10MB、解码后 2 秒、mono/stereo。容器元数据先独立解析，PCM 经当前 AudioContext 解码/重采样，再按跨声道共同起点裁剪 -80dB 相对峰值以前的静音并保留约 0.5ms preroll。原始 Blob 以 SHA-256 去重存入 IndexedDB；canonical Rig 只保存 hash。库上限 16 条/64MB，当前 Rig、Preset 与 Snapshot 引用均 pinned，其余按 LRU 淘汰。
+
+内置 IR 的来源、许可、署名、hash、型号映射与校准记录在 `public/irs/manifest.json`。
+四个 Tone Factor 生产文件已获单独直接分发授权并完成门禁，`CAB_IR_ASSETS_READY=true`；
+发布脚本会验证 public/dist 二进制 hash，禁止半发布、篡改或未登记 WAV。
 
 ## 7. 两个特殊模块
 
