@@ -319,6 +319,38 @@ test('listModels: 拉取 legacy 与 A2 全部分页并返回可展示的精确�
   assert.equal(requests.length, 3);
 });
 
+test('listModels: 接受 TONE3000 A2 响应中的 null size', async () => {
+  const { fetchFn } = mockFetch((req) => {
+    if (req.url.includes('architecture=2')) {
+      return {
+        status: 200,
+        body: {
+          data: [{
+            id: 730745,
+            tone_id: 85995,
+            name: 'Marshall JCM 2000 Lead Channel + TS9+',
+            size: null,
+            architecture_version: '2',
+            model_url: 'https://cdn.example.com/730745.nam',
+          }],
+          total_pages: 1,
+        },
+      };
+    }
+    return { status: 200, body: { data: [], total_pages: 1 } };
+  });
+  const storage = memoryStorage();
+  seedTokens(storage, 3600_000);
+
+  assert.deepEqual(await makeClient(fetchFn, storage).listModels('85995'), [{
+    id: '730745',
+    toneId: '85995',
+    name: 'Marshall JCM 2000 Lead Channel + TS9+',
+    size: 'unknown',
+    architecture: '2',
+  }]);
+});
+
 test('listModels: reports aggregate page progress and excludes non-NAM model records', async () => {
   const { fetchFn } = mockFetch((req) => {
     const url = new URL(req.url);

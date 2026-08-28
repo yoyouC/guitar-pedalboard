@@ -12,6 +12,10 @@ export function tone3000ModelVariantLabel(modelVariant: Tone3000ModelInfo): stri
   return modelVariant.name || `采样 #${modelVariant.id}`;
 }
 
+export function tone3000ModelSizeLabel(size: string): string {
+  return size === 'unknown' ? '未标注' : size;
+}
+
 export function filterTone3000ModelVariants(
   modelVariants: Tone3000ModelInfo[],
   filters: Tone3000ModelVariantFilters,

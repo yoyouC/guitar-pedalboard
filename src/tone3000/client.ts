@@ -331,7 +331,7 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
     tone_id?: number;
     model_url: string;
     name?: string;
-    size: string;
+    size: string | null;
     architecture_version: Tone3000ModelArchitecture;
     format?: string;
   }
@@ -413,13 +413,19 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
   function modelInfo(model: ApiModel, toneId: string): Tone3000ModelInfo | null {
     const id = String(model.id);
     const modelToneId = String(model.tone_id ?? toneId);
+    // TONE3000 的 A2 列表会返回 size: null。size 只用于展示/筛选，
+    // 不应因此丢弃一个身份和架构均有效、且具有下载地址的 NAM 模型。
+    const size = model.size === null
+      ? 'unknown'
+      : typeof model.size === 'string'
+        ? model.size.trim()
+        : '';
     if (
       !/^\d+$/.test(id) ||
       modelToneId !== toneId ||
       (model.format !== undefined && model.format !== 'nam') ||
       !['1', '2', 'custom'].includes(model.architecture_version) ||
-      typeof model.size !== 'string' ||
-      !model.size
+      !size
     ) {
       return null;
     }
@@ -427,7 +433,7 @@ export function createTone3000Client(config: Tone3000ClientConfig): Tone3000Clie
       id,
       toneId,
       name: typeof model.name === 'string' ? model.name.trim() : '',
-      size: model.size,
+      size,
       architecture: model.architecture_version,
     };
   }

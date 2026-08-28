@@ -9,6 +9,7 @@ import type { Tone3000ModelVariantSelection } from '../tone3000/rigIntegration';
 import {
   filterTone3000ModelVariants,
   orderTone3000ModelVariantArchitectures,
+  tone3000ModelSizeLabel,
   tone3000ModelVariantLabel,
 } from '../tone3000/modelVariantPresentation';
 
@@ -135,7 +136,7 @@ export function Tone3000ModelVariantPicker({
         >
           <option value="all">全部 size</option>
           {sizes.map((candidate) => (
-            <option key={candidate} value={candidate}>{candidate}</option>
+            <option key={candidate} value={candidate}>{tone3000ModelSizeLabel(candidate)}</option>
           ))}
         </select>
       </div>
@@ -172,7 +173,7 @@ export function Tone3000ModelVariantPicker({
                     <strong>{tone3000ModelVariantLabel(modelVariant)}</strong>
                     <span>
                       {modelVariant.architecture === 'custom' ? 'Custom' : `A${modelVariant.architecture}`}
-                      {' · '}{modelVariant.size}{' · '}model #{modelVariant.id}
+                      {' · '}{tone3000ModelSizeLabel(modelVariant.size)}{' · '}model #{modelVariant.id}
                     </span>
                   </span>
                   {modelVariant.id === selection.currentModelId && (

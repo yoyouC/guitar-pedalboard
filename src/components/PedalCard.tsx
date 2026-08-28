@@ -7,6 +7,7 @@ import type { Tone3000TargetState } from '../tone3000/rigIntegration';
 import type { Tone3000ModelListProgress } from '../tone3000/client';
 import { Tone3000ModelAttribution } from './Tone3000Display';
 import { tone3000ModelListProgressText } from '../tone3000/modelListProgressPresentation';
+import { tone3000ModelSizeLabel } from '../tone3000/modelVariantPresentation';
 
 /** 用摇杆(WahTreadle)代替 position 旋钮的效果器 */
 const TREADLE_EFFECT_IDS = new Set(['wahpedal', 'crybabywdf', 'whammy']);
@@ -104,7 +105,7 @@ export function PedalCard({ item, def, index, analyser, showMeters, onToggle, on
             <span className="tone3000-model-variant-summary" title={`model #${item.modelId}`}>
               {tone3000State?.modelVariant?.name || `采样 #${item.modelId}`}
               {tone3000State?.modelVariant
-                ? ` · ${tone3000State.modelVariant.architecture === 'custom' ? 'Custom' : `A${tone3000State.modelVariant.architecture}`} · ${tone3000State.modelVariant.size}`
+                ? ` · ${tone3000State.modelVariant.architecture === 'custom' ? 'Custom' : `A${tone3000State.modelVariant.architecture}`} · ${tone3000ModelSizeLabel(tone3000State.modelVariant.size)}`
                 : ''}
             </span>
           )}

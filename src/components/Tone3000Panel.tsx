@@ -11,6 +11,7 @@ import type { ToneInfo } from '../tone3000/client';
 import { Tone3000Selector } from './Tone3000Selector';
 import { Tone3000Account, Tone3000ModelAttribution } from './Tone3000Display';
 import { tone3000ModelListProgressText } from '../tone3000/modelListProgressPresentation';
+import { tone3000ModelSizeLabel } from '../tone3000/modelVariantPresentation';
 
 /** TONE3000 箱头入口；与 NAM 单块共用选择器、精确变体与运行状态。 */
 export function Tone3000Panel() {
@@ -108,7 +109,7 @@ export function Tone3000Panel() {
             <span className="tone3000-model-variant-summary" title={`model #${modelId}`}>
               {runtime?.modelVariant?.name || `采样 #${modelId}`}
               {runtime?.modelVariant
-                ? ` · ${runtime.modelVariant.architecture === 'custom' ? 'Custom' : `A${runtime.modelVariant.architecture}`} · ${runtime.modelVariant.size}`
+                ? ` · ${runtime.modelVariant.architecture === 'custom' ? 'Custom' : `A${runtime.modelVariant.architecture}`} · ${tone3000ModelSizeLabel(runtime.modelVariant.size)}`
                 : ''}
             </span>
           )}

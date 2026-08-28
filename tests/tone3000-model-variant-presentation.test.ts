@@ -4,6 +4,7 @@ import {
   filterTone3000ModelVariants,
   orderTone3000ModelVariantArchitectures,
   tone3000ModelVariantLabel,
+  tone3000ModelSizeLabel,
 } from '../src/tone3000/modelVariantPresentation.ts';
 import type { Tone3000ModelInfo } from '../src/tone3000/client.ts';
 
@@ -15,6 +16,11 @@ const modelVariants: Tone3000ModelInfo[] = [
 
 test('model variant presentation gives unnamed records a stable exact-id label', () => {
   assert.equal(tone3000ModelVariantLabel(modelVariants[2]), '采样 #103');
+});
+
+test('model variant presentation localizes an unspecified API size', () => {
+  assert.equal(tone3000ModelSizeLabel('unknown'), '未标注');
+  assert.equal(tone3000ModelSizeLabel('standard'), 'standard');
 });
 
 test('model variant presentation searches labels and exact ids', () => {
