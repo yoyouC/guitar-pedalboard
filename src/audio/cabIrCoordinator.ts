@@ -10,6 +10,8 @@ export interface StoredCabIr {
   processedSampleRate: number;
   durationSeconds: number;
   trimmedFrames: number;
+  /** 旧 IndexedDB 记录允许缺省；首次解码时会确定性补算并写回。 */
+  calibrationDb?: number;
   createdAt: number;
   lastUsedAt: number;
 }

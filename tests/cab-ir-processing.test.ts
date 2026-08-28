@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   CabIrError,
+  CUSTOM_CAB_IR_CALIBRATION_DB_MAX,
+  CUSTOM_CAB_IR_MAX_CALIBRATED_PEAK,
+  calibrateCustomCabIr,
   inspectWav,
   preprocessCabIr,
   type DecodedCabIr,
@@ -76,4 +79,17 @@ test('preprocessCabIr rejects silent, non-finite, >2s and non-mono/stereo decode
     /2 秒/,
   );
   assert.throws(() => preprocessCabIr(decoded([[1], [1], [1], [1]])), /单声道或双声道/);
+});
+
+test('custom IR calibration is deterministic and limits excessive boost and impulse peak', () => {
+  const quiet = preprocessCabIr(decoded([[0.001, ...new Array(2047).fill(0)]]));
+  const quietCalibration = calibrateCustomCabIr(quiet);
+  assert.equal(quietCalibration.calibrationDb, CUSTOM_CAB_IR_CALIBRATION_DB_MAX);
+  assert.equal(quietCalibration.limited, true);
+
+  const fullScale = preprocessCabIr(decoded([[1, ...new Array(2047).fill(0)]]));
+  const fullScaleCalibration = calibrateCustomCabIr(fullScale);
+  assert.ok(fullScaleCalibration.calibratedPeak <= CUSTOM_CAB_IR_MAX_CALIBRATED_PEAK + 1e-9);
+  assert.equal(fullScaleCalibration.limited, true);
+  assert.deepEqual(calibrateCustomCabIr(fullScale), fullScaleCalibration);
 });

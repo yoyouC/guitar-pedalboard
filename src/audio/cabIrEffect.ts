@@ -44,7 +44,7 @@ function disconnectLane(lane: CabLane): void {
 export function createCabIrEffect(
   ctx: AudioContext,
   initialBuffer: AudioBuffer,
-  initialLevelDb = -6,
+  initialLevelDb = -2,
   initialCalibrationDb = 0,
 ): CabIrEffectInstance {
   const input = ctx.createGain();

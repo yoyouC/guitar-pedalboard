@@ -121,6 +121,11 @@ kHz pink-weighted RMS transfer to its corresponding legacy Biquad response at un
 the unchanged user LEVEL. Fixed-DI blind listening remains the release approval for perceived level
 and tone.
 
+Custom IR 不复用某一个内置箱体的校准值。运行时以同一 pink-power 测量口径把每个导入
+文件对齐到 `+1.8 dB` 的公共资产目标，并把其确定性 `calibrationDb` 存入本地 Library；
+配合 `-2 dB` 的 Custom 新建 LEVEL，四个生产 WAV 以相同文件重新导入时，与对应内置身份
+的默认输出差均不超过 `0.5 dB`。该处理只缩放固定资产增益，不修改 IR 文件或演奏动态。
+
 License evidence was inspected from the following files in the local purchase:
 
 - `TONE FACTOR - XR IR PACK - 66 DELUXE REVERB 1x12 - V1-1/READ ME - Instructions.pdf`

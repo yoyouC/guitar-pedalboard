@@ -135,6 +135,12 @@ export function CabPanel({ showMeters, engineReady }: CabPanelProps) {
               <span>{irState.active.originalSampleRate.toLocaleString()} Hz</span>
               <span>{(irState.active.durationSeconds * 1000).toFixed(1)} ms</span>
               <span>裁剪 {irState.active.trimmedFrames} frames</span>
+              {Number.isFinite(irState.active.calibrationDb) && (
+                <span>
+                  自动校准 {irState.active.calibrationDb! > 0 ? '+' : ''}
+                  {irState.active.calibrationDb!.toFixed(1)} dB
+                </span>
+              )}
             </div>
           )}
           {visibleLibrary.length > 0 && (

@@ -11,6 +11,7 @@ import {
 } from './cabIrLibrary';
 import {
   MAX_CAB_IR_BYTES,
+  calibrateCustomCabIr,
   inspectWav,
   preprocessCabIr,
   sha256Hex,
@@ -50,7 +51,10 @@ export class CabIrService {
     this.libraryStore = library ?? new BrowserCabIrLibrary({
       pinnedHashes: () => referencedCustomIrHashes(this.rig.getState()),
     });
-    this.engine.setCabIrCustomLoader((hash) => this.libraryStore.get(hash));
+    this.engine.setCabIrCustomLoader(
+      (hash) => this.libraryStore.get(hash),
+      (hash, calibrationDb) => this.libraryStore.setCalibration(hash, calibrationDb),
+    );
     this.coordinator = new CabIrCoordinator({
       library: this.libraryStore,
       runtime: {
@@ -128,6 +132,7 @@ export class CabIrService {
       if (!ctx) throw new Error('请先启动音频输入再导入 IR');
       const decoded = await ctx.decodeAudioData(bytes.slice(0));
       const processed = preprocessCabIr(decoded);
+      const calibration = calibrateCustomCabIr(processed);
       const now = Date.now();
       const record: StoredCabIr = {
         hash,
@@ -139,6 +144,7 @@ export class CabIrService {
         processedSampleRate: processed.sampleRate,
         durationSeconds: processed.durationSeconds,
         trimmedFrames: processed.trimmedFrames,
+        calibrationDb: calibration.calibrationDb,
         createdAt: now,
         lastUsedAt: now,
       };

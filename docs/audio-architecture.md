@@ -242,6 +242,12 @@ canonical 型号保持 `open1x12`、`blue2x12`、`gb4x12`(默认)、`v304x12`，
 
 自定义 WAV 限 10MB、解码后 2 秒、mono/stereo。容器元数据先独立解析，PCM 经当前 AudioContext 解码/重采样，再按跨声道共同起点裁剪 -80dB 相对峰值以前的静音并保留约 0.5ms preroll。原始 Blob 以 SHA-256 去重存入 IndexedDB；canonical Rig 只保存 hash。库上限 16 条/64MB，当前 Rig、Preset 与 Snapshot 引用均 pinned，其余按 LRU 淘汰。
 
+Custom IR 在导入或旧记录首次加载时做一次离线 FFT 校准：按 70Hz–10kHz、1,024 点
+pink-power 加权传递增益对齐 `+1.8dB`，自动补偿限制为 `[-24,+12]dB`，校准后单位脉冲
+峰值不超过 1。结果作为本地记录元数据写入 IndexedDB，原始 Blob/PCM 不变；运行时只应用
+固定校准增益，不做会改变演奏动态的 AGC。Custom 的新建 LEVEL 默认值为 `-2dB`，已有
+Preset/Snapshot/Share 中保存的 LEVEL 继续按原值恢复。
+
 内置 IR 的来源、许可、署名、hash、型号映射与校准记录在 `public/irs/manifest.json`。
 四个 Tone Factor 生产文件已获单独直接分发授权并完成门禁，`CAB_IR_ASSETS_READY=true`；
 发布脚本会验证 public/dist 二进制 hash，禁止半发布、篡改或未登记 WAV。

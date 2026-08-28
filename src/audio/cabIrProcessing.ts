@@ -1,7 +1,14 @@
 export const MAX_CAB_IR_BYTES = 10 * 1024 * 1024;
 export const MAX_CAB_IR_SECONDS = 2;
+export const CUSTOM_CAB_IR_TARGET_TRANSFER_DB = 1.8;
+export const CUSTOM_CAB_IR_CALIBRATION_DB_MIN = -24;
+export const CUSTOM_CAB_IR_CALIBRATION_DB_MAX = 12;
+export const CUSTOM_CAB_IR_MAX_CALIBRATED_PEAK = 1;
 const SILENCE_THRESHOLD_DB = -80;
 const PREROLL_SECONDS = 0.0005;
+const CALIBRATION_FREQUENCY_MIN_HZ = 70;
+const CALIBRATION_FREQUENCY_MAX_HZ = 10_000;
+const CALIBRATION_FREQUENCY_LINES = 1024;
 
 export class CabIrError extends Error {
   constructor(message: string) {
@@ -31,6 +38,121 @@ export interface ProcessedCabIr {
   durationSeconds: number;
   trimmedFrames: number;
   peak: number;
+}
+
+export interface CabIrCalibration {
+  rawTransferDb: number;
+  calibrationDb: number;
+  calibratedTransferDb: number;
+  calibratedPeak: number;
+  limited: boolean;
+}
+
+function nextPowerOfTwo(value: number): number {
+  let result = 1;
+  while (result < value) result *= 2;
+  return result;
+}
+
+/** 原地 radix-2 FFT；正向变换不缩放，幅度与直接 DFT 保持一致。 */
+function fft(real: Float64Array, imaginary: Float64Array): void {
+  const size = real.length;
+  for (let index = 1, reversed = 0; index < size; index++) {
+    let bit = size >> 1;
+    while (reversed & bit) {
+      reversed ^= bit;
+      bit >>= 1;
+    }
+    reversed ^= bit;
+    if (index >= reversed) continue;
+    [real[index], real[reversed]] = [real[reversed], real[index]];
+    [imaginary[index], imaginary[reversed]] = [imaginary[reversed], imaginary[index]];
+  }
+
+  for (let width = 2; width <= size; width *= 2) {
+    const angle = -2 * Math.PI / width;
+    const stepReal = Math.cos(angle);
+    const stepImaginary = Math.sin(angle);
+    for (let offset = 0; offset < size; offset += width) {
+      let twiddleReal = 1;
+      let twiddleImaginary = 0;
+      for (let lane = 0; lane < width / 2; lane++) {
+        const even = offset + lane;
+        const odd = even + width / 2;
+        const oddReal = real[odd] * twiddleReal - imaginary[odd] * twiddleImaginary;
+        const oddImaginary = real[odd] * twiddleImaginary + imaginary[odd] * twiddleReal;
+        real[odd] = real[even] - oddReal;
+        imaginary[odd] = imaginary[even] - oddImaginary;
+        real[even] += oddReal;
+        imaginary[even] += oddImaginary;
+        const nextReal = twiddleReal * stepReal - twiddleImaginary * stepImaginary;
+        twiddleImaginary = twiddleReal * stepImaginary + twiddleImaginary * stepReal;
+        twiddleReal = nextReal;
+      }
+    }
+  }
+}
+
+/**
+ * 与内置资产基线相同的 70Hz–10kHz、1024 点 pink-power 加权传递增益。
+ * FFT 只在导入/首次迁移时运行，不进入实时音频线程。
+ */
+export function pinkWeightedCabIrTransferDb(processed: ProcessedCabIr): number {
+  const fftSize = nextPowerOfTwo(processed.channels[0].length);
+  const spectra = processed.channels.map((channel) => {
+    const real = new Float64Array(fftSize);
+    const imaginary = new Float64Array(fftSize);
+    real.set(channel);
+    fft(real, imaginary);
+    return { real, imaginary };
+  });
+  let weightedPower = 0;
+  let weightSum = 0;
+  for (let line = 0; line < CALIBRATION_FREQUENCY_LINES; line++) {
+    const frequency = CALIBRATION_FREQUENCY_MIN_HZ
+      + (CALIBRATION_FREQUENCY_MAX_HZ - CALIBRATION_FREQUENCY_MIN_HZ)
+        * line / (CALIBRATION_FREQUENCY_LINES - 1);
+    const exactBin = frequency * fftSize / processed.sampleRate;
+    const lowerBin = Math.floor(exactBin);
+    const upperBin = Math.min(lowerBin + 1, fftSize / 2);
+    const mix = exactBin - lowerBin;
+    let power = 0;
+    for (const spectrum of spectra) {
+      const real = spectrum.real[lowerBin] * (1 - mix) + spectrum.real[upperBin] * mix;
+      const imaginary = spectrum.imaginary[lowerBin] * (1 - mix)
+        + spectrum.imaginary[upperBin] * mix;
+      power += real * real + imaginary * imaginary;
+    }
+    power /= spectra.length;
+    const weight = 1 / frequency;
+    weightedPower += power * weight;
+    weightSum += weight;
+  }
+  const transferDb = 10 * Math.log10(weightedPower / weightSum);
+  if (!Number.isFinite(transferDb)) throw new CabIrError('无法计算箱体 IR 的自动校准');
+  return transferDb;
+}
+
+/** 计算一次性资产增益；不改写 PCM，也不会在演奏期间追踪或压缩响度。 */
+export function calibrateCustomCabIr(processed: ProcessedCabIr): CabIrCalibration {
+  const rawTransferDb = pinkWeightedCabIrTransferDb(processed);
+  const requestedDb = CUSTOM_CAB_IR_TARGET_TRANSFER_DB - rawTransferDb;
+  const rangeLimitedDb = Math.max(
+    CUSTOM_CAB_IR_CALIBRATION_DB_MIN,
+    Math.min(CUSTOM_CAB_IR_CALIBRATION_DB_MAX, requestedDb),
+  );
+  const peakLimitedDb = 20 * Math.log10(CUSTOM_CAB_IR_MAX_CALIBRATED_PEAK / processed.peak);
+  if (peakLimitedDb < CUSTOM_CAB_IR_CALIBRATION_DB_MIN) {
+    throw new CabIrError('箱体 IR 峰值过高，无法在安全增益范围内校准');
+  }
+  const calibrationDb = Math.round(Math.min(rangeLimitedDb, peakLimitedDb) * 1000) / 1000;
+  return {
+    rawTransferDb,
+    calibrationDb,
+    calibratedTransferDb: rawTransferDb + calibrationDb,
+    calibratedPeak: processed.peak * 10 ** (calibrationDb / 20),
+    limited: Math.abs(calibrationDb - requestedDb) > 0.0005,
+  };
 }
 
 function fourCc(view: DataView, offset: number): string {

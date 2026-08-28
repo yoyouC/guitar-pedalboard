@@ -57,6 +57,20 @@ test('IndexedDB adapter keeps original Blob, deduplicates hash, and sorts by rec
   assert.equal(records[0].lastUsedAt, 30);
 });
 
+test('IndexedDB adapter lazily adds calibration to a legacy record without replacing its Blob', async () => {
+  const library = new BrowserCabIrLibrary({ indexedDb: new IDBFactory() });
+  const legacy = record('legacy', 8, 7);
+  legacy.blob = new Blob(['original']);
+  await library.put(legacy);
+
+  await library.setCalibration('legacy', -13.25);
+
+  const migrated = await library.get('legacy');
+  assert.equal(migrated?.calibrationDb, -13.25);
+  assert.equal(await migrated?.blob.text(), 'original');
+  assert.equal(migrated?.lastUsedAt, 7);
+});
+
 test('IndexedDB adapter enforces count/LRU while preserving pinned references', async () => {
   const pinned = new Set(['0']);
   const library = new BrowserCabIrLibrary({

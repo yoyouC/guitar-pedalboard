@@ -18,6 +18,11 @@ Pedal/Amp。
 - WAV 导入按“读取/容器校验/hash/decode/PCM 校验/共同裁剪/Runtime prepare/IDB
   persist/同步 activate/canonical commit”执行。任一步失败都不提交 Rig；generation
   阻止迟到结果覆盖新选择。
+- Custom IR 在导入时离线计算与内置资产同口径的 70 Hz–10 kHz、1,024 点
+  pink-power 加权传递增益，并用固定资产增益对齐 `+1.8 dB` 目标。自动增益限制在
+  `[-24,+12] dB`，且校准后单位脉冲峰值不得超过 1；它不改写 PCM，也不是实时 AGC。
+  校准值随本地记录保存，旧 IndexedDB 记录在首次解码时确定性补算。Custom IR 的新建
+  LEVEL 默认值为 `-2 dB`；已有 Rig 中用户保存的 LEVEL 不迁移、不覆盖。
 - 自定义库保留原始 Blob 与展示元数据，16 条/64MB；Rig/Preset/Snapshot 引用 pinned，
   其余 LRU。删除被引用项会被拒绝。
 - Cab Runtime 的 input/output 身份稳定，内部使用两个 `normalize=false` Convolver lane，
@@ -36,4 +41,6 @@ Pedal/Amp。
 
 自定义文件只在当前浏览器可用，分享给另一设备时可能显示“IR 缺失”但不会篡改目标音色。
 每个 AudioContext 拥有自己的 lazy AudioBuffer cache；内存只预热活动内置项。旧 DSP
-的响应参数已记录在研究基线中，代码与部署版本仍可通过 Git 回滚。
+的响应参数已记录在研究基线中，代码与部署版本仍可通过 Git 回滚。同一 WAV 走内置或
+Custom 身份时，在各自默认 LEVEL 下的目标输出差不超过 `0.5 dB`；厂商文件本身的电平
+差异不再直接泄漏到两条产品路径之间。

@@ -227,7 +227,7 @@ function defaultAmpValues(ampId: string): Record<string, number> {
 }
 
 function defaultCabValues(cabId: string): Record<string, number> {
-  if (cabId === 'customIr') return { level: -6 };
+  if (cabId === 'customIr') return { level: -2 };
   const values: Record<string, number> = {};
   for (const p of getCabDef(cabId).params) values[p.key] = p.defaultValue;
   return values;

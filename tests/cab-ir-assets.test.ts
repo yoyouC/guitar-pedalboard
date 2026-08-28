@@ -3,7 +3,19 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { BUILTIN_CAB_IR_MANIFEST } from '../src/audio/cabIrManifest.ts';
-import { inspectWav } from '../src/audio/cabIrProcessing.ts';
+import {
+  CUSTOM_CAB_IR_TARGET_TRANSFER_DB,
+  calibrateCustomCabIr,
+  inspectWav,
+} from '../src/audio/cabIrProcessing.ts';
+
+const DEFAULT_LEVEL_DB = {
+  open1x12: -1,
+  blue2x12: -1.5,
+  gb4x12: -2,
+  v304x12: -2,
+} as const;
+const CUSTOM_DEFAULT_LEVEL_DB = -2;
 
 const GOLDENS = {
   open1x12: {
@@ -106,5 +118,24 @@ for (const entry of BUILTIN_CAB_IR_MANIFEST) {
     const calibratedBroadbandDb = pinkWeightedTransferDb(metrics.pcm, wav.sampleRate) + entry.calibrationDb;
     assert.ok(Math.abs(calibratedBroadbandDb - golden.calibratedBroadbandDb) < 0.01);
     assert.ok(metrics.peak * 10 ** (entry.calibrationDb / 20) < 0.2, '校准后单位脉冲峰值必须保留余量');
+
+    const customCalibration = calibrateCustomCabIr({
+      channels: [Float32Array.from(metrics.pcm)],
+      sampleRate: wav.sampleRate,
+      durationSeconds: metrics.samples / wav.sampleRate,
+      trimmedFrames: 0,
+      peak: metrics.peak,
+    });
+    assert.equal(customCalibration.limited, false);
+    assert.ok(
+      Math.abs(customCalibration.calibratedTransferDb - CUSTOM_CAB_IR_TARGET_TRANSFER_DB) < 0.02,
+      'Custom IR 应对齐统一的加权传递增益',
+    );
+    const builtinDefaultOutputDb = calibratedBroadbandDb + DEFAULT_LEVEL_DB[entry.id];
+    const customDefaultOutputDb = customCalibration.calibratedTransferDb + CUSTOM_DEFAULT_LEVEL_DB;
+    assert.ok(
+      Math.abs(builtinDefaultOutputDb - customDefaultOutputDb) <= 0.5,
+      '同一 WAV 作为内置或 Custom 加载时，默认输出应在 ±0.5dB 内',
+    );
   });
 }

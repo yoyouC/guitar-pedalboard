@@ -64,6 +64,7 @@ export interface BrowserCabIrLibraryOptions {
 
 export interface CabIrLibraryStore extends CabIrLibraryPort {
   list(): Promise<StoredCabIr[]>;
+  setCalibration(hash: string, calibrationDb: number): Promise<void>;
   delete(hash: string): Promise<boolean>;
 }
 
@@ -158,6 +159,16 @@ export class BrowserCabIrLibrary implements CabIrLibraryStore {
     await transactionDone(tx);
   }
 
+  async setCalibration(hash: string, calibrationDb: number): Promise<void> {
+    if (!Number.isFinite(calibrationDb)) throw new Error('IR 自动校准值无效');
+    const current = await this.get(hash);
+    if (!current) return;
+    const db = await this.open();
+    const tx = db.transaction('irs', 'readwrite');
+    tx.objectStore('irs').put({ ...current, calibrationDb });
+    await transactionDone(tx);
+  }
+
   async delete(hash: string): Promise<boolean> {
     if (this.pinnedHashes().has(hash)) return false;
     const db = await this.open();
@@ -183,6 +194,8 @@ export class UnavailableCabIrLibrary implements CabIrLibraryStore {
   }
 
   async touch(): Promise<void> {}
+
+  async setCalibration(): Promise<void> {}
 
   async delete(): Promise<boolean> {
     return false;

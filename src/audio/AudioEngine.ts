@@ -70,7 +70,6 @@ import { cabIrRefKey, type CabIrRef } from './cabIrTypes';
 import {
   CAB_IR_RUNTIME_DEF,
   CabIrBufferResolver,
-  cabIrCalibrationDb,
   isCabIrEffectInstance,
   stageInitialCabIrBuffer,
   type PreparedCabIrBuffer,
@@ -463,18 +462,16 @@ export class AudioEngine {
         cabIrFallbackActive: false,
       };
       if (this.cabSpec?.def === CAB_IR_RUNTIME_DEF) {
-        let activeIr: AudioBuffer;
-        let audibleRef = this.cabIrRef;
+        let activeIr: Awaited<ReturnType<CabIrBufferResolver['resolve']>>;
         try {
           activeIr = await this.cabIrResolver.resolve(ctx, this.cabIrRef);
           runtime.cabIrFallbackActive = false;
         } catch (error) {
           if (this.cabIrRef.kind !== 'custom') throw error;
-          audibleRef = { kind: 'builtin', id: 'gb4x12' };
-          activeIr = await this.cabIrResolver.resolve(ctx, audibleRef);
+          activeIr = await this.cabIrResolver.resolve(ctx, { kind: 'builtin', id: 'gb4x12' });
           runtime.cabIrFallbackActive = true;
         }
-        stageInitialCabIrBuffer(ctx, activeIr, cabIrCalibrationDb(audibleRef));
+        stageInitialCabIrBuffer(ctx, activeIr.buffer, activeIr.calibrationDb);
       }
       const plan = planGraph(this.graphSpec(), graphPrevState(runtime.graph));
       const artifacts = executePlan(
@@ -1212,12 +1209,15 @@ export class AudioEngine {
   async prepareCabIr(ref: CabIrRef, source?: unknown): Promise<PreparedCabIrBuffer> {
     const runtime = this.runtime;
     if (!runtime) throw new Error('请先启动音频输入');
-    const buffer = await this.cabIrResolver.resolve(runtime.ctx, ref, source);
-    return { context: runtime.ctx, ref, buffer, calibrationDb: cabIrCalibrationDb(ref) };
+    const resolved = await this.cabIrResolver.resolve(runtime.ctx, ref, source);
+    return { context: runtime.ctx, ref, ...resolved };
   }
 
-  setCabIrCustomLoader(loader: (hash: string) => Promise<import('./cabIrCoordinator').StoredCabIr | null>): void {
-    this.cabIrResolver.setCustomLoader(loader);
+  setCabIrCustomLoader(
+    loader: (hash: string) => Promise<import('./cabIrCoordinator').StoredCabIr | null>,
+    saveCalibration?: (hash: string, calibrationDb: number) => Promise<void>,
+  ): void {
+    this.cabIrResolver.setCustomLoader(loader, saveCalibration);
   }
 
   get isCabIrFallbackActive(): boolean {

@@ -231,7 +231,7 @@ test('custom IR commit stores only its hash and projects the stable IR runtime',
 
   assert.equal(store.getState().cabId, 'customIr');
   assert.deepEqual(store.getState().cabIrRef, { kind: 'custom', hash });
-  assert.equal(store.getState().cabValues.level, -6);
+  assert.equal(store.getState().cabValues.level, -2);
   assert.deepEqual(methods(), CAB_COMMIT_SEQUENCE);
   const cabSpec = calls.find((call) => call.method === 'setCab')?.args[0] as {
     def: { id: string };
@@ -239,7 +239,7 @@ test('custom IR commit stores only its hash and projects the stable IR runtime',
   };
   assert.equal(cabSpec.def.id, 'cabIrRuntime');
   assert.deepEqual(cabSpec.irRef, { kind: 'custom', hash });
-  assert.deepEqual(calls.at(-1), { method: 'updateCabParam', args: ['level', -6] });
+  assert.deepEqual(calls.at(-1), { method: 'updateCabParam', args: ['level', -2] });
 
   store.captureSnapshot(0);
   store.savePreset('Pinned IR');

@@ -15,7 +15,7 @@ const CAB_DEFINITIONS: readonly CabDefinitionMeta[] = [
   { id: 'blue2x12', name: '2x12 Blue', color: '#b03a2e', level: -1.5 },
   { id: 'gb4x12', name: '4x12 Greenback', color: '#c8a24a', level: -2 },
   { id: 'v304x12', name: '4x12 V30', color: '#5d6d7e', level: -2 },
-  { id: 'customIr', name: 'Custom IR', color: '#7467a8', level: -6 },
+  { id: 'customIr', name: 'Custom IR', color: '#7467a8', level: -2 },
 ];
 
 /**
