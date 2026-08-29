@@ -368,6 +368,14 @@ function serveMarketplaceApi(): Plugin {
       collectionTagIds: new Map([
         [demoCollection.id, demoCollection.tags.map((tag) => tag.id)],
       ]),
+      bindings: {
+        presetTagIds: () => publications.snapshotTagAssignments(),
+        collectionTagIds: () => collections.snapshotTagAssignments(),
+        synchronizeTags(tags) {
+          publications.synchronizeManagedTags(tags)
+          collections.synchronizeManagedTags(tags)
+        },
+      },
     }),
     sessions,
     adminAuthUserIds: new Set(

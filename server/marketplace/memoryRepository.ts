@@ -30,6 +30,7 @@ import {
 } from '../search/cursor.ts';
 import { rigResourceDependencyKey } from '../../shared/marketplaceResource.ts';
 import type { MarketplaceAccountExport } from '../../shared/account.ts';
+import type { ManagedMarketplaceTag } from '../tags/repository.ts';
 
 type MemoryMarketplaceTag = MarketplaceTag & {
   aliases?: readonly string[];
@@ -59,13 +60,64 @@ export function createMemoryPublishedPresetRepository(
     now: Date,
   ): Promise<void>;
   purgeAccount(memberId: string, now: Date): Promise<void>;
+  snapshotTagAssignments(): ReadonlyMap<string, readonly string[]>;
+  synchronizeManagedTags(tags: readonly ManagedMarketplaceTag[]): void;
 } & PublishedPresetSearchRepository {
   const presetsById = new Map(presets.map((preset) => [preset.id, preset]));
-  const tagsById = new Map(tags
-    .filter((tag) => (tag.status ?? 'active') === 'active')
-    .map(({ aliases: _aliases, status: _status, mergedIntoId: _mergedIntoId, ...tag }) => [tag.id, tag]));
-  const tagAliasesById = new Map(tags.map((tag) => [tag.id, tag.aliases ?? []]));
-  const resolvedTagIds = new Map(tags.map((tag) => [tag.id, tag.mergedIntoId ?? tag.id]));
+  const tagsById = new Map<string, MarketplaceTag>();
+  const sourceTagsById = new Map<string, MemoryMarketplaceTag>();
+  const resolvedTagIds = new Map<string, string | null>();
+  const tagAliasesById = new Map<string, readonly string[]>();
+  const resolveTagId = (id: string): string | null => {
+    const visited = new Set<string>();
+    let current = sourceTagsById.get(id);
+    while (current?.mergedIntoId) {
+      if (visited.has(current.id)) return null;
+      visited.add(current.id);
+      current = sourceTagsById.get(current.mergedIntoId);
+    }
+    return current?.id ?? null;
+  };
+  const rebuildTagCatalog = (
+    managedTags: readonly MemoryMarketplaceTag[],
+    migratePresets: boolean,
+  ) => {
+    tagsById.clear();
+    sourceTagsById.clear();
+    resolvedTagIds.clear();
+    tagAliasesById.clear();
+    for (const tag of managedTags) sourceTagsById.set(tag.id, tag);
+    for (const tag of managedTags) resolvedTagIds.set(tag.id, resolveTagId(tag.id));
+    for (const tag of managedTags) {
+      const { aliases: _aliases, status: _status, mergedIntoId: _mergedIntoId, ...publicTag } = tag;
+      if ((tag.status ?? 'active') === 'active') tagsById.set(tag.id, publicTag);
+      tagAliasesById.set(tag.id, [
+        ...(tag.aliases ?? []),
+        ...managedTags.filter((source) => (
+          source.id !== tag.id && resolveTagId(source.id) === tag.id
+        )).flatMap((source) => [
+          ...(source.aliases ?? []), source.id, source.nameZh, source.nameEn,
+        ]),
+      ]);
+    }
+    if (!migratePresets) return;
+    for (const preset of presetsById.values()) {
+      const seen = new Set<string>();
+      const nextTags = preset.tags.flatMap((tag) => {
+        const resolvedId = resolveTagId(tag.id) ?? tag.id;
+        if (seen.has(resolvedId)) return [];
+        seen.add(resolvedId);
+        const source = sourceTagsById.get(resolvedId);
+        if (!source) return [tag];
+        return [{
+          id: source.id, dimension: source.dimension,
+          nameZh: source.nameZh, nameEn: source.nameEn,
+        }];
+      });
+      presetsById.set(preset.id, { ...preset, tags: nextTags });
+    }
+  };
+  rebuildTagCatalog(tags, false);
   const revisionsByPresetId = new Map<string, Map<string, PublishedPresetRevision>>(
     presets.map((preset) => [
       preset.id,
@@ -128,6 +180,14 @@ export function createMemoryPublishedPresetRepository(
   }
 
   return {
+    snapshotTagAssignments() {
+      return new Map([...presetsById].map(([id, preset]) => [
+        id, preset.tags.map((tag) => tag.id),
+      ]));
+    },
+    synchronizeManagedTags(managedTags) {
+      rebuildTagCatalog(managedTags, true);
+    },
     async searchPublicPresets(input) {
       const candidates = [...presetsById.values()]
         .filter((preset) => preset.visibility === 'public')

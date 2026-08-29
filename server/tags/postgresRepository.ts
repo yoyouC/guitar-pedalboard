@@ -97,6 +97,7 @@ export function createPostgresMarketplaceTagAdministrationRepository(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('marketplace_tag_administration'))`);
         if (command.action === 'create') {
           const inserted = await client.query(
             `INSERT INTO marketplace_tags
@@ -147,6 +148,11 @@ export function createPostgresMarketplaceTagAdministrationRepository(
           await client.query(
             `UPDATE marketplace_tags SET aliases = $2::jsonb, updated_at = $3 WHERE id = $1`,
             [target.id, JSON.stringify(aliases), command.now],
+          );
+          await client.query(
+            `UPDATE marketplace_tags
+             SET merged_into_id = $2, updated_at = $3 WHERE merged_into_id = $1`,
+            [source.id, target.id, command.now],
           );
           await client.query(
             `UPDATE marketplace_tags

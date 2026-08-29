@@ -158,7 +158,16 @@ async function fetchRows(
            'dimension', tag.dimension,
            'nameZh', tag.name_zh,
            'nameEn', tag.name_en,
-           'aliases', tag.aliases
+           'aliases', tag.aliases || COALESCE((
+             SELECT jsonb_agg(forwarded.value)
+             FROM marketplace_tags AS source_tag
+             CROSS JOIN LATERAL jsonb_array_elements(
+               source_tag.aliases || jsonb_build_array(
+                 source_tag.id, source_tag.name_zh, source_tag.name_en
+               )
+             ) AS forwarded(value)
+             WHERE source_tag.merged_into_id = tag.id
+           ), '[]'::jsonb)
          ) ORDER BY tag.id)
          FROM marketplace_published_preset_tags AS preset_tag
          JOIN marketplace_tags AS tag ON tag.id = preset_tag.tag_id

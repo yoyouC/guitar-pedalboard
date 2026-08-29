@@ -157,13 +157,18 @@ function tagFromRow(row: TagRow): MarketplaceTag {
   return { id: row.id, dimension: row.dimension, nameZh: row.name_zh, nameEn: row.name_en };
 }
 
-async function activeTags(database: PostgresQueryable, tagIds?: readonly string[]): Promise<MarketplaceTag[]> {
+async function activeTags(
+  database: PostgresQueryable,
+  tagIds?: readonly string[],
+  lock = false,
+): Promise<MarketplaceTag[]> {
   const result = tagIds
     ? await database.query<TagRow>(
       `SELECT id, dimension, name_zh, name_en
        FROM marketplace_tags
        WHERE status = 'active' AND id = ANY($1::text[])
-       ORDER BY dimension, id`,
+       ORDER BY dimension, id
+       ${lock ? 'FOR SHARE' : ''}`,
       [tagIds],
     )
     : await database.query<TagRow>(
@@ -176,7 +181,7 @@ async function activeTags(database: PostgresQueryable, tagIds?: readonly string[
 }
 
 async function requireTags(database: PostgresQueryable, tagIds: readonly string[]): Promise<void> {
-  const tags = await activeTags(database, tagIds);
+  const tags = await activeTags(database, tagIds, true);
   if (tags.length !== new Set(tagIds).size) throw new PresetCollectionTagError();
 }
 

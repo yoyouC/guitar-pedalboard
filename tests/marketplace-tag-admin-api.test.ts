@@ -112,3 +112,25 @@ test('Tag merge migrates usages and aliases atomically and is safe to retry', as
   const audit = (await (await request('/api/marketplace/admin/tags/audit', 'GET', 'admin')).json()).entries;
   assert.equal(audit.filter((entry: { action: string }) => entry.action === 'merge_tag').length, 1);
 });
+
+test('Tag merge flattens every older source onto the final active target', async () => {
+  const { request } = fixture({
+    tags: [
+      { id: 'tag-a', dimension: 'tone', nameZh: '甲', nameEn: 'A', aliases: ['legacy-a'], status: 'active', mergedIntoId: null },
+      { id: 'tag-b', dimension: 'tone', nameZh: '乙', nameEn: 'B', aliases: [], status: 'active', mergedIntoId: null },
+      { id: 'tag-c', dimension: 'tone', nameZh: '丙', nameEn: 'C', aliases: [], status: 'active', mergedIntoId: null },
+    ],
+    presetTagIds: new Map([['preset-a', ['tag-a']]]),
+  });
+
+  assert.equal((await request('/api/marketplace/admin/tags/tag-a/merge', 'POST', 'admin', {
+    targetId: 'tag-b', reason: 'First consolidation.',
+  })).status, 200);
+  assert.equal((await request('/api/marketplace/admin/tags/tag-b/merge', 'POST', 'admin', {
+    targetId: 'tag-c', reason: 'Second consolidation.',
+  })).status, 200);
+
+  const tags = (await (await request('/api/marketplace/admin/tags', 'GET', 'admin')).json()).tags;
+  assert.equal(tags.find((tag: { id: string }) => tag.id === 'tag-a').mergedIntoId, 'tag-c');
+  assert.equal(tags.find((tag: { id: string }) => tag.id === 'tag-c').presetCount, 1);
+});
