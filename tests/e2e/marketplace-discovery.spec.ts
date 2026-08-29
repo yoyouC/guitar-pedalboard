@@ -11,7 +11,7 @@ test('unified discovery exposes three tabs with canonical creator navigation', a
   await page.getByRole('button', { name: 'Demo Crunch' }).click();
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    'http://127.0.0.1:4174/marketplace/presets/preset-demo-crunch',
+    'http://127.0.0.1:4174/marketplace/tones/preset-demo-crunch',
   );
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
@@ -58,12 +58,12 @@ test('legacy handle resolves to the id canonical page and Unlisted stays out of 
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    'http://127.0.0.1:4174/marketplace/presets/preset-demo-unlisted',
+    'http://127.0.0.1:4174/marketplace/tones/preset-demo-unlisted',
   );
 
   await page.goto('/marketplace/search');
   await page.getByLabel('搜索预设标题、介绍、创作者或标签').fill('Secret Demo Tone');
-  await page.getByRole('button', { name: '搜索公开内容' }).click();
-  await expect(page.getByText('没有匹配的公开预设。')).toBeVisible();
+  await page.getByRole('button', { name: '搜索 Tone' }).click();
+  await expect(page.getByText('没有匹配的 Tone')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Secret Demo Tone' })).toHaveCount(0);
 });

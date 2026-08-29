@@ -224,7 +224,6 @@ function AccountSettings({ locale, onNavigate }: { locale: AppLocale; onNavigate
       await recoverMarketplaceAccount();
       setDeletion(null);
       setMessage(locale === 'zh-CN' ? '账户已恢复；公开作品会按原可见性重新出现。' : 'Account restored.');
-      await memberSession.refresh();
     } catch (cause) {
       if (!await requireRecentAuthentication(cause)) {
         setMessage(cause instanceof Error ? cause.message : 'Account recovery failed.');
