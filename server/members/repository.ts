@@ -49,6 +49,7 @@ export class HandleChangeTooSoonError extends Error {
 
 export interface MemberRepository {
   findOrCreateForIdentity(input: CreateMemberInput): Promise<MemberRecord>;
+  findById(memberId: string): Promise<MemberRecord | null>;
   resolveHandle(handle: string): Promise<HandleResolution>;
   updateProfile(memberId: string, update: UpdateMemberProfileInput, now: Date): Promise<MemberRecord>;
 }

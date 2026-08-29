@@ -4,7 +4,10 @@ import type {
   MarketplaceLikeState,
   MarketplaceMyLikes,
   MarketplaceRankingPage,
+  MarketplaceSearchPage,
   PresetCollection,
+  PresetCollectionSearchItem,
+  PublicCreatorSearchItem,
   PublishedPresetSearchPage,
   PublishedPreset,
   PublishedPresetRevision,
@@ -360,6 +363,69 @@ export function parsePublishedPresetSearchPage(value: unknown): PublishedPresetS
     ) return null;
   }
   return value as unknown as PublishedPresetSearchPage;
+}
+
+function parseSearchEnvelope<Item>(
+  value: unknown,
+  parseItem: (item: unknown) => Item | null,
+): MarketplaceSearchPage<Item> | null {
+  if (
+    !isRecord(value)
+    || !hasOnlyKeys(value, ['items', 'nextCursor'])
+    || !Array.isArray(value.items)
+    || (value.nextCursor !== null && typeof value.nextCursor !== 'string')
+  ) return null;
+  const items = value.items.map(parseItem);
+  if (items.some((item) => item === null)) return null;
+  return { items: items as Item[], nextCursor: value.nextCursor };
+}
+
+export function parsePresetCollectionSearchPage(
+  value: unknown,
+): MarketplaceSearchPage<PresetCollectionSearchItem> | null {
+  return parseSearchEnvelope(value, (item) => {
+    if (
+      !isRecord(item)
+      || !isRecord(item.creator)
+      || !hasOnlyKeys(item, [
+        'id', 'title', 'description', 'creator', 'tags', 'url', 'createdAt', 'updatedAt',
+      ])
+      || typeof item.id !== 'string'
+      || typeof item.title !== 'string'
+      || typeof item.description !== 'string'
+      || !hasOnlyKeys(item.creator, ['id', 'handle', 'displayName'])
+      || typeof item.creator.id !== 'string'
+      || typeof item.creator.handle !== 'string'
+      || typeof item.creator.displayName !== 'string'
+      || !Array.isArray(item.tags)
+      || !item.tags.every(isMarketplaceTag)
+      || typeof item.url !== 'string'
+      || typeof item.createdAt !== 'string'
+      || typeof item.updatedAt !== 'string'
+    ) return null;
+    return item as unknown as PresetCollectionSearchItem;
+  });
+}
+
+export function parsePublicCreatorSearchPage(
+  value: unknown,
+): MarketplaceSearchPage<PublicCreatorSearchItem> | null {
+  return parseSearchEnvelope(value, (item) => {
+    if (
+      !isRecord(item)
+      || !hasOnlyKeys(item, [
+        'id', 'handle', 'displayName', 'bio', 'avatarUrl', 'url', 'createdAt',
+      ])
+      || typeof item.id !== 'string'
+      || typeof item.handle !== 'string'
+      || typeof item.displayName !== 'string'
+      || typeof item.bio !== 'string'
+      || (item.avatarUrl !== null && typeof item.avatarUrl !== 'string')
+      || typeof item.url !== 'string'
+      || typeof item.createdAt !== 'string'
+    ) return null;
+    return item as unknown as PublicCreatorSearchItem;
+  });
 }
 
 function isLikeSummary(value: unknown, withLikedAt: boolean): boolean {

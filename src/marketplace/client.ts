@@ -5,11 +5,15 @@ import type {
   MarketplaceAuthorModerationCase,
   MarketplaceLikeState,
   MarketplaceLikeTargetKind,
+  MarketplaceDiscoverySearchRequest,
+  MarketplaceSearchPage,
   MarketplaceMyLikes,
   MarketplaceRankingPage,
   MarketplaceModerationReportReason,
   MarketplaceModerationTargetKind,
   PresetCollection,
+  PresetCollectionSearchItem,
+  PublicCreatorSearchItem,
   PresetCollectionConcurrencyState,
   PublishedPresetSearchPage,
   PublishedPresetSearchRequest,
@@ -30,6 +34,8 @@ import {
   parseMarketplaceMyLikes,
   parseMarketplaceRankingPage,
   parsePresetCollection,
+  parsePresetCollectionSearchPage,
+  parsePublicCreatorSearchPage,
   parsePublishedPresetSearchPage,
   parsePublicPublishedPreset,
   parsePublishedPresetRevisionView,
@@ -101,6 +107,12 @@ export interface MarketplaceClient {
     request: UpdatePresetCollectionRequest,
   ): Promise<PresetCollection>;
   searchPublishedPresets(request: PublishedPresetSearchRequest): Promise<PublishedPresetSearchPage>;
+  searchPresetCollections(
+    request: MarketplaceDiscoverySearchRequest,
+  ): Promise<MarketplaceSearchPage<PresetCollectionSearchItem>>;
+  searchCreators(
+    request: MarketplaceDiscoverySearchRequest,
+  ): Promise<MarketplaceSearchPage<PublicCreatorSearchItem>>;
   getLikeState(kind: MarketplaceLikeTargetKind, id: string): Promise<MarketplaceLikeState>;
   setLike(kind: MarketplaceLikeTargetKind, id: string, liked: boolean): Promise<MarketplaceLikeState>;
   getMyLikes(): Promise<MarketplaceMyLikes>;
@@ -192,7 +204,11 @@ async function publicationError(response: Response): Promise<MarketplaceClientEr
           { items: '请选择允许收录的固定修订' },
         );
       }
-      if (error.code === 'invalid_preset_search' || error.code === 'invalid_search_cursor') {
+      if (
+        error.code === 'invalid_preset_search'
+        || error.code === 'invalid_marketplace_search'
+        || error.code === 'invalid_search_cursor'
+      ) {
         return new MarketplaceClientError(
           'invalid_search',
           error.code === 'invalid_search_cursor'
@@ -553,6 +569,19 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
       return page;
     },
 
+    searchPresetCollections(request) {
+      return discoveryRequest(
+        fetchResponse,
+        'collections',
+        request,
+        parsePresetCollectionSearchPage,
+      );
+    },
+
+    searchCreators(request) {
+      return discoveryRequest(fetchResponse, 'creators', request, parsePublicCreatorSearchPage);
+    },
+
     async getLikeState(kind, id) {
       return likeStateRequest(fetchResponse, kind, id, 'GET');
     },
@@ -603,6 +632,26 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
       });
     },
   };
+}
+
+async function discoveryRequest<Item>(
+  fetchResponse: Fetch,
+  kind: 'collections' | 'creators',
+  request: MarketplaceDiscoverySearchRequest,
+  parse: (value: unknown) => MarketplaceSearchPage<Item> | null,
+): Promise<MarketplaceSearchPage<Item>> {
+  const params = new URLSearchParams();
+  if (request.text) params.set('q', request.text);
+  if (request.limit !== undefined) params.set('limit', String(request.limit));
+  if (request.cursor) params.set('cursor', request.cursor);
+  const response = await fetchResponse(
+    `/api/marketplace/search/${kind}?${params}`,
+  ).catch(() => null);
+  if (!response) throw new MarketplaceClientError('network', '无法连接音色广场。');
+  if (!response.ok) throw await publicationError(response);
+  const page = parse(await response.json());
+  if (!page) throw new MarketplaceClientError('invalid_response', '搜索结果格式无效。');
+  return page;
 }
 
 async function moderationWrite(

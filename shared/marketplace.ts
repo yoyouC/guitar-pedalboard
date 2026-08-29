@@ -92,6 +92,38 @@ export interface PublishedPresetSearchPage {
   nextCursor: string | null;
 }
 
+export interface PresetCollectionSearchItem {
+  id: string;
+  title: string;
+  description: string;
+  creator: MarketplaceMemberSummary;
+  tags: MarketplaceTag[];
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicCreatorSearchItem {
+  id: string;
+  handle: string;
+  displayName: string;
+  bio: string;
+  avatarUrl: string | null;
+  url: string;
+  createdAt: string;
+}
+
+export interface MarketplaceSearchPage<Item> {
+  items: Item[];
+  nextCursor: string | null;
+}
+
+export interface MarketplaceDiscoverySearchRequest {
+  text?: string;
+  limit?: number;
+  cursor?: string;
+}
+
 export type MarketplaceLikeTargetKind = 'preset' | 'collection';
 
 export interface MarketplaceLikeState {

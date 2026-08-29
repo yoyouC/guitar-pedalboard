@@ -22,6 +22,14 @@
       "destination": "/api/marketplace-member?route=me"
     },
     {
+      "source": "/api/marketplace/creators/id/:memberId/presets",
+      "destination": "/api/marketplace-member?route=creator-id-presets&memberId=:memberId"
+    },
+    {
+      "source": "/api/marketplace/creators/id/:memberId",
+      "destination": "/api/marketplace-member?route=creator-id&memberId=:memberId"
+    },
+    {
       "source": "/api/marketplace/creators/:handle/presets",
       "destination": "/api/marketplace-member?route=creator-presets&handle=:handle"
     },
@@ -35,7 +43,15 @@
     },
     {
       "source": "/api/marketplace/search/presets",
-      "destination": "/api/marketplace-search"
+      "destination": "/api/marketplace-search?route=presets"
+    },
+    {
+      "source": "/api/marketplace/search/collections",
+      "destination": "/api/marketplace-search?route=collections"
+    },
+    {
+      "source": "/api/marketplace/search/creators",
+      "destination": "/api/marketplace-search?route=creators"
     },
     {
       "source": "/api/marketplace/me/likes",

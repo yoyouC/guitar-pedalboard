@@ -103,6 +103,28 @@ test('authenticated member creates one owned collection with controlled tags', a
   assert.equal(rejected.status, 401);
 });
 
+test('collection responses keep search-only tag aliases behind the repository boundary', async () => {
+  const aliasTags: Array<MarketplaceTag & { aliases: string[] }> = [{
+    ...tags[0],
+    aliases: ['rock tone'],
+  }];
+  const presets = createMemoryPublishedPresetRepository([], aliasTags);
+  const collections = createMemoryPresetCollectionRepository([{
+    id: 'collection-public',
+    title: 'Public Set',
+    description: '',
+    visibility: 'public',
+    creator: { id: 'member-ada', handle: 'ada', displayName: 'Ada' },
+    tags: [tags[0]],
+    items: [],
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  }], presets, aliasTags);
+
+  assert.deepEqual((await collections.listAvailableTags())[0], tags[0]);
+  assert.deepEqual((await collections.findVisibleById('collection-public'))?.tags[0], tags[0]);
+});
+
 test('banned member cannot create a community collection', async () => {
   const { api } = createFixture(adaIdentity, 'banned');
   const response = await createCollection(api);

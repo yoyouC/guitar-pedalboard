@@ -387,6 +387,59 @@ test('official client sends structured preset search and validates the public re
   );
 });
 
+test('official client keeps collection and creator discovery cursors on independent endpoints', async () => {
+  const collectionPage = {
+    items: [{
+      id: 'collection-rock',
+      title: 'Rock Stage',
+      description: 'Stage tones',
+      creator: demoPublishedPreset.creator,
+      tags: demoPublishedPreset.tags,
+      url: '/marketplace/collections/collection-rock',
+      createdAt: demoPublishedPreset.createdAt,
+      updatedAt: demoPublishedPreset.updatedAt,
+    }],
+    nextCursor: 'collection-next',
+  };
+  const creatorPage = {
+    items: [{
+      id: demoPublishedPreset.creator.id,
+      handle: demoPublishedPreset.creator.handle,
+      displayName: demoPublishedPreset.creator.displayName,
+      bio: 'Guitar tones',
+      avatarUrl: null,
+      url: `/creators/id/${demoPublishedPreset.creator.id}`,
+      createdAt: demoPublishedPreset.createdAt,
+    }],
+    nextCursor: 'creator-next',
+  };
+  const calls: string[] = [];
+  const client = createMarketplaceClient(async (input) => {
+    calls.push(String(input));
+    return Response.json(String(input).includes('/collections?') ? collectionPage : creatorPage);
+  });
+
+  assert.deepEqual(await client.searchPresetCollections({
+    text: 'rock', limit: 8, cursor: 'collection-current',
+  }), collectionPage);
+  assert.deepEqual(await client.searchCreators({
+    text: 'ada', limit: 6, cursor: 'creator-current',
+  }), creatorPage);
+  assert.deepEqual(calls, [
+    '/api/marketplace/search/collections?q=rock&limit=8&cursor=collection-current',
+    '/api/marketplace/search/creators?q=ada&limit=6&cursor=creator-current',
+  ]);
+
+  const leaked = createMarketplaceClient(async () => Response.json({
+    ...collectionPage,
+    items: [{ ...collectionPage.items[0], items: [{ title: 'private body' }] }],
+  }));
+  await assert.rejects(
+    () => leaked.searchPresetCollections({ text: 'rock' }),
+    (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
+  );
+});
+
 test('official client reads and mutates likes without accepting private trajectory drift', async () => {
   const calls: Array<{ path: string; method?: string }> = [];
   const summary = {

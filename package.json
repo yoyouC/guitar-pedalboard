@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "tsx --test tests/**/*.test.ts",
+    "test:e2e": "playwright test",
     "preview": "vite preview",
     "marketplace:migrate": "tsx scripts/marketplace-migrate.ts",
     "marketplace:seed": "tsx scripts/marketplace-seed.ts",
@@ -44,6 +45,7 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^24.13.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.17",

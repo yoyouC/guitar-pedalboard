@@ -88,6 +88,17 @@ test('member can edit public profile without accepting an arbitrary avatar uploa
 
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error.code, 'invalid_profile');
+
+  const reservedNamespace = await api.fetch(new Request(
+    'https://pedalboard.test/api/marketplace/me/profile',
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ handle: 'id', expectedUpdatedAt: now.toISOString() }),
+    },
+  ));
+  assert.equal(reservedNamespace.status, 400);
+  assert.equal((await reservedNamespace.json()).error.code, 'invalid_profile');
 });
 
 test('handle is unique, rate-limited for 90 days, and old handles redirect forever', async () => {
@@ -137,6 +148,19 @@ test('handle is unique, rate-limited for 90 days, and old handles redirect forev
   currentTime = new Date('2026-11-27T08:00:00.000Z');
   const changedAgain = await api.fetch(profilePatch({ handle: 'ada-rigs' }));
   assert.equal(changedAgain.status, 200);
+
+  const stableId = await api.fetch(
+    new Request('https://pedalboard.test/api/marketplace/creators/id/member-ada'),
+  );
+  assert.equal(stableId.status, 200);
+  assert.deepEqual((await stableId.json()).creator, {
+    id: 'member-ada',
+    handle: 'ada-rigs',
+    displayName: 'Ada Lovelace',
+    bio: '',
+    avatarUrl: 'https://images.example.test/ada.png',
+    publicWorksUrl: '/api/marketplace/creators/id/member-ada/presets',
+  });
 
   const reclaimed = await api.fetch(profilePatch({
     handle: 'player-4f82a1',

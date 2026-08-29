@@ -40,3 +40,10 @@ export function matchesSearchText(query: string, fields: readonly string[]): boo
     || (queryToken.length >= 4 && isWithinOneEdit(queryToken, documentToken))
   )));
 }
+
+export function marketplaceTagSearchFields(
+  tag: MarketplaceTag & { aliases?: readonly string[] },
+): string[] {
+  return [tag.nameZh, tag.nameEn, ...(tag.aliases ?? [])];
+}
+import type { MarketplaceTag } from '../../shared/marketplace.ts';

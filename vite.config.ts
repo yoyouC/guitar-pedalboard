@@ -14,7 +14,8 @@ import { createMemoryPublicCreatorWorks } from './server/members/works.ts'
 import { createPresetCollectionApi } from './server/collections/api.ts'
 import { createMemoryPresetCollectionRepository } from './server/collections/memoryRepository.ts'
 import type { MarketplaceTag, PresetCollection } from './shared/marketplace.ts'
-import { createPublishedPresetSearchApi } from './server/search/api.ts'
+import { createMarketplaceSearchApi } from './server/search/api.ts'
+import { createMemoryMarketplaceDiscoveryRepository } from './server/search/memoryRepository.ts'
 import { createMarketplaceLikesApi } from './server/likes/api.ts'
 import { createMemoryMarketplaceLikeRepository } from './server/likes/memoryRepository.ts'
 import { DEFAULT_MARKETPLACE_TRENDING_POLICY } from './server/trending/policy.ts'
@@ -73,7 +74,7 @@ function serveMarketplaceApi(): Plugin {
     handleChangedAt: null,
     createdAt: demoCreatedAt,
     updatedAt: demoCreatedAt,
-  }])
+  }], [{ handle: 'guitar-pedalboard-old', memberId: demoPublishedPreset.creator.id }])
   const marketplaceTags: Array<MarketplaceTag & { aliases: string[] }> = [
     { id: 'tone-clean', dimension: 'tone', nameZh: '清音', nameEn: 'Clean', aliases: ['clean tone'] },
     { id: 'tone-crunch', dimension: 'tone', nameZh: 'Crunch', nameEn: 'Crunch', aliases: ['crunch tone', 'overdrive'] },
@@ -83,7 +84,21 @@ function serveMarketplaceApi(): Plugin {
     { id: 'use-live', dimension: 'use', nameZh: '现场', nameEn: 'Live', aliases: ['stage'] },
     { id: 'use-recording', dimension: 'use', nameZh: '录音', nameEn: 'Recording', aliases: ['studio'] },
   ]
-  const publications = createMemoryPublishedPresetRepository([demoPublishedPreset], marketplaceTags)
+  const demoUnlistedPreset = {
+    ...structuredClone(demoPublishedPreset),
+    id: 'preset-demo-unlisted',
+    title: 'Secret Demo Tone',
+    description: 'Direct-link-only development fixture.',
+    visibility: 'unlisted' as const,
+    currentRevision: {
+      ...structuredClone(demoPublishedPreset.currentRevision),
+      id: 'revision-demo-unlisted-1',
+    },
+  }
+  const publications = createMemoryPublishedPresetRepository(
+    [demoPublishedPreset, demoUnlistedPreset],
+    marketplaceTags,
+  )
   const sessions = createBetterAuthSessionVerifier(auth.api)
   const presetApi = createMarketplaceApi({
     publishedPresets: publications,
@@ -142,7 +157,13 @@ function serveMarketplaceApi(): Plugin {
       createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
     },
   })
-  const searchApi = createPublishedPresetSearchApi({ presets: publications })
+  const searchApi = createMarketplaceSearchApi({
+    presets: publications,
+    discovery: createMemoryMarketplaceDiscoveryRepository({
+      collections: () => collections.listForDiscovery(),
+      members: () => members.listForDiscovery(),
+    }),
+  })
   const bannedMemberIds = new Set<string>()
   const likes = createMemoryMarketplaceLikeRepository({
     presets: [demoPublishedPreset],
@@ -252,7 +273,7 @@ function serveMarketplaceApi(): Plugin {
               ? await memberApi.fetch(request)
               : req.url.startsWith('/api/marketplace/collections')
                 ? await collectionApi.fetch(request)
-              : req.url.startsWith('/api/marketplace/search/presets')
+              : req.url.startsWith('/api/marketplace/search/')
                 ? await searchApi.fetch(request)
               : await presetApi.fetch(request)
           res.statusCode = response.status

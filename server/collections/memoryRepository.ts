@@ -21,12 +21,19 @@ export function createMemoryPresetCollectionRepository(
   presets: PresetCollectionReferenceSource,
   tags: readonly MarketplaceTag[],
 ): PresetCollectionRepository & PresetCollectionManagementRepository & {
+  listForDiscovery(): Promise<PresetCollection[]>;
   setModerationVisibility(
     collectionId: string,
     visibility: PresetCollection['visibility'],
   ): Promise<void>;
 } {
   const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+  const publicTag = (tag: MarketplaceTag): MarketplaceTag => ({
+    id: tag.id,
+    dimension: tag.dimension,
+    nameZh: tag.nameZh,
+    nameEn: tag.nameEn,
+  });
   const collectionsById = new Map<string, StoredPresetCollection>(initialCollections.map((item) => [
     item.id,
     {
@@ -70,7 +77,7 @@ export function createMemoryPresetCollectionRepository(
       tags: stored.tagIds.map((tagId) => {
         const tag = tagsById.get(tagId);
         if (!tag) throw new Error('Collection tag is missing');
-        return { ...tag };
+        return publicTag(tag);
       }),
       items,
       createdAt: stored.createdAt,
@@ -122,8 +129,26 @@ export function createMemoryPresetCollectionRepository(
   }
 
   return {
+    async listForDiscovery() {
+      return [...collectionsById.values()].map((stored) => ({
+        id: stored.id,
+        title: stored.title,
+        description: stored.description,
+        visibility: stored.visibility,
+        creator: structuredClone(stored.creator),
+        tags: stored.tagIds.map((tagId) => {
+          const tag = tagsById.get(tagId);
+          if (!tag) throw new Error('Collection tag is missing');
+          return { ...tag };
+        }),
+        items: [],
+        createdAt: stored.createdAt,
+        updatedAt: stored.updatedAt,
+      }));
+    },
+
     async listAvailableTags() {
-      return [...tagsById.values()].map((tag) => ({ ...tag }));
+      return [...tagsById.values()].map(publicTag);
     },
 
     async create(input) {

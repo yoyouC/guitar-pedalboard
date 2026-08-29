@@ -9,6 +9,7 @@ import type {
 import { isPublishedPresetRevisionCompatible } from '../../shared/marketplaceValidation';
 import { createPublishedPresetRigSession } from '../marketplace/applyPublishedPreset';
 import { marketplaceClient } from '../marketplace/client';
+import { useMarketplacePageMetadata } from '../marketplace/pageMetadata';
 import { publishedPresetRouteFromPath } from '../marketplace/route';
 import { rigStore } from '../state/useRig';
 import { PublishedPresetManager } from './PublishedPresetManager';
@@ -142,26 +143,13 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
     return () => { active = false; };
   }, [presetId, revisionId, attempt]);
 
-  useEffect(() => {
-    if (!presetId || loadState.status !== 'ready') return;
-    const previousTitle = document.title;
-    document.title = `${loadState.displayed.title} · Guitar Pedalboard`;
-    let robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
-    const previousRobots = robots?.content ?? null;
-    if (loadState.displayed.visibility !== 'public') {
-      if (!robots) {
-        robots = document.createElement('meta');
-        robots.name = 'robots';
-        document.head.append(robots);
-      }
-      robots.content = 'noindex,nofollow';
-    }
-    return () => {
-      document.title = previousTitle;
-      if (previousRobots === null) robots?.remove();
-      else if (robots) robots.content = previousRobots;
-    };
-  }, [loadState, presetId]);
+  useMarketplacePageMetadata(loadState.status === 'ready' ? {
+    kind: 'preset',
+    id: loadState.displayed.id,
+    title: loadState.displayed.title,
+    description: loadState.displayed.description,
+    visibility: loadState.displayed.visibility,
+  } : null);
 
   if (!route) return null;
 

@@ -14,15 +14,20 @@ import {
 
 export function createMemoryMemberRepository(
   initialMembers: readonly MemberRecord[] = [],
+  initialHandleClaims: readonly { handle: string; memberId: string }[] = [],
 ): MemberRepository & {
   count(): Promise<number>;
+  listForDiscovery(): Promise<MemberRecord[]>;
   setCommunityStatus(memberId: string, status: 'active' | 'banned'): Promise<void>;
 } {
   const membersById = new Map(initialMembers.map((member) => [member.id, { ...member }]));
   const memberIdsByAuthUserId = new Map(
     initialMembers.flatMap((member) => member.authUserId ? [[member.authUserId, member.id]] : []),
   );
-  const handleOwners = new Map(initialMembers.map((member) => [member.handle, member.id]));
+  const handleOwners = new Map([
+    ...initialMembers.map((member) => [member.handle, member.id] as const),
+    ...initialHandleClaims.map((claim) => [claim.handle, claim.memberId] as const),
+  ]);
 
   function currentMember(memberId: string): MemberRecord {
     const member = membersById.get(memberId);
@@ -31,6 +36,11 @@ export function createMemoryMemberRepository(
   }
 
   return {
+    async findById(memberId) {
+      const member = membersById.get(memberId);
+      return member ? { ...member } : null;
+    },
+
     async findOrCreateForIdentity({ id, identity, handle, now }: CreateMemberInput) {
       const existingId = memberIdsByAuthUserId.get(identity.authUserId);
       if (existingId) return { ...currentMember(existingId) };
@@ -91,6 +101,9 @@ export function createMemoryMemberRepository(
 
     async count() {
       return membersById.size;
+    },
+    async listForDiscovery() {
+      return [...membersById.values()].map((member) => ({ ...member }));
     },
     async setCommunityStatus(memberId: string, communityStatus: 'active' | 'banned') {
       const member = currentMember(memberId);

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PresetCollection } from '../../shared/marketplace';
 import { marketplaceClient } from '../marketplace/client';
 import { presetCollectionIdFromPath } from '../marketplace/route';
+import { useMarketplacePageMetadata } from '../marketplace/pageMetadata';
 import { PresetCollectionManager } from './PresetCollectionManager';
 import { MarketplaceLikeButton } from './MarketplaceLikeButton';
 import { MarketplaceReportForm } from './MarketplaceReportForm';
@@ -47,26 +48,13 @@ export function PresetCollectionRoute({ pathname, onClose, onNavigate }: PresetC
     return () => { active = false; };
   }, [collectionId, attempt]);
 
-  useEffect(() => {
-    if (!collectionId || state.status !== 'ready') return;
-    const previousTitle = document.title;
-    document.title = `${state.collection.title} · Guitar Pedalboard`;
-    let robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
-    const previousRobots = robots?.content ?? null;
-    if (state.collection.visibility !== 'public') {
-      if (!robots) {
-        robots = document.createElement('meta');
-        robots.name = 'robots';
-        document.head.append(robots);
-      }
-      robots.content = 'noindex,nofollow';
-    }
-    return () => {
-      document.title = previousTitle;
-      if (previousRobots === null) robots?.remove();
-      else if (robots) robots.content = previousRobots;
-    };
-  }, [collectionId, state]);
+  useMarketplacePageMetadata(state.status === 'ready' ? {
+    kind: 'collection',
+    id: state.collection.id,
+    title: state.collection.title,
+    description: state.collection.description,
+    visibility: state.collection.visibility === 'hidden' ? 'withdrawn' : state.collection.visibility,
+  } : null);
 
   if (!collectionId) return null;
   return (
