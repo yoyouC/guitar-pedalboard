@@ -35,11 +35,9 @@ import { RigFooter } from './components/RigFooter';
 import { Tone3000RedirectSelection } from './components/Tone3000RedirectSelection';
 import { Analytics } from '@vercel/analytics/react';
 import type { AudioDiagnosticsSnapshot } from './audio/audioDiagnostics';
-import { PublishedPresetRoute } from './components/PublishedPresetRoute';
-import { MemberPanel } from './components/MemberPanel';
-import { CreatorProfileRoute } from './components/CreatorProfileRoute';
-import { PresetCollectionRoute } from './components/PresetCollectionRoute';
-import { PublishedPresetSearchRoute } from './components/PublishedPresetSearchRoute';
+import { resolveAppRoute } from './app/route.ts';
+import { ApplicationHeader } from './components/ApplicationHeader.tsx';
+import { ApplicationRoute } from './components/ApplicationRoute.tsx';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -95,6 +93,8 @@ const translateMidiBinding = createBindingTranslator();
  */
 export default function App() {
   const [pathname, setPathname] = useState(window.location.pathname);
+  const route = resolveAppRoute(pathname);
+  const isPedalboard = route.kind === 'pedalboard';
   const [inputType, setInputType] = useState<InputSourceType | null>(null);
   const [engineReady, setEngineReady] = useState(false);
   const [showMeters, setShowMeters] = useState(true);
@@ -355,8 +355,10 @@ export default function App() {
   // ---------- 渲染 ----------
 
   return (
-    <div className="app">
-      {!reduceVisualLoad && !ytBgActive &&
+    <div className={`app ${isPedalboard ? 'app--pedalboard' : 'app--content'}`}>
+      <Analytics />
+
+      {isPedalboard && !reduceVisualLoad && !ytBgActive &&
         (bgTheme === 'prism' ? (
           <PrismBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
         ) : bgTheme === 'fluid' ? (
@@ -364,124 +366,101 @@ export default function App() {
         ) : (
           <MeddleBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
         ))}
-      <YouTubeBackground disabled={reduceVisualLoad} onActiveChange={setYtBgActive} />
-      <Analytics />
+      {isPedalboard && (
+        <YouTubeBackground disabled={reduceVisualLoad} onActiveChange={setYtBgActive} />
+      )}
 
-      {/* 背景主题切换:Meddle → 棱镜 → 流体 循环 */}
-      {!reduceVisualLoad && <button
-        className="bg-theme-toggle"
-        title={`切换背景:${BG_THEME_LABEL[BG_THEMES[(BG_THEMES.indexOf(bgTheme) + 1) % BG_THEMES.length]]}`}
-        onClick={() =>
-          setBgTheme((t) => BG_THEMES[(BG_THEMES.indexOf(t) + 1) % BG_THEMES.length])
-        }
-      >
-        {BG_THEME_ICON[bgTheme]}
-      </button>}
-
-      <header className="app-header">
-        <h1>🎸 Guitar Pedalboard</h1>
+      {isPedalboard && !reduceVisualLoad && (
         <button
-          className="marketplace-demo-link"
-          type="button"
-          onClick={() => navigate('/marketplace/search')}
+          className="bg-theme-toggle"
+          title={`切换背景:${BG_THEME_LABEL[BG_THEMES[(BG_THEMES.indexOf(bgTheme) + 1) % BG_THEMES.length]]}`}
+          onClick={() =>
+            setBgTheme((t) => BG_THEMES[(BG_THEMES.indexOf(t) + 1) % BG_THEMES.length])
+          }
         >
-          搜索音色
+          {BG_THEME_ICON[bgTheme]}
         </button>
-        <button
-          className="marketplace-demo-link"
-          type="button"
-          onClick={() => navigate('/marketplace/presets/preset-demo-crunch')}
-        >
-          音色广场 Demo
-        </button>
-        <button
-          className="marketplace-demo-link"
-          type="button"
-          onClick={() => navigate('/marketplace/collections/collection-demo-stage-tones')}
-        >
-          合集 Demo
-        </button>
-        <MemberPanel onNavigate={navigate} />
-      </header>
+      )}
 
-      <PublishedPresetRoute
-        pathname={pathname}
-        onClose={() => navigate('/')}
-        onNavigate={navigate}
-      />
-      <CreatorProfileRoute pathname={pathname} onClose={() => navigate('/')} onNavigate={navigate} />
-      <PresetCollectionRoute
-        pathname={pathname}
-        onClose={() => navigate('/')}
-        onNavigate={navigate}
-      />
-      <PublishedPresetSearchRoute
-        pathname={pathname}
-        onClose={() => navigate('/')}
-        onNavigate={navigate}
-      />
-
-      <TopBar
-        inputType={inputType}
-        onSelectMic={handleSelectMic}
-        onSelectFile={handleSelectFile}
-        onSelectTest={handleSelectTest}
-        onStopInput={handleStopInput}
-        micDevices={micDevices}
-        micId={micId}
-        onMicChange={handleMicChange}
-        outputDevices={outputDevices}
-        outputId={outputId}
-        onOutputChange={handleOutputChange}
-        outputSelectSupported={outputSelectSupported}
-        showMeters={effectiveShowMeters}
-        onToggleMeters={() => setShowMeters((m) => !m)}
-        showTuner={effectiveShowTuner}
-        onToggleTuner={() => setShowTuner((t) => !t)}
-        midi={midi}
-        midiLearn={{
-          learnMode,
-          armedTarget,
-          bindings: midiBindings,
-          onToggleLearn: () => {
-            setLearnMode((m) => !m);
-            setArmedTarget(null);
-          },
-          onDisarm: () => setArmedTarget(null),
-          onDeleteBinding: (i) => setMidiBindings((cur) => cur.filter((_, j) => j !== i)),
-          onClearBindings: () => setMidiBindings([]),
-        }}
-        inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
-        outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
+      <ApplicationHeader
+        section={route.section}
         engineReady={engineReady}
-        diagnostics={diagnostics}
-        reduceVisualLoad={reduceVisualLoad}
-        onReduceVisualLoadChange={setReduceVisualLoad}
+        inputType={inputType}
+        onNavigate={navigate}
+        onStopInput={handleStopInput}
       />
 
-      {/* 调音表:下拉面板,不占效果链位置 */}
-      {effectiveShowTuner && <Tuner analyser={engineReady ? audioEngine.inputAnalyser : null} />}
+      {isPedalboard ? (
+        <>
+          <TopBar
+            inputType={inputType}
+            onSelectMic={handleSelectMic}
+            onSelectFile={handleSelectFile}
+            onSelectTest={handleSelectTest}
+            onStopInput={handleStopInput}
+            micDevices={micDevices}
+            micId={micId}
+            onMicChange={handleMicChange}
+            outputDevices={outputDevices}
+            outputId={outputId}
+            onOutputChange={handleOutputChange}
+            outputSelectSupported={outputSelectSupported}
+            showMeters={effectiveShowMeters}
+            onToggleMeters={() => setShowMeters((m) => !m)}
+            showTuner={effectiveShowTuner}
+            onToggleTuner={() => setShowTuner((t) => !t)}
+            midi={midi}
+            midiLearn={{
+              learnMode,
+              armedTarget,
+              bindings: midiBindings,
+              onToggleLearn: () => {
+                setLearnMode((m) => !m);
+                setArmedTarget(null);
+              },
+              onDisarm: () => setArmedTarget(null),
+              onDeleteBinding: (i) => setMidiBindings((cur) => cur.filter((_, j) => j !== i)),
+              onClearBindings: () => setMidiBindings([]),
+            }}
+            inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
+            outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
+            engineReady={engineReady}
+            diagnostics={diagnostics}
+            reduceVisualLoad={reduceVisualLoad}
+            onReduceVisualLoadChange={setReduceVisualLoad}
+          />
 
-      <PresetBar onNavigate={navigate} />
+          {effectiveShowTuner && (
+            <Tuner analyser={engineReady ? audioEngine.inputAnalyser : null} />
+          )}
 
-      <main className="board">
-        <SnapshotSwitches />
-        <ChainView showMeters={effectiveShowMeters} />
-      </main>
+          <PresetBar onNavigate={navigate} />
 
-      <PreAmpEqPanel />
+          <main className="board">
+            <SnapshotSwitches />
+            <ChainView showMeters={effectiveShowMeters} />
+          </main>
 
-      <AmpPanel showMeters={effectiveShowMeters} engineReady={engineReady} />
+          <PreAmpEqPanel />
+          <AmpPanel showMeters={effectiveShowMeters} engineReady={engineReady} />
+          <CabPanel showMeters={effectiveShowMeters} engineReady={engineReady} />
 
-      <CabPanel showMeters={effectiveShowMeters} engineReady={engineReady} />
+          {!reduceVisualLoad && (
+            <Oscilloscope
+              inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
+              outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
+              showMeters={effectiveShowMeters}
+            />
+          )}
 
-      {!reduceVisualLoad && <Oscilloscope
-        inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
-        outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
-        showMeters={effectiveShowMeters}
-      />}
+          <RigFooter inputType={inputType} />
+        </>
+      ) : (
+        <main className="app-route" data-route={route.kind}>
+          <ApplicationRoute route={route} pathname={pathname} onNavigate={navigate} />
+        </main>
+      )}
 
-      <RigFooter inputType={inputType} />
       <Tone3000RedirectSelection />
     </div>
   );
