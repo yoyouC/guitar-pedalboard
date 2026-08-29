@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createDefaultPreAmpEqState } from '../src/audio/preAmpEq.ts';
 import { normalizeSnapshot } from '../src/state/presetCodec.ts';
 import { loadSnapshots, RIG_PRESET_CATALOG, SNAPSHOT_COUNT } from '../src/state/store.ts';
 
@@ -84,6 +85,25 @@ test('normalizeSnapshot: 旧形状解析为 legacy 分支,语义字段完整保�
   assert.equal(snap.cab.enabled, false);
   assert.equal(snap.chain[0].effectId, 'overdrive');
   assert.equal(snap.chain[0].enabled, false);
+  assert.deepEqual(snap.preAmpEq, createDefaultPreAmpEqState());
+});
+
+test('normalizeSnapshot: 箱头前均衡使用稳定频段名并钳制到 ±12 dB', () => {
+  const raw = {
+    ...newShapeSnapshot(),
+    preAmpEq: {
+      enabled: true,
+      bands: { hz31_25: -99, hz1000: 4.5, hz16000: 99 },
+      levelDb: 99,
+    },
+  };
+  const snap = normalizeSnapshot(raw, RIG_PRESET_CATALOG)!;
+  assert.equal(snap.preAmpEq.enabled, true);
+  assert.equal(snap.preAmpEq.bands.hz31_25, -12);
+  assert.equal(snap.preAmpEq.bands.hz1000, 4.5);
+  assert.equal(snap.preAmpEq.bands.hz16000, 12);
+  assert.equal(snap.preAmpEq.bands.hz4000, 0);
+  assert.equal(snap.preAmpEq.levelDb, 12);
 });
 
 test('normalizeSnapshot: 未知型号回退目录默认箱头,槽位仍存活', () => {

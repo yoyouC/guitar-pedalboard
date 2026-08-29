@@ -1,7 +1,14 @@
 import type { CabIrRef } from '../audio/cabIrTypes';
 import { isBuiltinCabId } from '../audio/cabIrTypes';
+import {
+  PRE_AMP_EQ_BANDS,
+  PRE_AMP_EQ_MAX_DB,
+  PRE_AMP_EQ_MIN_DB,
+  createDefaultPreAmpEqState,
+  type PreAmpEqState,
+} from '../audio/preAmpEq';
 
-export const RIG_PRESET_VERSION = 4;
+export const RIG_PRESET_VERSION = 5;
 export const PRESET_EXPORT_FORMAT = 'guitar-pedalboard-presets';
 export const PRESET_EXPORT_VERSION = 1;
 
@@ -69,6 +76,7 @@ export interface RigPresetState {
     enabled: boolean;
     values: Record<string, number>;
   };
+  preAmpEq: PreAmpEqState;
   globals: {
     inputGain: number;
     masterVolume: number;
@@ -114,6 +122,7 @@ export interface Snapshot {
   chain: PresetChainItem[];
   amp: SnapshotAmp;
   cab: SnapshotCab;
+  preAmpEq: PreAmpEqState;
 }
 
 interface PresetExportEnvelope {
@@ -287,6 +296,23 @@ function normalizeGlobals(
   };
 }
 
+function normalizePreAmpEq(rawEq: unknown): PreAmpEqState {
+  const fallback = createDefaultPreAmpEqState();
+  const source = isRecord(rawEq) ? rawEq : {};
+  const rawBands = isRecord(source.bands) ? source.bands : {};
+  for (const band of PRE_AMP_EQ_BANDS) {
+    fallback.bands[band.key] = clamp(
+      rawBands[band.key],
+      PRE_AMP_EQ_MIN_DB,
+      PRE_AMP_EQ_MAX_DB,
+      0,
+    );
+  }
+  fallback.enabled = typeof source.enabled === 'boolean' ? source.enabled : false;
+  fallback.levelDb = clamp(source.levelDb, PRE_AMP_EQ_MIN_DB, PRE_AMP_EQ_MAX_DB, 0);
+  return fallback;
+}
+
 /** 用 catalog 规范化任意来源的 rig 输入(预设/分享/快照共用唯一的 normalize 实现) */
 export function normalizeRig(rawRig: unknown, catalog: RigPresetCatalog): RigPresetState {
   const source = isRecord(rawRig) ? rawRig : {};
@@ -294,6 +320,7 @@ export function normalizeRig(rawRig: unknown, catalog: RigPresetCatalog): RigPre
     chain: normalizeChain(source.chain, catalog),
     amp: normalizeAmp(source.amp, catalog),
     cab: normalizeCab(source.cab, catalog),
+    preAmpEq: normalizePreAmpEq(source.preAmpEq),
     globals: normalizeGlobals(source.globals, catalog),
   };
 }
@@ -316,6 +343,7 @@ export function normalizeSnapshot(value: unknown, catalog: RigPresetCatalog): Sn
       : { id: value.cabId, enabled: value.cabEnabled, values: value.cabValues },
     catalog,
   );
+  const preAmpEq = normalizePreAmpEq(value.preAmpEq);
   if (isRecord(value.amp) && typeof value.amp.modelKey === 'string') {
     const amp = normalizeAmp({ ...value.amp, customName: null }, catalog);
     return {
@@ -328,6 +356,7 @@ export function normalizeSnapshot(value: unknown, catalog: RigPresetCatalog): Sn
         values: amp.values,
       },
       cab,
+      preAmpEq,
     };
   }
   if (typeof value.ampId === 'string') {
@@ -341,6 +370,7 @@ export function normalizeSnapshot(value: unknown, catalog: RigPresetCatalog): Sn
         values: normalizeValues(definition, value.ampValues),
       },
       cab,
+      preAmpEq,
     };
   }
   return null;
@@ -360,17 +390,23 @@ function migrateLegacyPreset(
       chain: normalizeChain(source.items, catalog),
       amp: defaultAmp(catalog),
       cab: normalizeCab(undefined, catalog),
+      preAmpEq: normalizePreAmpEq(undefined),
       globals: normalizeGlobals(undefined, catalog),
     },
   };
 }
 
-/** v2/v3 已是 canonical Rig；经当前 normalize 补齐后续身份字段。 */
+/** v2-v4 已是 canonical Rig；经当前 normalize 补齐后续身份字段。 */
 function migratePreviousPreset(
   source: Record<string, unknown>,
   catalog: RigPresetCatalog,
 ): RigPreset | null {
-  if ((source.version !== 2 && source.version !== 3) || typeof source.name !== 'string' || !source.name.trim() || !isRecord(source.rig)) {
+  if (
+    (source.version !== 2 && source.version !== 3 && source.version !== 4) ||
+    typeof source.name !== 'string' ||
+    !source.name.trim() ||
+    !isRecord(source.rig)
+  ) {
     return null;
   }
   return {

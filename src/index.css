@@ -858,6 +858,249 @@ input[type='text'] {
   cursor: pointer;
 }
 
+/* ---------- 箱头前十段均衡 ---------- */
+
+.preamp-eq-panel {
+  overflow: hidden;
+  border: 1px solid rgba(91, 190, 174, 0.34);
+  border-radius: 12px;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 4px),
+    linear-gradient(180deg, rgba(18, 46, 45, 0.96), rgba(10, 25, 27, 0.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.38);
+  transition: border-color 0.15s, filter 0.15s;
+}
+
+.preamp-eq-panel.eq-enabled {
+  border-color: rgba(67, 222, 190, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 18px rgba(22, 160, 133, 0.12),
+    0 8px 24px rgba(0, 0, 0, 0.38);
+}
+
+.preamp-eq-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 9px 12px 9px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(48, 70, 71, 0.78), rgba(25, 42, 43, 0.78));
+}
+
+.preamp-eq-heading,
+.preamp-eq-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.preamp-eq-heading {
+  min-width: 0;
+}
+
+.preamp-eq-title {
+  color: #ddfff8;
+  font-size: 15px;
+  font-weight: 850;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.preamp-eq-subtitle,
+.preamp-eq-route {
+  color: rgba(206, 236, 231, 0.5);
+  font-family: monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.preamp-eq-status {
+  padding: 3px 7px;
+  border: 1px solid #5c4941;
+  border-radius: 999px;
+  background: rgba(50, 28, 24, 0.7);
+  color: #d89a87;
+  font-family: monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.preamp-eq-status.is-on {
+  border-color: #2cab8e;
+  background: rgba(13, 78, 67, 0.75);
+  color: #7ff5d7;
+  box-shadow: 0 0 9px rgba(48, 221, 182, 0.28);
+}
+
+.preamp-eq-actions {
+  flex-shrink: 0;
+}
+
+.preamp-eq-actions button {
+  min-height: 30px;
+  padding: 5px 10px;
+  border-color: rgba(135, 184, 178, 0.28);
+  background: rgba(10, 22, 24, 0.68);
+  color: #cde4e0;
+  font-size: 11px;
+}
+
+.preamp-eq-actions > span[data-midi-target] {
+  display: inline-flex;
+}
+
+.preamp-eq-bypass {
+  min-width: 76px;
+  border-color: #7e483e !important;
+  color: #e9a897 !important;
+}
+
+.preamp-eq-bypass.is-on {
+  border-color: #2cab8e !important;
+  background: #176b5b !important;
+  color: #effffb !important;
+  box-shadow: 0 0 9px rgba(48, 221, 182, 0.24);
+}
+
+.preamp-eq-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.preamp-eq-scroll {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: #347f72 rgba(0, 0, 0, 0.22);
+}
+
+.preamp-eq-controls {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: clamp(8px, 1.6vw, 22px);
+  min-width: 900px;
+  padding: 14px 22px 16px;
+  transition: opacity 0.15s, filter 0.15s;
+}
+
+.eq-bypassed .preamp-eq-controls {
+  opacity: 0.62;
+  filter: saturate(0.55);
+}
+
+.preamp-eq-band {
+  position: relative;
+  display: grid;
+  grid-template-columns: 23px 28px;
+  grid-template-rows: 18px 158px 16px 11px;
+  justify-items: center;
+  align-items: center;
+  column-gap: 2px;
+  min-width: 54px;
+  color: #b9d6d1;
+}
+
+.preamp-eq-band input[type='range'] {
+  grid-column: 2;
+  grid-row: 2;
+  width: 26px;
+  height: 148px;
+  margin: 0;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  accent-color: #35c5a6;
+  cursor: ns-resize;
+}
+
+.preamp-eq-band input[type='range']:focus-visible {
+  outline: 2px solid #ffd54d;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.preamp-eq-value {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  color: #8fe5d3;
+  font-family: monospace;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.preamp-eq-scale {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 4px 0;
+  color: rgba(194, 224, 219, 0.42);
+  font-family: monospace;
+  font-size: 8px;
+  text-align: right;
+}
+
+.preamp-eq-frequency {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  color: #e2f6f2;
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.preamp-eq-unit {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  color: rgba(190, 218, 213, 0.42);
+  font-family: monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+}
+
+.preamp-eq-level {
+  margin-left: 8px;
+  padding-left: 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+@media (max-width: 720px) {
+  .preamp-eq-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .preamp-eq-heading,
+  .preamp-eq-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .preamp-eq-actions {
+    justify-content: flex-end;
+  }
+
+  .preamp-eq-route,
+  .preamp-eq-subtitle {
+    display: none;
+  }
+
+  .preamp-eq-controls {
+    justify-content: flex-start;
+  }
+}
+
 /* ---------- 箱头模拟 ---------- */
 
 .amp-section {

@@ -1,4 +1,5 @@
 import type { EffectDefinition, EffectInstance } from './effects/types';
+import type { PreAmpEqRuntime } from './preAmpEq';
 
 /**
  * 图谱编译的 functional core / imperative shell(ADR-0005):
@@ -10,7 +11,7 @@ import type { EffectDefinition, EffectInstance } from './effects/types';
  *
  *   executePlan(ctx, env, plan) → GraphArtifacts   薄执行。
  *     按固定线性规则创建节点与接线:
- *       inputGain → 前置链 → preAmp tap → 箱头 → FX Loop 后置链 → 箱体 → looper/output
+ *       inputGain → 前置链 → 箱头前均衡 → preAmp tap → 箱头 → FX Loop 后置链 → 箱体 → looper/output
  *     空 plan 直接 no-op(返回 null),不触碰任何状态。
  *     NAM 的 fetch/模型缓存等模块级副作用只允许在这一层被触达(经 def.create)。
  *
@@ -120,6 +121,7 @@ export interface GraphEnv {
   inputAnalyser: AnalyserNode;
   outputAnalyser: AnalyserNode;
   looperNode: AudioNode | null;
+  preAmpEq: PreAmpEqRuntime;
 }
 
 /** execute 的产物:engine 整体替换对应字段(不做原地 clear/set) */
@@ -346,6 +348,7 @@ export function executePlan(
 
   // 3. 断开 inputGain 全部下游(含 analyser 与旧链),再按新链重连
   env.inputGain.disconnect();
+  env.preAmpEq.output.disconnect();
   env.inputGain.connect(env.inputAnalyser);
 
   let prev: AudioNode = env.inputGain;
@@ -362,7 +365,10 @@ export function executePlan(
     for (const p of plan.pedals) {
       if (!p.post) connectPedal(p);
     }
-    // 箱头前抽头:前置链末端(削波检测/背景变色用)
+    // 固定箱头前均衡:不属于 ChainItem；独立 Bypass 保持单位响应且不触发重建。
+    prev.connect(env.preAmpEq.input);
+    prev = env.preAmpEq.output;
+    // 箱头前抽头:均衡输出(真正进入箱头的信号；削波检测/背景变色用)
     artifacts.preAmpAnalyser = createTap(ctx, prev);
     // 箱头位于前置效果链之后(踏板 → 箱头的真实路由)
     if (plan.amp) {

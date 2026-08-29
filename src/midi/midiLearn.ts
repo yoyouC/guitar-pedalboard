@@ -7,6 +7,7 @@
 
 import type { ParsedMidiMessage } from './midiMessage';
 import { MOTION_INPUT_NAME_PATTERN } from './midiMapping';
+import { PRE_AMP_EQ_BANDS, type PreAmpEqBandKey } from '../audio/preAmpEq';
 
 /** 绑定目标(纯地址类型,"绑的是哪个控件";链上位置语义,与默认映射一致:
  *  单块按链序索引,0 起)。与 RigAction("要执行什么"的意图,携带语义值)
@@ -19,6 +20,9 @@ export type MidiTarget =
   | { kind: 'bypass' }
   | { kind: 'master-volume' }
   | { kind: 'amp-param'; key: string }
+  | { kind: 'preamp-eq-toggle' }
+  | { kind: 'preamp-eq-band'; key: PreAmpEqBandKey }
+  | { kind: 'preamp-eq-level' }
   | { kind: 'looper-record' }
   | { kind: 'looper-play' }
   | { kind: 'looper-clear' };
@@ -70,6 +74,8 @@ export function serializeTarget(t: MidiTarget): string {
       return `snapshot:${t.slot}`;
     case 'amp-param':
       return `amp-param:${t.key}`;
+    case 'preamp-eq-band':
+      return `preamp-eq-band:${t.key}`;
     default:
       return t.kind; // bypass / master-volume / looper-*
   }
@@ -90,11 +96,17 @@ export function parseTarget(s: string): MidiTarget | null {
       return num !== null ? { kind, slot: num } : null;
     case 'amp-param':
       return a ? { kind, key: a } : null;
+    case 'preamp-eq-band':
+      return PRE_AMP_EQ_BANDS.some((band) => band.key === a)
+        ? { kind, key: a as PreAmpEqBandKey }
+        : null;
     case 'bypass':
     case 'master-volume':
     case 'looper-record':
     case 'looper-play':
     case 'looper-clear':
+    case 'preamp-eq-toggle':
+    case 'preamp-eq-level':
       return { kind };
     default:
       return null;
@@ -107,6 +119,8 @@ function targetSig(t: MidiTarget): string {
     case 'pedal-param':
       return `${t.kind}:${t.index}:${t.key}`;
     case 'amp-param':
+      return `${t.kind}:${t.key}`;
+    case 'preamp-eq-band':
       return `${t.kind}:${t.key}`;
     case 'pedal-toggle':
     case 'pedal-treadle':
@@ -143,6 +157,12 @@ export function targetLabel(t: MidiTarget): string {
       return 'Master Volume';
     case 'amp-param':
       return `箱头 ${t.key}`;
+    case 'preamp-eq-toggle':
+      return '箱头前 EQ Bypass';
+    case 'preamp-eq-band':
+      return `箱头前 EQ · ${PRE_AMP_EQ_BANDS.find((band) => band.key === t.key)?.label ?? t.key}`;
+    case 'preamp-eq-level':
+      return '箱头前 EQ · Level';
     case 'looper-record':
       return 'Looper 录音';
     case 'looper-play':

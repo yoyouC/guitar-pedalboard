@@ -17,6 +17,7 @@
 
 import { LEVEL_DB_MAX, LEVEL_DB_MIN } from '../audio/level';
 import type { ParsedMidiMessage } from './midiMessage';
+import type { PreAmpEqBandKey } from '../audio/preAmpEq';
 
 // ---------- 编号常量(实机核对/改配时改这里) ----------
 
@@ -134,7 +135,13 @@ export type RigAction =
   /** 设置效果链第 index 块单块的参数(链索引语义;value 已按效果定义参数表映射) */
   | { type: 'set-pedal-param'; index: number; key: string; value: number }
   /** 设置效果链第 index 块单块的摇杆行程(链索引语义;position 0..100) */
-  | { type: 'set-pedal-treadle'; index: number; value: number };
+  | { type: 'set-pedal-treadle'; index: number; value: number }
+  /** 切换固定箱头前均衡的独立 Bypass。 */
+  | { type: 'toggle-preamp-eq' }
+  /** 设置箱头前均衡的一个稳定身份频段。 */
+  | { type: 'set-preamp-eq-band'; key: PreAmpEqBandKey; value: number }
+  /** 设置箱头前均衡输出 Level(dB)。 */
+  | { type: 'set-preamp-eq-level'; value: number };
 
 /** CC 值 0..127 线性映射到 [min, max] */
 export function ccToRange(ccValue: number, min: number, max: number): number {

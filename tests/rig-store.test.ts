@@ -14,6 +14,7 @@ import {
   type RigStoreState,
 } from '../src/state/rigStore.ts';
 import { decodeShareState, encodeShareState, DEFAULT_RIG_ENCODED } from '../src/state/share.ts';
+import { createDefaultPreAmpEqState } from '../src/audio/preAmpEq.ts';
 
 /**
  * rigStore 行为测试:只用 stub engine 断言 store interface 上的外部行为
@@ -37,6 +38,10 @@ function createStubEngine() {
     setChain: rec('setChain'),
     setAmp: rec('setAmp'),
     setCab: rec('setCab'),
+    setPreAmpEq: rec('setPreAmpEq'),
+    setPreAmpEqEnabled: rec('setPreAmpEqEnabled'),
+    updatePreAmpEqBand: rec('updatePreAmpEqBand'),
+    setPreAmpEqLevel: rec('setPreAmpEqLevel'),
     updateParam: rec('updateParam'),
     updateAmpParam: rec('updateAmpParam'),
     updateCabParam: rec('updateCabParam'),
@@ -70,7 +75,13 @@ function installLocalStorage() {
 /** 结构性 verb / applyRig 的固定引擎写序列(结构四连 + 全局两连) */
 const STRUCTURE_SEQUENCE = ['setGlobalBypass', 'setChain', 'setAmp', 'setCab'];
 const CAB_COMMIT_SEQUENCE = [...STRUCTURE_SEQUENCE, 'updateCabParam'];
-const APPLY_SEQUENCE = [...CAB_COMMIT_SEQUENCE, 'setInputGain', 'setMasterVolume'];
+const APPLY_SEQUENCE = [
+  ...STRUCTURE_SEQUENCE,
+  'setPreAmpEq',
+  'updateCabParam',
+  'setInputGain',
+  'setMasterVolume',
+];
 
 /** 比较用的链摘要(uid 各路径重新生成,不参与比较) */
 function chainSummary(state: RigStoreState) {
@@ -93,6 +104,7 @@ function rigSummary(state: RigStoreState) {
     cabIrRef: state.cabIrRef,
     cabEnabled: state.cabEnabled,
     cabValues: state.cabValues,
+    preAmpEq: state.preAmpEq,
     inputGain: state.inputGain,
     masterVolume: state.masterVolume,
     globalBypass: state.globalBypass,
@@ -113,6 +125,7 @@ test('initial state aligns with catalog defaults (ADR-0006 单点)', () => {
   assert.equal(state.masterVolume, 0.5);
   assert.equal(state.globalBypass, false);
   assert.equal(state.cabId, 'gb4x12');
+  assert.deepEqual(state.preAmpEq, createDefaultPreAmpEqState());
   // 默认型号(builtin:crunch)推导初始箱头分类与 def
   assert.equal(state.ampCategoryId, 'crunch');
   assert.equal(state.ampId, 'crunch');
@@ -152,6 +165,32 @@ test('param verbs update state and engine without structure rebuild', () => {
     { method: 'setInputGain', args: [1.5] },
     { method: 'setMasterVolume', args: [0.7] },
   ]);
+  assert.equal(store.getState().graphVersion, 0);
+});
+
+test('箱头前均衡 verbs 实时投影且 Reset 保持开关、不触发图谱重建', () => {
+  const { engine, calls } = createStubEngine();
+  const store = createRigStore(engine);
+
+  store.setPreAmpEqBand('hz1000', 6);
+  store.setPreAmpEqLevel(-3);
+  store.setPreAmpEqEnabled(true);
+  assert.equal(store.getState().preAmpEq.bands.hz1000, 6);
+  assert.equal(store.getState().preAmpEq.levelDb, -3);
+  assert.equal(store.getState().preAmpEq.enabled, true);
+  assert.deepEqual(calls.map((call) => call.method), [
+    'updatePreAmpEqBand',
+    'setPreAmpEqLevel',
+    'setPreAmpEqEnabled',
+  ]);
+  assert.equal(store.getState().graphVersion, 0);
+
+  calls.length = 0;
+  store.resetPreAmpEq();
+  assert.equal(store.getState().preAmpEq.enabled, true);
+  assert.deepEqual(Object.values(store.getState().preAmpEq.bands), Array(10).fill(0));
+  assert.equal(store.getState().preAmpEq.levelDb, 0);
+  assert.deepEqual(calls.map((call) => call.method), ['setPreAmpEq']);
   assert.equal(store.getState().graphVersion, 0);
 });
 
@@ -402,6 +441,9 @@ function makeSourceRig() {
   src.setAmpParam('gain', 70);
   src.setCab('blue2x12');
   src.setCabParam('level', -4);
+  src.setPreAmpEqBand('hz1000', 4);
+  src.setPreAmpEqLevel(-2);
+  src.setPreAmpEqEnabled(true);
   src.savePreset('T');
   src.captureSnapshot(0);
   const state = src.getState();
@@ -476,6 +518,7 @@ test('derivation: toSnapshot/rigToShareState are canonical minus the agreed fiel
     values: preset.rig.amp.values,
   });
   assert.deepEqual(snap.cab, preset.rig.cab);
+  assert.deepEqual(snap.preAmpEq, preset.rig.preAmpEq);
   assert.equal('globals' in snap, false);
 
   // share = preset.rig − globals − customName(扁平化是编码层的形状,不是第三套知识)
@@ -490,6 +533,7 @@ test('derivation: toSnapshot/rigToShareState are canonical minus the agreed fiel
   assert.equal(share.cabId, preset.rig.cab.id);
   assert.deepEqual(share.cabIrRef, preset.rig.cab.ir);
   assert.deepEqual(share.cabValues, preset.rig.cab.values);
+  assert.deepEqual(share.preAmpEq, preset.rig.preAmpEq);
 });
 
 test('snapshot capture/recall/clear with derived dirty flag', () => {
@@ -499,6 +543,18 @@ test('snapshot capture/recall/clear with derived dirty flag', () => {
 
   store.captureSnapshot(0);
   assert.equal(store.getState().activeSlot, 0);
+  assert.equal(isSnapshotDirty(store.getState(), 0), false);
+  store.setPreAmpEqBand('hz2000', 3);
+  assert.equal(isSnapshotDirty(store.getState(), 0), true, 'EQ 参数属于 Snapshot dirty');
+  store.setPreAmpEqBand('hz2000', 0);
+  assert.equal(isSnapshotDirty(store.getState(), 0), false);
+  store.setPreAmpEqLevel(-2);
+  assert.equal(isSnapshotDirty(store.getState(), 0), true, 'EQ Level 属于 Snapshot dirty');
+  store.setPreAmpEqLevel(0);
+  assert.equal(isSnapshotDirty(store.getState(), 0), false);
+  store.setPreAmpEqEnabled(true);
+  assert.equal(isSnapshotDirty(store.getState(), 0), true, 'EQ 开关属于 Snapshot dirty');
+  store.setPreAmpEqEnabled(false);
   assert.equal(isSnapshotDirty(store.getState(), 0), false);
   // 持久化:新 store 能读到同一快照
   assert.notEqual(createRigStore(createStubEngine().engine).getState().snapshots[0], null);

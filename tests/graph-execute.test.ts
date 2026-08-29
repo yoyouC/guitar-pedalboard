@@ -16,6 +16,11 @@ import {
   type GraphEnv,
   type GraphPlan,
 } from '../src/audio/graphBuilder.ts';
+import {
+  createDefaultPreAmpEqState,
+  createPreAmpEqRuntime,
+  type PreAmpEqRuntime,
+} from '../src/audio/preAmpEq.ts';
 
 /**
  * executePlan 的冒烟测试:经 stub AudioContext 断言节点创建与接线。
@@ -29,6 +34,7 @@ interface EnvFixture {
   inputAnalyser: StubAnalyserNode;
   outputAnalyser: StubAnalyserNode;
   looperNode: StubGainNode;
+  preAmpEq: PreAmpEqRuntime;
 }
 
 /** 按引擎 init 的方式预接固定主链路(inputGain→inputAnalyser、looper→outputAnalyser) */
@@ -37,6 +43,10 @@ function makeEnv(ctx: StubAudioContext, opts: { looper?: boolean } = {}): EnvFix
   const inputAnalyser = ctx.createAnalyser();
   const outputAnalyser = ctx.createAnalyser();
   const looperNode = opts.looper === false ? null : ctx.createGain();
+  const preAmpEq = createPreAmpEqRuntime(
+    ctx as unknown as AudioContext,
+    createDefaultPreAmpEqState(),
+  );
   inputGain.connect(inputAnalyser);
   looperNode?.connect(outputAnalyser);
   return {
@@ -45,11 +55,13 @@ function makeEnv(ctx: StubAudioContext, opts: { looper?: boolean } = {}): EnvFix
       inputAnalyser: inputAnalyser as unknown as AnalyserNode,
       outputAnalyser: outputAnalyser as unknown as AnalyserNode,
       looperNode: looperNode as unknown as AudioNode | null,
+      preAmpEq,
     },
     inputGain,
     inputAnalyser,
     outputAnalyser,
     looperNode: looperNode as StubGainNode,
+    preAmpEq,
   };
 }
 
@@ -133,9 +145,9 @@ test('按 plan 创建节点:每 spec 一个实例,artifacts 归集实例与电�
   assert.equal(artifacts.globalBypass, false);
 });
 
-test('线性 connect 序列:inputGain → 前置链 → preAmp tap → 箱头 → 后置链 → 箱体 → looper', () => {
+test('线性 connect 序列:inputGain → 前置链 → 箱头前EQ → preAmp tap → 箱头 → 后置链 → 箱体 → looper', () => {
   const ctx = createStubAudioContext();
-  const { env, inputGain, looperNode } = makeEnv(ctx);
+  const { env, inputGain, looperNode, preAmpEq } = makeEnv(ctx);
 
   const artifacts = executePlan(asAudioContext(ctx), env, fullPlan())!;
   const od = artifacts.instances.get('od')!.inst;
@@ -150,9 +162,10 @@ test('线性 connect 序列:inputGain → 前置链 → preAmp tap → 箱头 �
   // 前置段
   assert.ok(connected(inputGain, od.input), 'inputGain → od.input');
   assert.ok(connected(od.output, vol.input), 'od → vol');
-  // preAmp 抽头挂在前置链末端,且信号继续进箱头
-  assert.ok(connected(vol.output, artifacts.preAmpAnalyser), '前置链末端 → preAmpAnalyser');
-  assert.ok(connected(vol.output, amp.input), '前置链末端 → amp.input');
+  // 箱头前 EQ 固定位于前置链末端与 preAmp 抽头/箱头之间
+  assert.ok(connected(vol.output, preAmpEq.input), '前置链末端 → preAmpEq.input');
+  assert.ok(connected(preAmpEq.output, artifacts.preAmpAnalyser), 'preAmpEq.output → preAmpAnalyser');
+  assert.ok(connected(preAmpEq.output, amp.input), 'preAmpEq.output → amp.input');
   // 箱头 → 后置段(FX Loop)
   assert.ok(connected(amp.output, dly.input), 'amp → dly(FX Loop)');
   // 后置段 → 箱体 → looper
@@ -213,7 +226,7 @@ test('dispose 先于接线:旧实例销毁,且全部 disconnect 事件先于全�
 
 test('复用实例:不重建、回放 spec 参数、断开旧下游后按新序重接', () => {
   const ctx = createStubAudioContext();
-  const { env, inputGain, looperNode } = makeEnv(ctx);
+  const { env, inputGain, looperNode, preAmpEq } = makeEnv(ctx);
   const kept = liveInst(ctx);
   const staleTap = ctx.createAnalyser();
   inputGain.connect(kept.input);
@@ -235,17 +248,26 @@ test('复用实例:不重建、回放 spec 参数、断开旧下游后按新序�
     ['level', 2],
   ], '复用实例回放 spec 参数');
   assert.equal(ctx.isConnected(kept.output, staleTap), false, '旧电平抽头被断开');
-  // 重新接线:kept 是前置链末端 → preAmp tap(旁路)+ 新模块电平表 + looper(主链)
-  assert.ok(ctx.isConnected(kept.output, artifacts.preAmpAnalyser as unknown as StubAnalyserNode));
+  // 重新接线:kept 是前置链末端 → 箱头前 EQ → preAmp tap + looper(主链)
+  assert.ok(ctx.isConnected(kept.output, preAmpEq.input as unknown as StubGainNode));
+  assert.ok(
+    ctx.isConnected(
+      preAmpEq.output as unknown as StubGainNode,
+      artifacts.preAmpAnalyser as unknown as StubAnalyserNode,
+    ),
+  );
   const newTap = artifacts.moduleAnalysers.get('od') as unknown as StubAnalyserNode;
   assert.ok(newTap, '复用实例也获得新的模块电平表');
   assert.ok(ctx.isConnected(kept.output, newTap));
-  assert.ok(ctx.isConnected(kept.output, looperNode), '断开旧下游后按新序重接回 looper');
+  assert.ok(
+    ctx.isConnected(preAmpEq.output as unknown as StubGainNode, looperNode),
+    '断开旧下游后经箱头前 EQ 重接回 looper',
+  );
 });
 
 test('globalBypass:inputGain 直连 looper/output,保留 kept 实例,不新建不接线', () => {
   const ctx = createStubAudioContext();
-  const { env, inputGain, looperNode } = makeEnv(ctx);
+  const { env, inputGain, looperNode, preAmpEq } = makeEnv(ctx);
   const kept = liveInst(ctx);
   const keptAmp = liveInst(ctx);
   const gainCount = ctx.nodesOfKind('GainNode').length;
@@ -260,6 +282,11 @@ test('globalBypass:inputGain 直连 looper/output,保留 kept 实例,不新建�
   })!;
 
   assert.ok(ctx.isConnected(inputGain, looperNode), 'bypass:inputGain 直连 looper');
+  assert.equal(
+    ctx.isConnected(inputGain, preAmpEq.input as unknown as StubGainNode),
+    false,
+    '全局 Bypass 不进入箱头前 EQ',
+  );
   assert.equal(ctx.nodesOfKind('GainNode').length, gainCount, 'bypass 不新建任何节点');
   assert.deepEqual(kept.updates, [], 'bypass 不回放参数');
   assert.equal(artifacts.instances.get('od')!.inst, kept, '保留单块实例');
@@ -274,10 +301,14 @@ test('globalBypass:inputGain 直连 looper/output,保留 kept 实例,不新建�
 
 test('looper 缺失时安全直通:末端落到 outputAnalyser', () => {
   const ctx = createStubAudioContext();
-  const { env, inputGain, outputAnalyser } = makeEnv(ctx, { looper: false });
+  const { env, inputGain, outputAnalyser, preAmpEq } = makeEnv(ctx, { looper: false });
 
   const artifacts = executePlan(asAudioContext(ctx), env, fullPlan({ pedals: [], amp: null, cab: null }))!;
-  assert.ok(ctx.isConnected(inputGain, outputAnalyser), '无 looper:inputGain 直连 outputAnalyser');
+  assert.ok(ctx.isConnected(inputGain, preAmpEq.input as unknown as StubGainNode));
+  assert.ok(
+    ctx.isConnected(preAmpEq.output as unknown as StubGainNode, outputAnalyser),
+    '无 looper:非 Bypass 仍经过箱头前 EQ 后落到 outputAnalyser',
+  );
   assert.ok(artifacts.preAmpAnalyser, '非 bypass 总有 preAmp 抽头');
 
   const bypassArtifacts = executePlan(asAudioContext(ctx), env, {

@@ -6,6 +6,7 @@ import { Decimator4x, Upsampler4x, makeAntiAliasFIR } from '../src/audio/wdf/res
 import { whammyEffect } from '../src/audio/effects/whammy.ts';
 import { chorusEffect } from '../src/audio/effects/chorus.ts';
 import { flangerEffect } from '../src/audio/effects/flanger.ts';
+import { PRE_AMP_EQ_LATENCY } from '../src/audio/preAmpEq.ts';
 
 function def(id: string, processingSamples: number, designSamples: number): EffectDefinition {
   return {
@@ -50,6 +51,19 @@ test('globalBypass 的 Rig 链路时延为零', () => {
   );
   assert.equal(result.totalMs, 0);
   assert.deepEqual(result.items, []);
+});
+
+test('箱头前均衡启用或 Bypass 都声明为零链路时延', () => {
+  assert.deepEqual(PRE_AMP_EQ_LATENCY, { processingSamples: 0, designSamples: 0 });
+  for (const enabled of [false, true]) {
+    const result = calculateRigLatency(
+      { chain: [], amp: null, cab: null, globalBypass: false },
+      48_000,
+    );
+    assert.equal(result.processingSamples, 0, `enabled=${enabled}`);
+    assert.equal(result.designSamples, 0, `enabled=${enabled}`);
+    assert.deepEqual(result.items, []);
+  }
 });
 
 test('WDF 4x FIR 元数据与真实单位脉冲峰值一致（±1 sample）', () => {

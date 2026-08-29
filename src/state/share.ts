@@ -3,6 +3,7 @@ import { RIG_PRESET_CATALOG } from './store';
 import { normalizeRig } from './presetCodec';
 import type { CabIrRef } from '../audio/cabIrTypes';
 import { isBuiltinCabId } from '../audio/cabIrTypes';
+import type { PreAmpEqBandKey, PreAmpEqState } from '../audio/preAmpEq';
 
 /**
  * 效果链/箱头/箱体配置的 URL 分享编码。
@@ -23,10 +24,11 @@ export interface ShareState {
   cabIrRef?: CabIrRef;
   cabEnabled: boolean;
   cabValues: Record<string, number>;
+  preAmpEq: PreAmpEqState;
 }
 
 interface SharePayload {
-  v: 1 | 2 | 3;
+  v: 1 | 2 | 3 | 4;
   c: { id: string; e: 0 | 1; v: Record<string, number>; p?: 0 | 1; r?: string; m?: string }[];
   a?: { cat: string; key: string; on: 0 | 1; v: Record<string, number>; m?: string };
   b?: {
@@ -35,6 +37,7 @@ interface SharePayload {
     v: Record<string, number>;
     r?: { k: 'b'; i: string } | { k: 'c'; h: string };
   };
+  q?: { on: 0 | 1; b: Partial<Record<PreAmpEqBandKey, number>>; l: number };
 }
 
 function base64urlEncode(text: string): string {
@@ -55,7 +58,10 @@ function base64urlDecode(s: string): string {
 export function decodeShareState(encoded: string): ShareState | null {
   try {
     const payload = JSON.parse(base64urlDecode(encoded)) as SharePayload;
-    if ((payload?.v !== 1 && payload?.v !== 2 && payload?.v !== 3) || !Array.isArray(payload.c)) return null;
+    if (
+      (payload?.v !== 1 && payload?.v !== 2 && payload?.v !== 3 && payload?.v !== 4) ||
+      !Array.isArray(payload.c)
+    ) return null;
 
     // payload → canonical 形状的原始输入,交给 presetCodec 统一规范化
     const rig = normalizeRig(
@@ -81,7 +87,7 @@ export function decodeShareState(encoded: string): ShareState | null {
         cab: payload.b
           ? {
               id: payload.b.id,
-              ir: payload.v === 3 && payload.b.r
+              ir: payload.v >= 3 && payload.b.r
                 ? payload.b.r.k === 'c'
                   ? { kind: 'custom', hash: payload.b.r.h }
                   : { kind: 'builtin', id: payload.b.r.i }
@@ -89,6 +95,9 @@ export function decodeShareState(encoded: string): ShareState | null {
               enabled: payload.b.on !== 0,
               values: payload.b.v,
             }
+          : undefined,
+        preAmpEq: payload.v === 4 && payload.q
+          ? { enabled: payload.q.on !== 0, bands: payload.q.b, levelDb: payload.q.l }
           : undefined,
         globals: undefined,
       },
@@ -106,6 +115,7 @@ export function decodeShareState(encoded: string): ShareState | null {
       cabIrRef: rig.cab.ir,
       cabEnabled: rig.cab.enabled,
       cabValues: rig.cab.values,
+      preAmpEq: rig.preAmpEq,
     };
   } catch {
     return null;
@@ -114,7 +124,7 @@ export function decodeShareState(encoded: string): ShareState | null {
 
 export function encodeShareState(state: ShareState): string {
   const payload: SharePayload = {
-    v: 3,
+    v: 4,
     c: state.chain.map((i) => ({
       id: i.effectId,
       e: i.enabled ? 1 : 0,
@@ -142,6 +152,11 @@ export function encodeShareState(state: ShareState): string {
               ? state.cabIrRef.id
               : isBuiltinCabId(state.cabId) ? state.cabId : 'gb4x12',
           },
+    },
+    q: {
+      on: state.preAmpEq.enabled ? 1 : 0,
+      b: state.preAmpEq.bands,
+      l: state.preAmpEq.levelDb,
     },
   };
   return base64urlEncode(JSON.stringify(payload));

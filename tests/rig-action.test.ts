@@ -80,6 +80,21 @@ test('master-volume:CC 0 → 0,CC 127 → 1(线性)', () => {
   });
 });
 
+test('箱头前均衡 Learn:开关走沿检测，频段与 Level 映射到 ±12 dB', () => {
+  assert.deepEqual(
+    translateBinding({ kind: 'preamp-eq-toggle' }, noteOn(40), 0, []).action,
+    { type: 'toggle-preamp-eq' },
+  );
+  assert.deepEqual(
+    translateBinding({ kind: 'preamp-eq-band', key: 'hz1000' }, cc(12, 0), 0, []).action,
+    { type: 'set-preamp-eq-band', key: 'hz1000', value: -12 },
+  );
+  assert.deepEqual(
+    translateBinding({ kind: 'preamp-eq-level' }, cc(13, 127), 0, []).action,
+    { type: 'set-preamp-eq-level', value: 12 },
+  );
+});
+
 test('amp-param:音色 0..100;master 走 dB 范围 LEVEL_DB_MIN..MAX', () => {
   assert.deepEqual(translateBinding({ kind: 'amp-param', key: 'gain' }, cc(2, 127), 0, []).action, {
     type: 'set-amp-param',
@@ -288,6 +303,10 @@ function setup() {
     setChain: rec('setChain'),
     setAmp: rec('setAmp'),
     setCab: rec('setCab'),
+    setPreAmpEq: rec('setPreAmpEq'),
+    setPreAmpEqEnabled: rec('setPreAmpEqEnabled'),
+    updatePreAmpEqBand: rec('updatePreAmpEqBand'),
+    setPreAmpEqLevel: rec('setPreAmpEqLevel'),
     updateParam: rec('updateParam'),
     updateAmpParam: rec('updateAmpParam'),
     updateCabParam: rec('updateCabParam'),
@@ -355,6 +374,20 @@ test('dispatch set-master-volume / set-amp-param:落在 store verb 并同步引�
   dispatch({ type: 'set-amp-param', key: 'gain', value: 77 });
   assert.equal(store.getState().ampValues.gain, 77);
   assert.deepEqual(engineCalls.find((c) => c.method === 'updateAmpParam')?.args, ['gain', 77]);
+});
+
+test('dispatch 箱头前均衡动作落在统一 store verbs', () => {
+  const { store, engineCalls, dispatch } = setup();
+  dispatch({ type: 'toggle-preamp-eq' });
+  dispatch({ type: 'set-preamp-eq-band', key: 'hz1000', value: 4 });
+  dispatch({ type: 'set-preamp-eq-level', value: -2 });
+  assert.equal(store.getState().preAmpEq.enabled, true);
+  assert.equal(store.getState().preAmpEq.bands.hz1000, 4);
+  assert.equal(store.getState().preAmpEq.levelDb, -2);
+  assert.deepEqual(
+    engineCalls.filter((call) => call.method.includes('PreAmpEq')).map((call) => call.method),
+    ['setPreAmpEqEnabled', 'updatePreAmpEqBand', 'setPreAmpEqLevel'],
+  );
 });
 
 test('dispatch set-pedal-param / set-pedal-treadle:写第 index 块的参数', () => {

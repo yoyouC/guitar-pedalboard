@@ -18,6 +18,9 @@ const ALL_TARGETS: MidiTarget[] = [
   { kind: 'bypass' },
   { kind: 'master-volume' },
   { kind: 'amp-param', key: 'gain' },
+  { kind: 'preamp-eq-toggle' },
+  { kind: 'preamp-eq-band', key: 'hz1000' },
+  { kind: 'preamp-eq-level' },
   { kind: 'looper-record' },
   { kind: 'looper-play' },
   { kind: 'looper-clear' },
@@ -34,6 +37,7 @@ test('parseTarget 非法输入返回 null', () => {
   assert.equal(parseTarget('garbage'), null);
   assert.equal(parseTarget('pedal-toggle:'), null);
   assert.equal(parseTarget('pedal-param:0'), null);
+  assert.equal(parseTarget('preamp-eq-band:not-a-band'), null);
 });
 
 test('upsertBinding:同 target 替换', () => {
@@ -72,5 +76,9 @@ test('标签可读', () => {
   assert.equal(
     bindingLabel({ msgType: 'note', number: 36, source: 'other', target: { kind: 'snapshot', slot: 1 } }),
     'Note36 → 快照 B',
+  );
+  assert.equal(
+    bindingLabel({ msgType: 'cc', number: 12, source: 'other', target: { kind: 'preamp-eq-band', key: 'hz1000' } }),
+    'CC12 → 箱头前 EQ · 1k',
   );
 });

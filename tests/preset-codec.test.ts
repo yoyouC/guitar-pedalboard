@@ -81,6 +81,22 @@ test('full rig preset round-trips and clamps every parameter domain', () => {
       enabled: false,
       values: { level: 100 },
     },
+    preAmpEq: {
+      enabled: true,
+      bands: {
+        hz31_25: -99,
+        hz62_5: -10,
+        hz125: -8,
+        hz250: -6,
+        hz500: -4,
+        hz1000: 2,
+        hz2000: 4,
+        hz4000: 6,
+        hz8000: 10,
+        hz16000: 99,
+      },
+      levelDb: Number.POSITIVE_INFINITY,
+    },
     globals: {
       inputGain: 5,
       masterVolume: -1,
@@ -92,6 +108,22 @@ test('full rig preset round-trips and clamps every parameter domain', () => {
   assert.equal(preset.rig.chain[0].values.gain, 10);
   assert.equal(preset.rig.amp.values.gain, 0);
   assert.equal(preset.rig.cab.values.level, 6);
+  assert.deepEqual(preset.rig.preAmpEq, {
+    enabled: true,
+    bands: {
+      hz31_25: -12,
+      hz62_5: -10,
+      hz125: -8,
+      hz250: -6,
+      hz500: -4,
+      hz1000: 2,
+      hz2000: 4,
+      hz4000: 6,
+      hz8000: 10,
+      hz16000: 12,
+    },
+    levelDb: 0,
+  });
   assert.deepEqual(preset.rig.globals, {
     inputGain: 2,
     masterVolume: 0,
@@ -124,9 +156,12 @@ test('legacy chain-only presets migrate with safe rig defaults', () => {
     masterVolume: 0.5,
     bypass: false,
   });
+  assert.equal(imported[0].rig.preAmpEq.enabled, false);
+  assert.deepEqual(Object.values(imported[0].rig.preAmpEq.bands), Array(10).fill(0));
+  assert.equal(imported[0].rig.preAmpEq.levelDb, 0);
 });
 
-test('preset v4 preserves a custom IR hash without embedding its binary', () => {
+test('current preset preserves a custom IR hash without embedding its binary', () => {
   const preset = createRigPreset('Local IR', {
     chain: [],
     amp: {
@@ -151,7 +186,7 @@ test('preset v4 preserves a custom IR hash without embedding its binary', () => 
     }],
   });
 
-  assert.equal(preset.version, 4);
+  assert.equal(preset.version, RIG_PRESET_VERSION);
   assert.deepEqual(preset.rig.cab.ir, { kind: 'custom', hash: 'a'.repeat(64) });
   assert.equal(JSON.stringify(preset).includes('blob'), false);
 });
@@ -169,8 +204,29 @@ test('v3 preset migrates its cab id to a builtin IR reference', () => {
       globals: { inputGain: 1, masterVolume: 0.5, bypass: false },
     },
   }, catalog)!;
-  assert.equal(migrated.version, 4);
+  assert.equal(migrated.version, RIG_PRESET_VERSION);
   assert.deepEqual(migrated.rig.cab.ir, { kind: 'builtin', id: 'open1x12' });
+});
+
+test('v4 preset 缺少箱头前均衡时迁移为 Bypass 全平', () => {
+  const migrated = normalizeRigPreset({
+    version: 4,
+    name: 'Before Pre-Amp EQ',
+    rig: {
+      chain: [],
+      amp: {
+        categoryId: 'clean', modelKey: 'builtin:clean', enabled: true, values: {}, customName: null,
+      },
+      cab: {
+        id: 'open1x12', ir: { kind: 'builtin', id: 'open1x12' }, enabled: true, values: {},
+      },
+      globals: { inputGain: 1, masterVolume: 0.5, bypass: false },
+    },
+  }, catalog)!;
+  assert.equal(migrated.version, RIG_PRESET_VERSION);
+  assert.equal(migrated.rig.preAmpEq.enabled, false);
+  assert.deepEqual(Object.values(migrated.rig.preAmpEq.bands), Array(10).fill(0));
+  assert.equal(migrated.rig.preAmpEq.levelDb, 0);
 });
 
 test('preset export envelope imports again and drops unknown modules', () => {

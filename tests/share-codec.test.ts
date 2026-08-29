@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { decodeShareState, encodeShareState } from '../src/state/share.ts';
+import { createDefaultPreAmpEqState } from '../src/audio/preAmpEq.ts';
 
 /**
  * share decode 走 presetCodec 的 catalog normalize(ADR-0006):
@@ -120,6 +121,20 @@ test('encode/decode round-trip 保持链、型号与参数', () => {
   assert.equal(roundTripped.ampModelKey, original.ampModelKey);
   assert.equal(roundTripped.ampCategoryId, original.ampCategoryId);
   assert.equal(roundTripped.cabEnabled, original.cabEnabled);
+  assert.deepEqual(roundTripped.preAmpEq, createDefaultPreAmpEqState());
+});
+
+test('legacy share v1-v3 缺少 EQ 时都迁移为 Bypass 全平', () => {
+  for (const version of [1, 2, 3]) {
+    const restored = decodeShareState(encodePayload({
+      v: version,
+      c: [],
+      a: { cat: 'clean', key: 'builtin:clean', on: 1, v: {} },
+      b: { id: 'gb4x12', on: 1, v: {} },
+      q: { on: 1, b: { hz1000: 12 }, l: 12 },
+    }))!;
+    assert.deepEqual(restored.preAmpEq, createDefaultPreAmpEqState(), `v${version}`);
+  }
 });
 
 test('current share round-trip keeps Tone3000 Pedal and Amp exact model variants', () => {
@@ -141,9 +156,10 @@ test('current share round-trip keeps Tone3000 Pedal and Amp exact model variants
     cabId: 'gb4x12',
     cabEnabled: true,
     cabValues: { level: -6 },
+    preAmpEq: createDefaultPreAmpEqState(),
   });
   const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
-  assert.equal(payload.v, 3);
+  assert.equal(payload.v, 4);
 
   const restored = decodeShareState(encoded)!;
   assert.equal(restored.chain[0].modelRef, 'tone3000:42');
@@ -151,7 +167,7 @@ test('current share round-trip keeps Tone3000 Pedal and Amp exact model variants
   assert.equal(restored.ampModelId, '7007');
 });
 
-test('v3 share preserves custom IR identity without binary data', () => {
+test('v4 share preserves custom IR identity without binary data', () => {
   const hash = 'b'.repeat(64);
   const encoded = encodeShareState({
     chain: [],
@@ -163,9 +179,41 @@ test('v3 share preserves custom IR identity without binary data', () => {
     cabIrRef: { kind: 'custom', hash },
     cabEnabled: true,
     cabValues: { level: -6 },
+    preAmpEq: createDefaultPreAmpEqState(),
   });
   const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
-  assert.equal(payload.v, 3);
+  assert.equal(payload.v, 4);
   assert.deepEqual(payload.b.r, { k: 'c', h: hash });
   assert.deepEqual(decodeShareState(encoded)?.cabIrRef, { kind: 'custom', hash });
+});
+
+test('v4 share round-trip preserves and clamps the named箱头前均衡 bands', () => {
+  const encoded = encodePayload({
+    v: 4,
+    c: [],
+    a: { cat: 'crunch', key: 'builtin:crunch', on: 1, v: {} },
+    b: { id: 'gb4x12', on: 1, v: {} },
+    q: { on: 1, b: { hz31_25: -99, hz1000: 4.5, hz16000: 99 }, l: -3 },
+  });
+  const restored = decodeShareState(encoded)!;
+  assert.equal(restored.preAmpEq.enabled, true);
+  assert.equal(restored.preAmpEq.bands.hz31_25, -12);
+  assert.equal(restored.preAmpEq.bands.hz1000, 4.5);
+  assert.equal(restored.preAmpEq.bands.hz16000, 12);
+  assert.equal(restored.preAmpEq.levelDb, -3);
+});
+
+test('v4 share 缺失或损坏的 EQ 值按段安全回退', () => {
+  const restored = decodeShareState(encodePayload({
+    v: 4,
+    c: [],
+    a: { cat: 'clean', key: 'builtin:clean', on: 1, v: {} },
+    b: { id: 'gb4x12', on: 1, v: {} },
+    q: { on: 1, b: { hz31_25: 'loud', hz1000: null, hz2000: 3.5 }, l: 'quiet' },
+  }))!;
+  assert.equal(restored.preAmpEq.enabled, true);
+  assert.equal(restored.preAmpEq.bands.hz31_25, 0);
+  assert.equal(restored.preAmpEq.bands.hz1000, 0);
+  assert.equal(restored.preAmpEq.bands.hz2000, 3.5);
+  assert.equal(restored.preAmpEq.levelDb, 0);
 });

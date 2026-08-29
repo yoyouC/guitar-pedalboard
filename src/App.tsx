@@ -25,6 +25,7 @@ import { PresetBar } from './components/PresetBar';
 import { SnapshotSwitches } from './components/SnapshotSwitches';
 import { AmpPanel } from './components/AmpPanel';
 import { CabPanel } from './components/CabPanel';
+import { PreAmpEqPanel } from './components/PreAmpEqPanel';
 import { Oscilloscope } from './components/Oscilloscope';
 import { FluidBackground } from './components/FluidBackground';
 import { PrismBackground } from './components/PrismBackground';
@@ -411,6 +412,8 @@ export default function App() {
         <SnapshotSwitches />
         <ChainView showMeters={effectiveShowMeters} />
       </main>
+
+      <PreAmpEqPanel />
 
       <AmpPanel showMeters={effectiveShowMeters} engineReady={engineReady} />
 

@@ -12,6 +12,7 @@ function signalFlowText(s: RigStoreState): string {
     .filter((i) => !i.post)
     .map((i) => getEffectDef(i.effectId).name)
     .join(' → ')}`;
+  text += ` → 箱头前 EQ${s.preAmpEq.enabled ? '' : '(Bypass)'}`;
   if (s.ampEnabled) {
     text += ` → ${getAmpModelEntry(s.ampModelKeys[s.ampCategoryId])?.name ?? getAmpDef(s.ampId).name}`;
   }

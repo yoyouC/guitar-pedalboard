@@ -39,6 +39,11 @@ import {
   parseTone3000Key,
   type NamModelSelection,
 } from '../audio/namWasm';
+import {
+  createDefaultPreAmpEqState,
+  type PreAmpEqBandKey,
+  type PreAmpEqState,
+} from '../audio/preAmpEq';
 import type { ShareState } from './share';
 import type { RigPreset, Snapshot, SnapshotAmp, SnapshotCab } from './presetCodec';
 import {
@@ -63,6 +68,10 @@ export type RigEngine = Pick<
   | 'setChain'
   | 'setAmp'
   | 'setCab'
+  | 'setPreAmpEq'
+  | 'setPreAmpEqEnabled'
+  | 'updatePreAmpEqBand'
+  | 'setPreAmpEqLevel'
   | 'updateParam'
   | 'updateAmpParam'
   | 'updateCabParam'
@@ -102,6 +111,7 @@ export interface RigStoreState {
   cabIrRef: CabIrRef;
   cabEnabled: boolean;
   cabValues: Record<string, number>;
+  preAmpEq: PreAmpEqState;
   /** NAM 自定义模型名(展示用;模型选择本身在 namModel) */
   namCustomName: string | null;
   /** NAM 模型选择(ADR-0007):随状态传递,引擎侧不再读 namWasm 模块全局 */
@@ -129,6 +139,7 @@ export interface ApplyRigState {
   chain: ChainItem[];
   amp: SnapshotAmp;
   cab: SnapshotCab;
+  preAmpEq: PreAmpEqState;
   globals: RigGlobals;
 }
 
@@ -188,6 +199,12 @@ export interface RigStore {
   setRigRestoreHandler(handler: RigRestoreHandler): void;
   setCabEnabled(enabled: boolean): void;
   setCabParam(key: string, value: number): void;
+
+  // 箱头前均衡
+  setPreAmpEqEnabled(enabled: boolean): void;
+  setPreAmpEqBand(key: PreAmpEqBandKey, gainDb: number): void;
+  setPreAmpEqLevel(levelDb: number): void;
+  resetPreAmpEq(): void;
 
   // 全局
   setInputGain(v: number): void;
@@ -307,6 +324,7 @@ export function rigFromPreset(preset: RigPreset): ApplyRigState {
       values: rig.amp.values,
     },
     cab: rig.cab,
+    preAmpEq: rig.preAmpEq,
     globals: rig.globals,
   };
 }
@@ -324,6 +342,7 @@ export function rigFromSnapshot(
     })),
     amp: { ...snap.amp, values: { ...snap.amp.values } },
     cab: { ...snap.cab, values: { ...snap.cab.values } },
+    preAmpEq: { ...snap.preAmpEq, bands: { ...snap.preAmpEq.bands } },
     globals,
   };
 }
@@ -350,6 +369,7 @@ export function rigFromShare(
       enabled: share.cabEnabled,
       values: share.cabValues,
     },
+    preAmpEq: { ...share.preAmpEq, bands: { ...share.preAmpEq.bands } },
     globals,
   };
 }
@@ -367,6 +387,7 @@ export function rigToShareState(state: RigStoreState): ShareState {
     cabIrRef: state.cabIrRef,
     cabEnabled: state.cabEnabled,
     cabValues: state.cabValues,
+    preAmpEq: { ...state.preAmpEq, bands: { ...state.preAmpEq.bands } },
   };
 }
 
@@ -394,6 +415,7 @@ export function toSnapshot(state: RigStoreState): Snapshot {
       enabled: state.cabEnabled,
       values: { ...state.cabValues },
     },
+    preAmpEq: { ...state.preAmpEq, bands: { ...state.preAmpEq.bands } },
   };
 }
 
@@ -457,6 +479,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     cabIrRef: defaultCabIrRef(),
     cabEnabled: true,
     cabValues: defaultCabValues(RIG_PRESET_CATALOG.defaults.cabId),
+    preAmpEq: createDefaultPreAmpEqState(),
     namCustomName: null,
     namModel: { source: BUNDLED_WAVENET_MODELS[0].url },
     namVersion: 0,
@@ -809,6 +832,43 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       emit();
     },
 
+    // ---------- 箱头前均衡 ----------
+
+    setPreAmpEqEnabled(enabled) {
+      if (state.preAmpEq.enabled === enabled) return;
+      state = { ...state, preAmpEq: { ...state.preAmpEq, enabled } };
+      engine.setPreAmpEqEnabled(enabled);
+      emit();
+    },
+
+    setPreAmpEqBand(key, gainDb) {
+      state = {
+        ...state,
+        preAmpEq: {
+          ...state.preAmpEq,
+          bands: { ...state.preAmpEq.bands, [key]: gainDb },
+        },
+      };
+      engine.updatePreAmpEqBand(key, gainDb);
+      emit();
+    },
+
+    setPreAmpEqLevel(levelDb) {
+      state = { ...state, preAmpEq: { ...state.preAmpEq, levelDb } };
+      engine.setPreAmpEqLevel(levelDb);
+      emit();
+    },
+
+    resetPreAmpEq() {
+      const defaults = createDefaultPreAmpEqState();
+      state = {
+        ...state,
+        preAmpEq: { ...defaults, enabled: state.preAmpEq.enabled },
+      };
+      engine.setPreAmpEq(state.preAmpEq);
+      emit();
+    },
+
     // ---------- 全局 ----------
 
     setInputGain(v) {
@@ -866,12 +926,14 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         cabIrRef: rig.cab.ir,
         cabEnabled: rig.cab.enabled,
         cabValues: rig.cab.values,
+        preAmpEq: { ...rig.preAmpEq, bands: { ...rig.preAmpEq.bands } },
         inputGain: rig.globals.inputGain,
         masterVolume: rig.globals.masterVolume,
         globalBypass: rig.globals.bypass,
         namVersion,
       };
       syncStructure();
+      engine.setPreAmpEq(state.preAmpEq);
       for (const [key, value] of Object.entries(state.cabValues)) engine.updateCabParam(key, value);
       engine.setInputGain(state.inputGain);
       engine.setMasterVolume(state.masterVolume);
@@ -939,6 +1001,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
           enabled: state.cabEnabled,
           values: state.cabValues,
         },
+        preAmpEq: state.preAmpEq,
         globals: {
           inputGain: state.inputGain,
           masterVolume: state.masterVolume,

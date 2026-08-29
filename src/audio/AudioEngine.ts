@@ -74,6 +74,13 @@ import {
   stageInitialCabIrBuffer,
   type PreparedCabIrBuffer,
 } from './cabIrRuntime';
+import {
+  createDefaultPreAmpEqState,
+  createPreAmpEqRuntime,
+  type PreAmpEqBandKey,
+  type PreAmpEqRuntime,
+  type PreAmpEqState,
+} from './preAmpEq';
 
 /** 引擎重建链条所需的快照(定义在 graphBuilder,此处 re-export 保持既有 import 路径) */
 export type { ChainSpec, AmpSpec } from './graphBuilder';
@@ -109,6 +116,7 @@ interface AudioRuntime {
   metronomeBus: GainNode;
   recorderDest: MediaStreamAudioDestinationNode;
   looperNode: AudioWorkletNode | null;
+  preAmpEq: PreAmpEqRuntime;
   loadedWorklets: Set<string>;
   graph: RuntimeGraphState;
   cabIrFallbackActive: boolean;
@@ -280,6 +288,7 @@ export class AudioEngine {
   private outputDeviceId = 'default';
   private inputGainValue = 1;
   private masterVolumeValue = 0.5;
+  private preAmpEqState = createDefaultPreAmpEqState();
 
   private inputDescriptor: InputDescriptor | null = null;
   private sourceNode: AudioNode | null = null;
@@ -427,6 +436,7 @@ export class AudioEngine {
       metronomeBus.connect(limiter);
       const recorderDest = ctx.createMediaStreamDestination();
       limiter.connect(recorderDest);
+      const preAmpEq = createPreAmpEqRuntime(ctx, this.preAmpEqState);
 
       const loaded = await this.registerWorklets(ctx, strictWorklets);
       let looperNode: AudioWorkletNode | null = null;
@@ -457,6 +467,7 @@ export class AudioEngine {
         metronomeBus,
         recorderDest,
         looperNode,
+        preAmpEq,
         loadedWorklets: loaded,
         graph: emptyGraphState(),
         cabIrFallbackActive: false,
@@ -476,7 +487,7 @@ export class AudioEngine {
       const plan = planGraph(this.graphSpec(), graphPrevState(runtime.graph));
       const artifacts = executePlan(
         ctx,
-        { inputGain, inputAnalyser, outputAnalyser, looperNode },
+        { inputGain, inputAnalyser, outputAnalyser, looperNode, preAmpEq },
         plan,
       );
       if (artifacts) applyArtifacts(runtime, artifacts);
@@ -522,6 +533,7 @@ export class AudioEngine {
       runtime.limiter.disconnect();
       runtime.masterGain.disconnect();
       runtime.metronomeBus.disconnect();
+      runtime.preAmpEq.dispose();
     } catch {
       /* Context 关闭过程中的重复断开可忽略 */
     }
@@ -1169,6 +1181,33 @@ export class AudioEngine {
     this.rebuildGraph();
   }
 
+  setPreAmpEq(state: PreAmpEqState): void {
+    this.preAmpEqState = {
+      enabled: state.enabled,
+      bands: { ...state.bands },
+      levelDb: state.levelDb,
+    };
+    this.runtime?.preAmpEq.setState(this.preAmpEqState);
+  }
+
+  setPreAmpEqEnabled(enabled: boolean): void {
+    this.preAmpEqState = { ...this.preAmpEqState, enabled };
+    this.runtime?.preAmpEq.setEnabled(enabled);
+  }
+
+  updatePreAmpEqBand(key: PreAmpEqBandKey, gainDb: number): void {
+    this.preAmpEqState = {
+      ...this.preAmpEqState,
+      bands: { ...this.preAmpEqState.bands, [key]: gainDb },
+    };
+    this.runtime?.preAmpEq.setBand(key, gainDb);
+  }
+
+  setPreAmpEqLevel(levelDb: number): void {
+    this.preAmpEqState = { ...this.preAmpEqState, levelDb };
+    this.runtime?.preAmpEq.setLevel(levelDb);
+  }
+
   setChain(chain: ChainSpec[]): void {
     this.chain = chain;
     this.rebuildGraph();
@@ -1254,6 +1293,7 @@ export class AudioEngine {
         inputAnalyser: runtime.inputAnalyser,
         outputAnalyser: runtime.outputAnalyser,
         looperNode: runtime.looperNode,
+        preAmpEq: runtime.preAmpEq,
       },
       plan,
     );

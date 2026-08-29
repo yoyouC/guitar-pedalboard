@@ -18,6 +18,7 @@
  */
 
 import { getEffectDef } from '../audio/effects';
+import { PRE_AMP_EQ_MAX_DB, PRE_AMP_EQ_MIN_DB } from '../audio/preAmpEq';
 import type { MidiBinding, MidiTarget } from './midiLearn';
 import type { ParsedMidiMessage } from './midiMessage';
 import {
@@ -43,6 +44,8 @@ function toggleAction(t: MidiTarget): RigAction | null {
       return { type: 'recall-snapshot', slot: t.slot };
     case 'bypass':
       return { type: 'toggle-bypass' };
+    case 'preamp-eq-toggle':
+      return { type: 'toggle-preamp-eq' };
     case 'looper-record':
       return { type: 'looper-record' };
     case 'looper-play':
@@ -102,6 +105,23 @@ export function translateBinding(
         nextValue: v,
       };
     }
+    case 'preamp-eq-band':
+      return {
+        action: {
+          type: 'set-preamp-eq-band',
+          key: target.key,
+          value: ccToRange(v, PRE_AMP_EQ_MIN_DB, PRE_AMP_EQ_MAX_DB),
+        },
+        nextValue: v,
+      };
+    case 'preamp-eq-level':
+      return {
+        action: {
+          type: 'set-preamp-eq-level',
+          value: ccToRange(v, PRE_AMP_EQ_MIN_DB, PRE_AMP_EQ_MAX_DB),
+        },
+        nextValue: v,
+      };
     case 'pedal-treadle':
       return {
         action: { type: 'set-pedal-treadle', index: target.index, value: ccToRange(v, 0, 100) },

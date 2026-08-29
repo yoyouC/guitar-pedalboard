@@ -30,6 +30,9 @@ export interface RigDispatcherDeps {
     | 'setGlobalBypass'
     | 'setMasterVolume'
     | 'setAmpParam'
+    | 'setPreAmpEqEnabled'
+    | 'setPreAmpEqBand'
+    | 'setPreAmpEqLevel'
   >;
   looper: {
     /** 主按钮命令(初录→完成→叠录→完成叠录,共享守卫) */
@@ -83,6 +86,15 @@ export function createRigDispatcher(deps: RigDispatcherDeps): (action: RigAction
         return;
       case 'set-amp-param':
         store.setAmpParam(action.key, action.value);
+        return;
+      case 'toggle-preamp-eq':
+        store.setPreAmpEqEnabled(!store.getState().preAmpEq.enabled);
+        return;
+      case 'set-preamp-eq-band':
+        store.setPreAmpEqBand(action.key, action.value);
+        return;
+      case 'set-preamp-eq-level':
+        store.setPreAmpEqLevel(action.value);
         return;
       case 'looper-record':
         looper.primary();
