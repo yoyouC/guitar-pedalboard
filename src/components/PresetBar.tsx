@@ -168,6 +168,7 @@ export function PresetBar({ onNavigate }: PresetBarProps) {
           initialTitle={publication.initialTitle}
           provenance={publication.provenance}
           onClose={() => setPublication(null)}
+          onNavigate={onNavigate}
           onPublished={(pathname, preset) => {
             rigStore.recordPublishedProvenance({
               presetId: preset.id,

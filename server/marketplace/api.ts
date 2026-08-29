@@ -21,12 +21,17 @@ import {
 } from '../../shared/marketplaceManagement.ts';
 import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
-import { communityWriteDenied, communityWriteErrorResponse } from '../members/communityWriteApi.ts';
+import {
+  communityWriteDenied,
+  communityWriteErrorResponse,
+  unverifiedEmailWriteDenied,
+} from '../members/communityWriteApi.ts';
 import type {
   RigResourceDependency,
   Tone3000DependencyFact,
 } from '../../shared/marketplace.ts';
 import { evaluatePublishedPresetRevisionCompatibility } from '../../shared/marketplaceCompatibility.ts';
+import { marketplaceWriteLimitDenied, type MarketplaceWriteLimiter } from '../abuse/writeLimiter.ts';
 
 export interface MarketplaceCompatibilityFacts {
   inspectTone3000Dependencies(
@@ -48,6 +53,7 @@ export interface MarketplaceApiDependencies {
     createRevisionId(): string;
     createMemberId(): string;
     createHandleSuffix(): string;
+    writeLimiter?: MarketplaceWriteLimiter;
   };
 }
 
@@ -133,6 +139,8 @@ export function createMarketplaceApi({
               { status: 401 },
             );
           }
+          const verificationDenied = unverifiedEmailWriteDenied(identity, '/marketplace/publish');
+          if (verificationDenied) return verificationDenied;
           const tags = await publication.repository.listAvailableTags();
           let body: unknown;
           try {
@@ -162,6 +170,11 @@ export function createMarketplaceApi({
           });
           const denied = communityWriteDenied(member);
           if (denied) return denied;
+          const limited = await marketplaceWriteLimitDenied({
+            limiter: publication.writeLimiter, operation: 'publish', memberId: member.id,
+            request, now,
+          });
+          if (limited) return limited;
           const created = await publication.repository.create({
             id: publication.createPresetId(),
             revisionId: publication.createRevisionId(),
@@ -294,8 +307,18 @@ export function createMarketplaceApi({
               });
             }
             if (revisionsMatch && request.method === 'POST') {
+              const verificationDenied = unverifiedEmailWriteDenied(
+                identity,
+                `/marketplace/tones/${encodeURIComponent(presetId)}/manage`,
+              );
+              if (verificationDenied) return verificationDenied;
               const validation = validateRevisionAppend(await jsonBody(request));
               if (!validation.value) return invalidUpdate(validation.errors);
+              const limited = await marketplaceWriteLimitDenied({
+                limiter: publication.writeLimiter, operation: 'revision', memberId: member.id,
+                request, now,
+              });
+              if (limited) return limited;
               const updated = await publication.repository.appendRevision({
                 presetId,
                 creatorId: member.id,

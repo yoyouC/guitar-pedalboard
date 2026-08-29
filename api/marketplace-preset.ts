@@ -8,6 +8,8 @@ import {
   createPostgresPublishedPresetRepository,
 } from '../server/marketplace/postgresRepository.ts';
 import { createPostgresMemberRepository } from '../server/members/postgresRepository.ts';
+import { createPostgresMarketplaceWriteLimiter } from '../server/abuse/postgresWriteLimiter.ts';
+import { parseMarketplaceWritePolicies } from '../server/abuse/policy.ts';
 
 let publicApi: ReturnType<typeof createMarketplaceApi> | null = null;
 let privateApi: ReturnType<typeof createMarketplaceApi> | null = null;
@@ -78,6 +80,10 @@ export default {
               createRevisionId: () => `revision-${crypto.randomUUID()}`,
               createMemberId: () => crypto.randomUUID(),
               createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+              writeLimiter: createPostgresMarketplaceWriteLimiter(
+                marketplacePool,
+                parseMarketplaceWritePolicies(process.env),
+              ),
             },
           });
         }

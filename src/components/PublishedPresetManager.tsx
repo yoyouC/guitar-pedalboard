@@ -29,6 +29,7 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
   const [revisions, setRevisions] = useState<PublishedPresetRevisionSummary[]>([]);
   const [errors, setErrors] = useState<PublicationErrors>({});
   const [message, setMessage] = useState('');
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const cancelOperationRef = useRef<() => void>(() => {});
 
@@ -58,6 +59,7 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
     cancelOperationRef.current();
     setBusy(true);
     setMessage('');
+    setVerificationUrl(null);
     setErrors({});
     cancelOperationRef.current = runPublishedPresetManagerMutation(
       preset.id,
@@ -73,6 +75,9 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
         },
         onError: (cause) => {
           setBusy(false);
+          if (cause instanceof MarketplaceClientError && cause.verificationUrl) {
+            setVerificationUrl(cause.verificationUrl);
+          }
           if (cause instanceof MarketplaceClientError && cause.code === 'update_conflict') {
             setMessage('作品已在别处更新。请重新载入最新版本后再继续。');
           } else if (cause instanceof MarketplaceClientError && cause.fields) {
@@ -185,6 +190,9 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
       </div>
 
       {message && <p className="preset-manager__message" role="status">{message}</p>}
+      {verificationUrl && (
+        <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>
+      )}
     </section>
   );
 }

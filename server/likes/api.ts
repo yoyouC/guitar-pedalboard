@@ -4,6 +4,7 @@ import {
   communityWriteDenied,
   communityWriteErrorResponse,
 } from '../members/communityWriteApi.ts';
+import { marketplaceWriteLimitDenied, type MarketplaceWriteLimiter } from '../abuse/writeLimiter.ts';
 import type { MarketplaceLikeTargetKind } from '../../shared/marketplace.ts';
 import {
   InvalidTrendingCursorError,
@@ -40,13 +41,18 @@ export function createMarketplaceLikesApi(input: {
   now(): Date;
   createMemberId(): string;
   createHandleSuffix(): string;
+  writeLimiter?: MarketplaceWriteLimiter;
 }): MarketplaceLikesApi {
-  const memberId = async (request: Request, requireWrite = false): Promise<string | null | Response> => {
+  const memberId = async (
+    request: Request,
+    now: Date,
+    requireWrite = false,
+  ): Promise<string | null | Response> => {
     const identity = await input.sessions.verify(request);
     if (!identity) return null;
     const member = await input.members.findOrCreateForIdentity({
       id: input.createMemberId(), identity,
-      handle: `player-${input.createHandleSuffix()}`, now: input.now(),
+      handle: `player-${input.createHandleSuffix()}`, now,
     });
     if (requireWrite) {
       const denied = communityWriteDenied(member);
@@ -62,9 +68,10 @@ export function createMarketplaceLikesApi(input: {
       const rankingMatch = RANKING_PATH.exec(url.pathname);
       try {
         if (likeMatch && ['GET', 'PUT', 'DELETE'].includes(request.method)) {
+          const now = input.now();
           const kind = targetKind(likeMatch[1]);
           const targetId = decodeURIComponent(likeMatch[2]);
-          const currentMemberId = await memberId(request, request.method !== 'GET');
+          const currentMemberId = await memberId(request, now, request.method !== 'GET');
           if (currentMemberId instanceof Response) return currentMemberId;
           if (request.method === 'GET') {
             return Response.json({
@@ -75,15 +82,20 @@ export function createMarketplaceLikesApi(input: {
           if ((await request.text()).trim()) {
             return error(400, 'invalid_like', 'Like requests do not accept a body');
           }
+          const limited = await marketplaceWriteLimitDenied({
+            limiter: input.writeLimiter, operation: 'like', memberId: currentMemberId,
+            request, now,
+          });
+          if (limited) return limited;
           return Response.json({
             state: await input.repository.setLiked({
               kind, targetId, memberId: currentMemberId,
-              liked: request.method === 'PUT', now: input.now(),
+              liked: request.method === 'PUT', now,
             }),
           });
         }
         if (request.method === 'GET' && url.pathname === MY_LIKES_PATH) {
-          const currentMemberId = await memberId(request);
+          const currentMemberId = await memberId(request, input.now());
           if (currentMemberId instanceof Response) return currentMemberId;
           if (!currentMemberId) return error(401, 'authentication_required', 'Authentication required');
           return Response.json({ likes: await input.repository.listMine(currentMemberId) });

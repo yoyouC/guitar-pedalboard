@@ -53,6 +53,8 @@ export type MarketplaceClientErrorCode =
   | 'invalid_update'
   | 'invalid_search'
   | 'forbidden'
+  | 'verification_required'
+  | 'rate_limited'
   | 'update_conflict';
 
 export class MarketplaceClientError extends Error {
@@ -60,6 +62,8 @@ export class MarketplaceClientError extends Error {
   readonly fields?: Record<string, string>;
   readonly current?: PublishedPresetConcurrencyState;
   readonly collectionCurrent?: PresetCollectionConcurrencyState;
+  readonly verificationUrl?: string;
+  readonly retryAt?: string;
 
   constructor(
     code: MarketplaceClientErrorCode,
@@ -67,6 +71,8 @@ export class MarketplaceClientError extends Error {
     fields?: Record<string, string>,
     current?: PublishedPresetConcurrencyState,
     collectionCurrent?: PresetCollectionConcurrencyState,
+    verificationUrl?: string,
+    retryAt?: string,
   ) {
     super(message);
     this.name = 'MarketplaceClientError';
@@ -74,6 +80,8 @@ export class MarketplaceClientError extends Error {
     this.fields = fields;
     this.current = current;
     this.collectionCurrent = collectionCurrent;
+    this.verificationUrl = verificationUrl;
+    this.retryAt = retryAt;
   }
 }
 
@@ -168,6 +176,35 @@ async function publicationError(response: Response): Promise<MarketplaceClientEr
         : undefined;
       if (response.status === 401) {
         return new MarketplaceClientError('authentication_required', '请先登录再发布。');
+      }
+      if (
+        error.code === 'email_verification_required'
+        && typeof error.verificationUrl === 'string'
+        && error.verificationUrl.startsWith('/')
+      ) {
+        return new MarketplaceClientError(
+          'verification_required',
+          '请先验证邮箱；当前输入已保留。',
+          undefined,
+          undefined,
+          undefined,
+          error.verificationUrl,
+        );
+      }
+      if (
+        error.code === 'write_rate_limited'
+        && typeof error.retryAt === 'string'
+        && !Number.isNaN(Date.parse(error.retryAt))
+      ) {
+        return new MarketplaceClientError(
+          'rate_limited',
+          '操作过于频繁；请稍后重试，当前输入已保留。',
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          error.retryAt,
+        );
       }
       if (error.code === 'self_like_forbidden') {
         return new MarketplaceClientError('forbidden', '不能给自己的作品点赞。');

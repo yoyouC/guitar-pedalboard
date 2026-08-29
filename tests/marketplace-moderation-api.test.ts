@@ -5,6 +5,7 @@ import { createMemoryMemberRepository } from '../server/members/memoryRepository
 import { assertAccountActive } from '../server/members/standing.ts';
 import { createMarketplaceModerationApi } from '../server/moderation/api.ts';
 import { createMemoryMarketplaceModerationRepository } from '../server/moderation/memoryRepository.ts';
+import type { MarketplaceWriteLimiter } from '../server/abuse/writeLimiter.ts';
 
 const now = new Date('2026-08-29T14:00:00.000Z');
 const identities: Record<string, AuthenticatedIdentity> = {
@@ -12,9 +13,13 @@ const identities: Record<string, AuthenticatedIdentity> = {
   other: { authUserId: 'auth-other', email: 'other@example.test', displayName: 'Other', avatarUrl: null },
   author: { authUserId: 'auth-author', email: 'author@example.test', displayName: 'Author', avatarUrl: null },
   admin: { authUserId: 'auth-admin', email: 'admin@example.test', displayName: 'Admin', avatarUrl: null },
+  unverified: {
+    authUserId: 'auth-unverified', email: 'unverified@example.test', emailVerified: false,
+    displayName: 'Unverified', avatarUrl: null,
+  },
 };
 
-function fixture() {
+function fixture(writeLimiter?: MarketplaceWriteLimiter) {
   const members = createMemoryMemberRepository(Object.entries(identities).map(([key, identity]) => ({
     id: `member-${key}`,
     authUserId: identity.authUserId,
@@ -49,6 +54,7 @@ function fixture() {
     createId: () => `governance-${++id}`,
     createMemberId: () => 'member-created',
     createHandleSuffix: () => 'created1',
+    writeLimiter,
   });
   const request = (path: string, method = 'GET', user?: string, body?: unknown) => api.fetch(new Request(
     `https://pedalboard.test${path}`,
@@ -98,6 +104,33 @@ test('verified members report accessible content once while formal notices stay 
   assert.equal(queuedNotice.claimantEmail, 'rights@example.test');
   assert.equal(JSON.stringify(queue).includes('auth-'), false);
   assert.equal(JSON.stringify(queue).includes('token'), false);
+});
+
+test('ordinary reports require email verification without hiding the signed-in state', async () => {
+  const { request } = fixture();
+  const response = await request('/api/marketplace/reports', 'POST', 'unverified', report);
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), {
+    error: {
+      code: 'email_verification_required',
+      message: 'Verify your email before this community write',
+      verificationUrl: '/login?verify=email&return=%2Fmarketplace',
+    },
+  });
+});
+
+test('ordinary reports use the dedicated report limiter after body validation', async () => {
+  const operations: string[] = [];
+  const { request } = fixture({
+    async consume(input) {
+      operations.push(input.operation);
+      return { allowed: false, retryAt: new Date('2026-08-29T14:01:00.000Z') };
+    },
+  });
+  const response = await request('/api/marketplace/reports', 'POST', 'reporter', report);
+  assert.equal(response.status, 429);
+  assert.equal((await response.json()).error.retryAt, '2026-08-29T14:01:00.000Z');
+  assert.deepEqual(operations, ['report']);
 });
 
 test('only admins hide content; authors see the reason and get one appeal with a private audit trail', async () => {
