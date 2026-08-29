@@ -28,6 +28,10 @@
       "destination": "/api/marketplace-preset?route=tags"
     },
     {
+      "source": "/api/marketplace/search/presets",
+      "destination": "/api/marketplace-search"
+    },
+    {
       "source": "/api/marketplace/presets",
       "destination": "/api/marketplace-preset?route=presets"
     },

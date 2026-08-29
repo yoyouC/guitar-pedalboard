@@ -16,14 +16,14 @@ open http://localhost:5173/marketplace/presets/preset-demo-crunch
 
 ## PostgreSQL
 
-生产环境设置 `DATABASE_URL`（也兼容 `POSTGRES_URL`），然后运行：
+生产环境设置 `DATABASE_URL`（也兼容 `POSTGRES_URL`），然后依次运行：
 
 ```bash
 npm run marketplace:migrate
 npm run marketplace:seed
 ```
 
-迁移脚本按文件名顺序运行全部 SQL，创建成员、认证、handle claim、作品、修订、受控标签和 Rig 筛选投影。数据库约束保证每个作品都有属于自己的当前修订，修订更新和删除由 trigger 拒绝；Remix 的来源作品/修订使用成对复合外键固定，来源撤回不级联删除 Remix；handle claim 不删除，因此旧 handle 不会被其他成员占用。首发事务一次写入作品、不可变修订、标签关系和从 Rig 派生的筛选投影，任一步失败都会回滚。声音更新同样在一个事务内追加修订、推进当前指针并重建筛选投影；每条修订同时冻结当时的派生器材属性，回退直接复制旧 Rig 与该快照，不依赖当前器材目录，也不移动历史指针。账号期满清理需要由对应生命周期迁移建立专用受控路径。seed 命令幂等创建 `preset-demo-crunch`。
+迁移脚本按文件名顺序运行全部 SQL，创建成员、认证、handle claim、作品、修订、受控标签和 Rig 筛选投影。数据库约束保证每个作品都有属于自己的当前修订，修订更新和删除由 trigger 拒绝；Remix 的来源作品/修订使用成对复合外键固定，来源撤回不级联删除 Remix；handle claim 不删除，因此旧 handle 不会被其他成员占用。首发事务一次写入作品、不可变修订、标签关系和从 Rig 派生的筛选投影，任一步失败都会回滚。声音更新同样在一个事务内追加修订、推进当前指针并重建筛选投影；每条修订同时冻结当时的派生器材属性，回退直接复制旧 Rig 与该快照，不依赖当前器材目录，也不移动历史指针。账号期满清理需要由对应生命周期迁移建立专用受控路径。seed 命令幂等创建 `preset-demo-crunch`，提交后会调用统一重建器补齐全部搜索投影字段。
 
 生产认证还需配置：
 

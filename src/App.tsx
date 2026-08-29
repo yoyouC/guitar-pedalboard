@@ -39,6 +39,7 @@ import { PublishedPresetRoute } from './components/PublishedPresetRoute';
 import { MemberPanel } from './components/MemberPanel';
 import { CreatorProfileRoute } from './components/CreatorProfileRoute';
 import { PresetCollectionRoute } from './components/PresetCollectionRoute';
+import { PublishedPresetSearchRoute } from './components/PublishedPresetSearchRoute';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -382,6 +383,13 @@ export default function App() {
         <button
           className="marketplace-demo-link"
           type="button"
+          onClick={() => navigate('/marketplace/search')}
+        >
+          搜索音色
+        </button>
+        <button
+          className="marketplace-demo-link"
+          type="button"
           onClick={() => navigate('/marketplace/presets/preset-demo-crunch')}
         >
           音色广场 Demo
@@ -403,6 +411,11 @@ export default function App() {
       />
       <CreatorProfileRoute pathname={pathname} onClose={() => navigate('/')} onNavigate={navigate} />
       <PresetCollectionRoute
+        pathname={pathname}
+        onClose={() => navigate('/')}
+        onNavigate={navigate}
+      />
+      <PublishedPresetSearchRoute
         pathname={pathname}
         onClose={() => navigate('/')}
         onNavigate={navigate}

@@ -19,16 +19,29 @@ import {
   UnavailableTagError,
 } from './repository.ts';
 import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.ts';
+import type { PublishedPresetSearchRepository } from '../search/repository.ts';
+import { matchesSearchText } from '../search/text.ts';
+import {
+  decodeSearchCursor,
+  encodeSearchCursor,
+  isAfterCursor,
+  isAtOrBefore,
+  type SearchBoundary,
+} from '../search/cursor.ts';
+import { rigResourceDependencyKey } from '../../shared/marketplaceResource.ts';
+
+type MemoryMarketplaceTag = MarketplaceTag & { aliases?: readonly string[] };
 
 export function createMemoryPublishedPresetRepository(
   presets: readonly PublishedPreset[] = [],
-  tags: readonly MarketplaceTag[] = [],
+  tags: readonly MemoryMarketplaceTag[] = [],
 ): PublishedPresetRepository & PublishedPresetPublicationRepository & PublishedPresetManagementRepository & {
   findRevisionReference: PublishedPresetRevisionReferenceRepository['findRevisionReference'];
   count(): Promise<number>;
-} {
+} & PublishedPresetSearchRepository {
   const presetsById = new Map(presets.map((preset) => [preset.id, preset]));
-  const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+  const tagsById = new Map(tags.map(({ aliases: _aliases, ...tag }) => [tag.id, tag]));
+  const tagAliasesById = new Map(tags.map((tag) => [tag.id, tag.aliases ?? []]));
   const revisionsByPresetId = new Map<string, Map<string, PublishedPresetRevision>>(
     presets.map((preset) => [
       preset.id,
@@ -91,6 +104,67 @@ export function createMemoryPublishedPresetRepository(
   }
 
   return {
+    async searchPublicPresets(input) {
+      const candidates = [...presetsById.values()]
+        .filter((preset) => preset.visibility === 'public')
+        .filter((preset) => input.tagIds.every((id) => preset.tags.some((tag) => tag.id === id)))
+        .filter((preset) => input.pedalIds.every((id) => preset.derivedAttributes.pedalIds.includes(id)))
+        .filter((preset) => input.ampIds.length === 0 || input.ampIds.includes(preset.derivedAttributes.ampId))
+        .filter((preset) => input.cabIds.length === 0 || input.cabIds.includes(preset.derivedAttributes.cabId))
+        .filter((preset) => input.resourceKinds.every((kind) => (
+          preset.derivedAttributes.resourceKinds.includes(kind)
+        )))
+        .filter((preset) => input.resourceDependencyKeys.every((key) => (
+          preset.currentRevision.resourceDependencies.some((dependency) => (
+            rigResourceDependencyKey(dependency) === key
+          ))
+        )))
+        .filter((preset) => !input.publishedAfter || preset.createdAt >= input.publishedAfter)
+        .filter((preset) => !input.publishedBefore || preset.createdAt <= input.publishedBefore)
+        .sort((left, right) => (
+          right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id)
+        ));
+      const cursor = input.cursor ? decodeSearchCursor(input.cursor, input) : null;
+      const snapshot: SearchBoundary | null = cursor?.snapshot ?? (candidates[0]
+        ? { createdAt: candidates[0].createdAt, id: candidates[0].id }
+        : null);
+      if (!snapshot) return { items: [], nextCursor: null };
+      const matches = candidates
+        .filter((preset) => isAtOrBefore(preset, snapshot))
+        .filter((preset) => !cursor || isAfterCursor(preset, cursor.after))
+        .filter((preset) => matchesSearchText(input.text, [
+          preset.title,
+          preset.description,
+          preset.creator.handle,
+          ...preset.tags.flatMap((tag) => [
+            tag.nameZh,
+            tag.nameEn,
+            ...(tagAliasesById.get(tag.id) ?? []),
+          ]),
+        ]))
+        .slice(0, input.limit + 1);
+      const hasMore = matches.length > input.limit;
+      const pagePresets = matches.slice(0, input.limit);
+      const items = pagePresets
+        .map((preset) => ({
+          id: preset.id,
+          title: preset.title,
+          description: preset.description,
+          creator: clone(preset.creator),
+          tags: clone(preset.tags),
+          derivedAttributes: clone(preset.derivedAttributes),
+          createdAt: preset.createdAt,
+          updatedAt: preset.updatedAt,
+        }));
+      const last = pagePresets.at(-1);
+      return {
+        items,
+        nextCursor: hasMore && last
+          ? encodeSearchCursor(input, snapshot, { createdAt: last.createdAt, id: last.id })
+          : null,
+      };
+    },
+
     async findRevisionReference(presetId, revisionId) {
       const preset = presetsById.get(presetId);
       const revision = revisionsByPresetId.get(presetId)?.get(revisionId);

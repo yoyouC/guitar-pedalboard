@@ -338,3 +338,51 @@ test('official client rejects a collection response that leaks unavailable item 
     (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
   );
 });
+
+test('official client sends structured preset search and validates the public result projection', async () => {
+  const page = {
+    items: [{
+      id: demoPublishedPreset.id,
+      title: demoPublishedPreset.title,
+      description: demoPublishedPreset.description,
+      creator: demoPublishedPreset.creator,
+      tags: demoPublishedPreset.tags,
+      derivedAttributes: demoPublishedPreset.derivedAttributes,
+      createdAt: demoPublishedPreset.createdAt,
+      updatedAt: demoPublishedPreset.updatedAt,
+    }],
+    nextCursor: 'opaque-next',
+  };
+  let requested = '';
+  const client = createMarketplaceClient(async (input) => {
+    requested = String(input);
+    return Response.json(page);
+  });
+  assert.deepEqual(await client.searchPublishedPresets({
+    text: 'rock',
+    tagIds: ['genre-rock'],
+    pedalIds: ['overdrive'],
+    ampIds: ['crunch'],
+    cabIds: ['gb4x12'],
+    resourceKinds: ['builtin'],
+    resourceDependencyKeys: ['tone3000:123:456'],
+    publishedAfter: '2026-08-01T00:00:00.000Z',
+    publishedBefore: '2026-08-31T00:00:00.000Z',
+    limit: 12,
+    cursor: 'opaque-current',
+  }), page);
+  assert.equal(requested, '/api/marketplace/search/presets?'
+    + 'q=rock&tag=genre-rock&pedal=overdrive&amp=crunch&cab=gb4x12&resourceKind=builtin'
+    + '&resource=tone3000%3A123%3A456'
+    + '&publishedAfter=2026-08-01T00%3A00%3A00.000Z'
+    + '&publishedBefore=2026-08-31T00%3A00%3A00.000Z&limit=12&cursor=opaque-current');
+
+  const malformed = createMarketplaceClient(async () => Response.json({
+    ...page,
+    items: [{ ...page.items[0], rig: demoPublishedPreset.currentRevision.rig }],
+  }));
+  await assert.rejects(
+    () => malformed.searchPublishedPresets({ text: 'rock' }),
+    (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
+  );
+});

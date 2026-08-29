@@ -383,18 +383,22 @@ async function replaceProjection(
   client: PostgresQueryable,
   presetId: string,
   attributes: RigDerivedAttributes,
+  dependencies: readonly RigResourceDependency[],
   now: Date,
 ): Promise<void> {
   await client.query(
     `INSERT INTO marketplace_published_preset_search_projection
-       (preset_id, pedal_ids, amp_id, amp_model_key, cab_id, resource_kinds, projected_at)
-     VALUES ($1, $2::text[], $3, $4, $5, $6::text[], $7)
+       (preset_id, pedal_ids, amp_id, amp_model_key, cab_id, resource_kinds,
+        resource_dependency_keys, projected_at)
+     VALUES ($1, $2::text[], $3, $4, $5, $6::text[],
+       marketplace_resource_dependency_keys($7::jsonb), $8)
      ON CONFLICT (preset_id) DO UPDATE SET
        pedal_ids = EXCLUDED.pedal_ids,
        amp_id = EXCLUDED.amp_id,
        amp_model_key = EXCLUDED.amp_model_key,
        cab_id = EXCLUDED.cab_id,
        resource_kinds = EXCLUDED.resource_kinds,
+       resource_dependency_keys = EXCLUDED.resource_dependency_keys,
        projected_at = EXCLUDED.projected_at`,
     [
       presetId,
@@ -403,6 +407,7 @@ async function replaceProjection(
       attributes.ampModelKey,
       attributes.cabId,
       attributes.resourceKinds,
+      JSON.stringify(dependencies),
       now,
     ],
   );
@@ -514,19 +519,12 @@ export function createPostgresPublishedPresetPublicationRepository(
            SELECT $1, unnest($2::text[])`,
           [input.id, input.tagIds],
         );
-        await client.query(
-          `INSERT INTO marketplace_published_preset_search_projection
-             (preset_id, pedal_ids, amp_id, amp_model_key, cab_id, resource_kinds, projected_at)
-           VALUES ($1, $2::text[], $3, $4, $5, $6::text[], $7)`,
-          [
-            input.id,
-            input.derivedAttributes.pedalIds,
-            input.derivedAttributes.ampId,
-            input.derivedAttributes.ampModelKey,
-            input.derivedAttributes.cabId,
-            input.derivedAttributes.resourceKinds,
-            input.now,
-          ],
+        await replaceProjection(
+          client,
+          input.id,
+          input.derivedAttributes,
+          input.resourceDependencies,
+          input.now,
         );
         await client.query('COMMIT');
 
@@ -678,7 +676,13 @@ export function createPostgresPublishedPresetPublicationRepository(
            WHERE id = $1 AND creator_id = $2`,
           [input.presetId, input.creatorId, input.revisionId, input.now],
         );
-        await replaceProjection(client, input.presetId, input.derivedAttributes, input.now);
+        await replaceProjection(
+          client,
+          input.presetId,
+          input.derivedAttributes,
+          input.resourceDependencies,
+          input.now,
+        );
         const updated = await managedPreset(client, input.presetId);
         await client.query('COMMIT');
         return updated;
@@ -740,7 +744,13 @@ export function createPostgresPublishedPresetPublicationRepository(
            WHERE id = $1 AND creator_id = $2`,
           [input.presetId, input.creatorId, input.revisionId, input.now],
         );
-        await replaceProjection(client, input.presetId, source.derived_attributes, input.now);
+        await replaceProjection(
+          client,
+          input.presetId,
+          source.derived_attributes,
+          source.resource_dependencies,
+          input.now,
+        );
         const updated = await managedPreset(client, input.presetId);
         await client.query('COMMIT');
         return updated;

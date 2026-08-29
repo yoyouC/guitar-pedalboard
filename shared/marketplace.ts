@@ -76,9 +76,41 @@ export interface PresetCollectionConcurrencyState {
   visibility: PresetCollectionVisibility;
 }
 
+export interface PublishedPresetSearchItem {
+  id: string;
+  title: string;
+  description: string;
+  creator: MarketplaceMemberSummary;
+  tags: MarketplaceTag[];
+  derivedAttributes: RigDerivedAttributes;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublishedPresetSearchPage {
+  items: PublishedPresetSearchItem[];
+  nextCursor: string | null;
+}
+
+export interface PublishedPresetSearchRequest {
+  text?: string;
+  tagIds?: string[];
+  pedalIds?: string[];
+  ampIds?: string[];
+  cabIds?: string[];
+  resourceKinds?: RigDerivedAttributes['resourceKinds'];
+  resourceDependencyKeys?: RigResourceDependencyKey[];
+  publishedAfter?: string;
+  publishedBefore?: string;
+  limit?: number;
+  cursor?: string;
+}
+
 export type RigResourceDependency =
   | { kind: 'builtin' }
   | { kind: 'tone3000'; toneId: string; modelId?: string };
+
+export type RigResourceDependencyKey = 'builtin' | `tone3000:${string}`;
 
 export interface RigDerivedAttributes {
   pedalIds: string[];

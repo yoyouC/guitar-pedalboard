@@ -4,6 +4,8 @@ import type {
   MarketplaceTag,
   PresetCollection,
   PresetCollectionConcurrencyState,
+  PublishedPresetSearchPage,
+  PublishedPresetSearchRequest,
   PublishedPreset,
   PublishedPresetConcurrencyState,
   PublishedPresetRevisionSummary,
@@ -17,6 +19,7 @@ import type {
 import {
   parseManagedPublishedPreset,
   parsePresetCollection,
+  parsePublishedPresetSearchPage,
   parsePublicPublishedPreset,
   parsePublishedPresetRevisionView,
 } from '../../shared/marketplaceValidation';
@@ -29,6 +32,7 @@ export type MarketplaceClientErrorCode =
   | 'authentication_required'
   | 'invalid_publication'
   | 'invalid_update'
+  | 'invalid_search'
   | 'update_conflict';
 
 export class MarketplaceClientError extends Error {
@@ -84,6 +88,7 @@ export interface MarketplaceClient {
     id: string,
     request: UpdatePresetCollectionRequest,
   ): Promise<PresetCollection>;
+  searchPublishedPresets(request: PublishedPresetSearchRequest): Promise<PublishedPresetSearchPage>;
 }
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -125,6 +130,14 @@ async function publicationError(response: Response): Promise<MarketplaceClientEr
           'invalid_update',
           '合集包含不可访问的音色修订。',
           { items: '请选择允许收录的固定修订' },
+        );
+      }
+      if (error.code === 'invalid_preset_search' || error.code === 'invalid_search_cursor') {
+        return new MarketplaceClientError(
+          'invalid_search',
+          error.code === 'invalid_search_cursor'
+            ? '搜索结果已变化，请从第一页重新搜索。'
+            : '搜索条件无效。',
         );
       }
       if (error.code === 'collection_update_conflict' && isRecord(error.current)) {
@@ -453,6 +466,31 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
         'PATCH',
         request,
       );
+    },
+
+    async searchPublishedPresets(request) {
+      const params = new URLSearchParams();
+      if (request.text) params.set('q', request.text);
+      for (const tagId of request.tagIds ?? []) params.append('tag', tagId);
+      for (const pedalId of request.pedalIds ?? []) params.append('pedal', pedalId);
+      for (const ampId of request.ampIds ?? []) params.append('amp', ampId);
+      for (const cabId of request.cabIds ?? []) params.append('cab', cabId);
+      for (const kind of request.resourceKinds ?? []) params.append('resourceKind', kind);
+      for (const key of request.resourceDependencyKeys ?? []) params.append('resource', key);
+      if (request.publishedAfter) params.set('publishedAfter', request.publishedAfter);
+      if (request.publishedBefore) params.set('publishedBefore', request.publishedBefore);
+      if (request.limit !== undefined) params.set('limit', String(request.limit));
+      if (request.cursor) params.set('cursor', request.cursor);
+      let response: Response;
+      try {
+        response = await fetchResponse(`/api/marketplace/search/presets?${params}`);
+      } catch {
+        throw new MarketplaceClientError('network', '无法连接音色广场。');
+      }
+      if (!response.ok) throw await publicationError(response);
+      const page = parsePublishedPresetSearchPage(await response.json());
+      if (!page) throw new MarketplaceClientError('invalid_response', '搜索结果格式无效。');
+      return page;
     },
   };
 }

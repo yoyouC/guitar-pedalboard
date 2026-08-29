@@ -2,6 +2,7 @@ import type { RigPresetState } from '../src/state/presetCodec.ts';
 import { normalizeRig } from '../src/state/presetCodec.ts';
 import { RIG_PRESET_CATALOG } from './rigPresetCatalog.ts';
 import type { RigDerivedAttributes, RigResourceDependency } from './marketplace.ts';
+import { rigResourceDependencyKey } from './marketplaceResource.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -18,12 +19,6 @@ function canonicalJsonValue(value: unknown): unknown {
   );
 }
 
-function dependencyKey(dependency: RigResourceDependency): string {
-  return dependency.kind === 'builtin'
-    ? 'builtin'
-    : `tone3000:${dependency.toneId}:${dependency.modelId ?? ''}`;
-}
-
 export function deriveRigResourceDependencies(rig: RigPresetState): RigResourceDependency[] {
   const dependencies = new Map<string, RigResourceDependency>();
   dependencies.set('builtin', { kind: 'builtin' });
@@ -36,7 +31,7 @@ export function deriveRigResourceDependencies(rig: RigPresetState): RigResourceD
       toneId: match[1],
       ...(modelId ? { modelId } : {}),
     };
-    dependencies.set(dependencyKey(dependency), dependency);
+    dependencies.set(rigResourceDependencyKey(dependency), dependency);
   };
 
   addTone3000(rig.amp.modelKey, rig.amp.modelId);
@@ -83,8 +78,8 @@ export function sameResourceDependencies(
   left: readonly RigResourceDependency[],
   right: readonly RigResourceDependency[],
 ): boolean {
-  const leftKeys = new Set(left.map(dependencyKey));
-  const rightKeys = new Set(right.map(dependencyKey));
+  const leftKeys = new Set(left.map(rigResourceDependencyKey));
+  const rightKeys = new Set(right.map(rigResourceDependencyKey));
   return leftKeys.size === left.length
     && rightKeys.size === right.length
     && leftKeys.size === rightKeys.size

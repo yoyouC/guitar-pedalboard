@@ -1,6 +1,7 @@
 import type {
   CanonicalPublishedPresetRevision,
   PresetCollection,
+  PublishedPresetSearchPage,
   PublishedPreset,
   PublishedPresetRevision,
   PublishedPresetRevisionView,
@@ -317,4 +318,42 @@ export function parsePresetCollection(
     ) return null;
   }
   return value as unknown as PresetCollection;
+}
+
+export function parsePublishedPresetSearchPage(value: unknown): PublishedPresetSearchPage | null {
+  if (
+    !isRecord(value)
+    || !hasOnlyKeys(value, ['items', 'nextCursor'])
+    || !Array.isArray(value.items)
+    || (value.nextCursor !== null && typeof value.nextCursor !== 'string')
+  ) return null;
+  for (const item of value.items) {
+    if (
+      !isRecord(item)
+      || !isRecord(item.creator)
+      || !hasOnlyKeys(item, [
+        'id', 'title', 'description', 'creator', 'tags', 'derivedAttributes',
+        'createdAt', 'updatedAt',
+      ])
+      || typeof item.id !== 'string'
+      || !item.id
+      || typeof item.title !== 'string'
+      || textLength(item.title) < 1
+      || textLength(item.title) > 80
+      || typeof item.description !== 'string'
+      || textLength(item.description) > 2_000
+      || !hasOnlyKeys(item.creator, ['id', 'handle', 'displayName'])
+      || typeof item.creator.id !== 'string'
+      || typeof item.creator.handle !== 'string'
+      || typeof item.creator.displayName !== 'string'
+      || !Array.isArray(item.tags)
+      || item.tags.length < 1
+      || item.tags.length > 5
+      || !item.tags.every(isMarketplaceTag)
+      || !isDerivedAttributes(item.derivedAttributes)
+      || typeof item.createdAt !== 'string'
+      || typeof item.updatedAt !== 'string'
+    ) return null;
+  }
+  return value as unknown as PublishedPresetSearchPage;
 }
