@@ -31,6 +31,7 @@ import {
   UnavailableTagError,
 } from './repository.ts';
 import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.ts';
+import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
 
 export interface PostgresQueryable {
   query<R extends QueryResultRow>(text: string, values?: readonly unknown[]): Promise<QueryResult<R>>;
@@ -437,6 +438,7 @@ export function createPostgresPublishedPresetPublicationRepository(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await lockCommunityWriteMember(client, input.creator.id);
         const selected = await client.query<TagRow>(
           `SELECT id, dimension, name_zh, name_en
            FROM marketplace_tags
@@ -612,6 +614,7 @@ export function createPostgresPublishedPresetPublicationRepository(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await lockCommunityWriteMember(client, input.creatorId);
         await lockOwnedPreset(client, input.presetId, input.creatorId, input.expectedUpdatedAt);
         const selected = await client.query<TagRow>(
           `SELECT id, dimension, name_zh, name_en
@@ -654,6 +657,7 @@ export function createPostgresPublishedPresetPublicationRepository(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await lockCommunityWriteMember(client, input.creatorId);
         await lockOwnedPreset(client, input.presetId, input.creatorId, input.expectedUpdatedAt);
         await client.query(
           `INSERT INTO marketplace_published_preset_revisions
@@ -698,6 +702,7 @@ export function createPostgresPublishedPresetPublicationRepository(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await lockCommunityWriteMember(client, input.creatorId);
         await lockOwnedPreset(client, input.presetId, input.creatorId, input.expectedUpdatedAt);
         const sourceResult = await client.query<QueryResultRow & {
           id: string;
@@ -766,6 +771,7 @@ export function createPostgresPublishedPresetPublicationRepository(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await lockCommunityWriteMember(client, input.creatorId);
         await lockOwnedPreset(client, input.presetId, input.creatorId, input.expectedUpdatedAt);
         await client.query(
           `UPDATE marketplace_published_presets

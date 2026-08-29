@@ -1,5 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { MemberProfile } from '../../shared/members.ts';
+import type { MarketplaceAccountDeletion } from '../../shared/account.ts';
+import {
+  fetchMarketplaceAccountDeletion,
+  fetchMarketplaceAccountExport,
+  recoverMarketplaceAccount,
+  requestMarketplaceAccountDeletion,
+} from '../accounts/client.ts';
 import {
   beginGoogleAuth,
   fetchCurrentMember,
@@ -25,18 +32,21 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
   const [bio, setBio] = useState('');
   const [message, setMessage] = useState('');
   const [creatingCollection, setCreatingCollection] = useState(false);
+  const [deletion, setDeletion] = useState<MarketplaceAccountDeletion | null>(null);
+  const [confirmingDeletion, setConfirmingDeletion] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
     setMessage('');
     void fetchCurrentMember()
-      .then((next) => {
+      .then(async (next) => {
         setMember(next);
         setAnonymous(false);
         setHandle(next.handle);
         setDisplayName(next.displayName);
         setBio(next.bio);
+        setDeletion(await fetchMarketplaceAccountDeletion());
       })
       .catch((cause: unknown) => {
         if (cause instanceof MemberClientError && cause.code === 'authentication_required') {
@@ -110,6 +120,61 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
     }
   };
 
+  const exportAccount = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const exported = await fetchMarketplaceAccountExport();
+      const href = URL.createObjectURL(new Blob(
+        [JSON.stringify(exported.data, null, 2)],
+        { type: 'application/json' },
+      ));
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = exported.filename;
+      link.click();
+      URL.revokeObjectURL(href);
+      setMessage('平台数据导出已开始下载。');
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : '导出失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestDeletion = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      const next = await requestMarketplaceAccountDeletion();
+      setDeletion(null);
+      setMember(null);
+      setAnonymous(true);
+      setConfirmingDeletion(false);
+      setMessage(
+        `注销已申请并退出登录；可在 ${new Date(next.purgeAfter).toLocaleString()} 前重新登录并恢复。`,
+      );
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : '注销申请失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const recoverAccount = async () => {
+    setLoading(true);
+    setMessage('');
+    try {
+      await recoverMarketplaceAccount();
+      setDeletion(null);
+      setMessage('账户与注销申请撤回前的公开内容已恢复。');
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : '恢复失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="member-menu">
       <button type="button" className="member-menu__trigger" onClick={() => setOpen((value) => !value)}>
@@ -135,7 +200,15 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
           )}
           {member && !loading && (
             <>
-              {creatingCollection ? (
+              {deletion ? (
+                <div className="member-panel__deletion">
+                  <strong>账户正在等待永久注销</strong>
+                  <p>作品与合集已撤回，预计于 {new Date(deletion.purgeAfter).toLocaleString()} 清除。</p>
+                  <button type="button" onClick={() => void recoverAccount()}>
+                    取消注销并恢复账户
+                  </button>
+                </div>
+              ) : creatingCollection ? (
                 <CreatePresetCollectionForm
                   onCancel={() => setCreatingCollection(false)}
                   onCreated={(pathname) => {
@@ -163,7 +236,7 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
               </form>
               )}
               <div className="member-panel__actions">
-                {!creatingCollection && (
+                {!deletion && !creatingCollection && (
                   <button type="button" onClick={() => setCreatingCollection(true)}>
                     创建预设合集
                   </button>
@@ -173,6 +246,19 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
                   setOpen(false);
                 }}>查看公开主页</button>
                 <button type="button" onClick={() => void google('link')}>验证并绑定 Google</button>
+                <button type="button" onClick={() => void exportAccount()}>导出我的平台数据</button>
+                {!deletion && !confirmingDeletion && (
+                  <button type="button" onClick={() => setConfirmingDeletion(true)}>
+                    申请注销账户
+                  </button>
+                )}
+                {!deletion && confirmingDeletion && (
+                  <div>
+                    <p>作品与合集会立即撤回；30 天后资料、作品正文、Rig 与登录身份将永久清除。</p>
+                    <button type="button" onClick={() => void requestDeletion()}>确认申请注销</button>
+                    <button type="button" onClick={() => setConfirmingDeletion(false)}>取消</button>
+                  </div>
+                )}
                 <button type="button" onClick={() => void logout()}>退出</button>
               </div>
             </>

@@ -17,6 +17,7 @@ import {
 } from './repository.ts';
 import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
 import { canIncludePresetRevision } from './referencePolicy.ts';
+import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
 
 interface CollectionRow extends QueryResultRow {
   id: string;
@@ -318,6 +319,7 @@ export function createPostgresPresetCollectionManagementRepository(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await lockCommunityWriteMember(client, input.creator.id);
         await requireTags(client, input.tagIds);
         await client.query(
           `INSERT INTO marketplace_preset_collections
@@ -342,6 +344,7 @@ export function createPostgresPresetCollectionManagementRepository(
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        await lockCommunityWriteMember(client, input.creatorId);
         const current = await lockOwnedCollection(client, input);
         await requireTags(client, input.tagIds);
         await validateReferences(client, input, current.visibility);

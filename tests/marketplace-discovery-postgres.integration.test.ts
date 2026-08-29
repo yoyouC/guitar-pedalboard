@@ -17,6 +17,7 @@ const migrations = [
   '0009_marketplace_likes.sql',
   '0010_marketplace_trending.sql',
   '0011_marketplace_moderation.sql',
+  '0012_account_lifecycle.sql',
 ];
 
 test('PostgreSQL discovery keeps collection and creator tabs private and cursor-stable', {

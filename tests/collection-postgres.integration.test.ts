@@ -36,6 +36,7 @@ test('PostgreSQL collections atomically preserve order, revisions, placeholders,
         '0005_preset_revision_management.sql',
         '0006_preset_remix_provenance.sql',
         '0007_preset_collections.sql',
+        '0012_account_lifecycle.sql',
       ][index - 1];
       await client.query(await readFile(
         new URL(`../server/marketplace/migrations/${name}`, import.meta.url),

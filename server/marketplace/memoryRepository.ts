@@ -29,12 +29,14 @@ import {
   type SearchBoundary,
 } from '../search/cursor.ts';
 import { rigResourceDependencyKey } from '../../shared/marketplaceResource.ts';
+import type { MarketplaceAccountExport } from '../../shared/account.ts';
 
 type MemoryMarketplaceTag = MarketplaceTag & { aliases?: readonly string[] };
 
 export function createMemoryPublishedPresetRepository(
   presets: readonly PublishedPreset[] = [],
   tags: readonly MemoryMarketplaceTag[] = [],
+  writeAllowed?: (memberId: string) => Promise<void>,
 ): PublishedPresetRepository & PublishedPresetPublicationRepository & PublishedPresetManagementRepository & {
   findRevisionReference: PublishedPresetRevisionReferenceRepository['findRevisionReference'];
   count(): Promise<number>;
@@ -42,6 +44,17 @@ export function createMemoryPublishedPresetRepository(
     presetId: string,
     visibility: PublishedPreset['visibility'],
   ): Promise<void>;
+  exportForAccount(memberId: string): Promise<MarketplaceAccountExport['presets']>;
+  withdrawForAccountDeletion(
+    memberId: string,
+    now: Date,
+  ): Promise<Record<string, PublishedPreset['visibility']>>;
+  restoreForAccountDeletion(
+    memberId: string,
+    snapshot: Record<string, PublishedPreset['visibility']>,
+    now: Date,
+  ): Promise<void>;
+  purgeAccount(memberId: string, now: Date): Promise<void>;
 } & PublishedPresetSearchRepository {
   const presetsById = new Map(presets.map((preset) => [preset.id, preset]));
   const tagsById = new Map(tags.map(({ aliases: _aliases, ...tag }) => [tag.id, tag]));
@@ -219,6 +232,7 @@ export function createMemoryPublishedPresetRepository(
     },
 
     async create(input) {
+      await writeAllowed?.(input.creator.id);
       const selectedTags = input.tagIds.map((id) => tagsById.get(id));
       if (selectedTags.some((tag) => !tag)) throw new UnavailableTagError();
       let source;
@@ -283,6 +297,7 @@ export function createMemoryPublishedPresetRepository(
     },
 
     async updateMetadata(input) {
+      await writeAllowed?.(input.creatorId);
       const preset = ownedCurrent(input.presetId, input.creatorId, input.expectedUpdatedAt);
       const selectedTags = input.tagIds.map((id) => tagsById.get(id));
       if (selectedTags.some((tag) => !tag)) throw new UnavailableTagError();
@@ -296,6 +311,7 @@ export function createMemoryPublishedPresetRepository(
     },
 
     async appendRevision(input) {
+      await writeAllowed?.(input.creatorId);
       const preset = ownedCurrent(input.presetId, input.creatorId, input.expectedUpdatedAt);
       const revision: PublishedPresetRevision = {
         payloadKind: 'canonical-rig',
@@ -316,6 +332,7 @@ export function createMemoryPublishedPresetRepository(
     },
 
     async restoreRevision(input) {
+      await writeAllowed?.(input.creatorId);
       const preset = ownedCurrent(input.presetId, input.creatorId, input.expectedUpdatedAt);
       const source = revisionsByPresetId.get(input.presetId)?.get(input.sourceRevisionId);
       if (!source) throw new PublishedPresetRevisionNotFoundError();
@@ -337,6 +354,7 @@ export function createMemoryPublishedPresetRepository(
     },
 
     async updateVisibility(input) {
+      await writeAllowed?.(input.creatorId);
       const preset = ownedCurrent(input.presetId, input.creatorId, input.expectedUpdatedAt);
       return setCurrent({
         ...preset,
@@ -353,6 +371,84 @@ export function createMemoryPublishedPresetRepository(
       const preset = presetsById.get(presetId);
       if (!preset) throw new PublishedPresetAccessError();
       preset.visibility = visibility;
+    },
+
+    async exportForAccount(memberId) {
+      return [...presetsById.values()]
+        .filter((preset) => preset.creator.id === memberId)
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+        .map((preset) => ({
+          id: preset.id,
+          title: preset.title,
+          description: preset.description,
+          visibility: preset.visibility,
+          tagIds: preset.tags.map((tag) => tag.id).sort(),
+          source: preset.source
+            ? { presetId: preset.source.presetId, revisionId: preset.source.revisionId }
+            : null,
+          revisions: [...(revisionsByPresetId.get(preset.id)?.values() ?? [])]
+            .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+            .map((revision) => ({
+              id: revision.id,
+              schemaVersion: revision.schemaVersion,
+              resourceDependencies: clone(revision.resourceDependencies),
+              derivedAttributes: clone(revision.derivedAttributes),
+              rig: clone(revision.rig),
+              createdAt: revision.createdAt,
+            })),
+          createdAt: preset.createdAt,
+          updatedAt: preset.updatedAt,
+        }));
+    },
+
+    async withdrawForAccountDeletion(memberId, now) {
+      const snapshot: Record<string, PublishedPreset['visibility']> = {};
+      for (const preset of presetsById.values()) {
+        if (preset.creator.id !== memberId
+          || (preset.visibility !== 'public' && preset.visibility !== 'unlisted')) continue;
+        snapshot[preset.id] = preset.visibility;
+        presetsById.set(preset.id, {
+          ...preset, visibility: 'withdrawn', updatedAt: nextUpdatedAt(preset, now),
+        });
+      }
+      return snapshot;
+    },
+
+    async restoreForAccountDeletion(memberId, snapshot, now) {
+      for (const [presetId, visibility] of Object.entries(snapshot)) {
+        const preset = presetsById.get(presetId);
+        if (!preset || preset.creator.id !== memberId || preset.visibility !== 'withdrawn') continue;
+        presetsById.set(presetId, {
+          ...preset, visibility, updatedAt: nextUpdatedAt(preset, now),
+        });
+      }
+    },
+
+    async purgeAccount(memberId, now) {
+      for (const preset of presetsById.values()) {
+        if (preset.creator.id !== memberId) continue;
+        const revisions = revisionsByPresetId.get(preset.id);
+        for (const [revisionId, revision] of revisions ?? []) {
+          revisions!.set(revisionId, {
+            ...revision,
+            rig: {},
+            resourceDependencies: [],
+            derivedAttributes: {},
+          } as unknown as PublishedPresetRevision);
+        }
+        const currentRevision = revisions?.get(preset.currentRevision.id) ?? preset.currentRevision;
+        presetsById.set(preset.id, {
+          ...preset,
+          title: 'Deleted preset',
+          description: '',
+          visibility: 'withdrawn',
+          tags: [],
+          creator: { ...preset.creator, handle: 'deleted-member', displayName: 'Deleted member' },
+          derivedAttributes: {} as PublishedPreset['derivedAttributes'],
+          currentRevision,
+          updatedAt: nextUpdatedAt(preset, now),
+        });
+      }
     },
   };
 }

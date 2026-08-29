@@ -22,6 +22,13 @@ import { DEFAULT_MARKETPLACE_TRENDING_POLICY } from './server/trending/policy.ts
 import { createMemoryMarketplaceTrendingRepository } from './server/trending/memoryRepository.ts'
 import { createMarketplaceModerationApi } from './server/moderation/api.ts'
 import { createMemoryMarketplaceModerationRepository } from './server/moderation/memoryRepository.ts'
+import { createMarketplaceAccountApi } from './server/accounts/api.ts'
+import { createMemoryMarketplaceAccountRepository } from './server/accounts/memoryRepository.ts'
+import {
+  AccountDeletionPendingError,
+  assertAccountActive,
+  assertCommunityWriteAllowed,
+} from './server/members/standing.ts'
 
 // 本地评估模型(models-local/,git-ignored,许可不允许公开分发):
 // 仅开发期经此中间件提供;/models-local/** 不进入 dist,也不会被部署。
@@ -49,16 +56,17 @@ function serveLocalModels(): Plugin {
 /** 开发期 API：用确定性种子跑同一 Request → Response 核心，不接触本地音频路径。 */
 function serveMarketplaceApi(): Plugin {
   const devAuthBaseURL = process.env.VITE_DEV_AUTH_BASE_URL ?? 'http://localhost:5173'
+  const devAuthStore: Record<string, Array<Record<string, unknown>>> = {
+    marketplace_auth_users: [],
+    marketplace_auth_sessions: [],
+    marketplace_auth_accounts: [],
+    marketplace_auth_verifications: [],
+  }
   const auth = createPlatformAuth({
     baseURL: devAuthBaseURL,
     secret: 'local-development-secret-at-least-32-characters',
     trustedOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'],
-    database: memoryAdapter({
-      marketplace_auth_users: [],
-      marketplace_auth_sessions: [],
-      marketplace_auth_accounts: [],
-      marketplace_auth_verifications: [],
-    }),
+    database: memoryAdapter(devAuthStore),
     sendMagicLink: ({ email, url }) => {
       console.info(`[dev auth] ${email}: ${url}`)
     },
@@ -84,6 +92,16 @@ function serveMarketplaceApi(): Plugin {
     { id: 'use-live', dimension: 'use', nameZh: '现场', nameEn: 'Live', aliases: ['stage'] },
     { id: 'use-recording', dimension: 'use', nameZh: '录音', nameEn: 'Recording', aliases: ['studio'] },
   ]
+  const writeAllowed = async (memberId: string) => {
+    const member = await members.findById(memberId)
+    if (!member) throw new Error('Member not found')
+    assertCommunityWriteAllowed(member)
+  }
+  const contentRestorable = async (memberId: string) => {
+    const member = await members.findById(memberId)
+    if (!member) throw new AccountDeletionPendingError()
+    assertAccountActive(member)
+  }
   const demoUnlistedPreset = {
     ...structuredClone(demoPublishedPreset),
     id: 'preset-demo-unlisted',
@@ -98,6 +116,7 @@ function serveMarketplaceApi(): Plugin {
   const publications = createMemoryPublishedPresetRepository(
     [demoPublishedPreset, demoUnlistedPreset],
     marketplaceTags,
+    writeAllowed,
   )
   const sessions = createBetterAuthSessionVerifier(auth.api)
   const presetApi = createMarketplaceApi({
@@ -144,6 +163,7 @@ function serveMarketplaceApi(): Plugin {
     [demoCollection],
     publications,
     marketplaceTags,
+    writeAllowed,
   )
   const collectionApi = createPresetCollectionApi({
     collections,
@@ -169,6 +189,7 @@ function serveMarketplaceApi(): Plugin {
     presets: [demoPublishedPreset],
     collections: [demoCollection],
     bannedMemberIds,
+    writeAllowed,
   })
   const trending = createMemoryMarketplaceTrendingRepository({
     presets: [demoPublishedPreset],
@@ -189,8 +210,7 @@ function serveMarketplaceApi(): Plugin {
     createMemberId: () => crypto.randomUUID(),
     createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
   })
-  const moderationApi = createMarketplaceModerationApi({
-    repository: createMemoryMarketplaceModerationRepository({
+  const moderation = createMemoryMarketplaceModerationRepository({
       targets: [
         {
           kind: 'preset', id: demoPublishedPreset.id,
@@ -215,7 +235,11 @@ function serveMarketplaceApi(): Plugin {
         await likes.rebuildCounts()
         await rebuildTrending()
       },
-    }),
+      writeAllowed,
+      contentRestorable,
+    })
+  const moderationApi = createMarketplaceModerationApi({
+    repository: moderation,
     sessions,
     members,
     adminAuthUserIds: new Set(
@@ -225,6 +249,98 @@ function serveMarketplaceApi(): Plugin {
     createId: () => crypto.randomUUID(),
     createMemberId: () => crypto.randomUUID(),
     createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+  })
+  const removeAuthRows = (table: string, predicate: (row: Record<string, unknown>) => boolean) => {
+    const rows = devAuthStore[table]
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      if (predicate(rows[index])) rows.splice(index, 1)
+    }
+  }
+  const accountApi = createMarketplaceAccountApi({
+    repository: createMemoryMarketplaceAccountRepository({
+      members,
+      emailForAuthUserId: (authUserId) => String(
+        devAuthStore.marketplace_auth_users.find((row) => row.id === authUserId)?.email
+          ?? 'local-development@example.invalid',
+      ),
+      lifecycle: {
+        async exportData(memberId) {
+          const [presets, collectionsData, liked, cases] = await Promise.all([
+            publications.exportForAccount(memberId),
+            collections.exportForAccount(memberId),
+            likes.exportForAccount(memberId),
+            moderation.exportForAccount(memberId),
+          ])
+          return {
+            presets,
+            collections: collectionsData,
+            relationships: { ...liked, ...cases },
+          }
+        },
+        async withdraw(memberId, now) {
+          const snapshot = {
+            presets: await publications.withdrawForAccountDeletion(memberId, now),
+            collections: await collections.withdrawForAccountDeletion(memberId, now),
+          }
+          for (const presetId of Object.keys(snapshot.presets)) {
+            await likes.setAccountTargetVisibility('preset', presetId, 'withdrawn')
+            await moderation.setAccountTargetVisibility('preset', presetId, 'withdrawn')
+          }
+          for (const collectionId of Object.keys(snapshot.collections)) {
+            await likes.setAccountTargetVisibility('collection', collectionId, 'withdrawn')
+            await moderation.setAccountTargetVisibility('collection', collectionId, 'withdrawn')
+          }
+          return snapshot
+        },
+        async restore(memberId, snapshot, now) {
+          const saved = snapshot as {
+            presets: Awaited<ReturnType<typeof publications.withdrawForAccountDeletion>>
+            collections: Awaited<ReturnType<typeof collections.withdrawForAccountDeletion>>
+          }
+          await publications.restoreForAccountDeletion(memberId, saved.presets, now)
+          await collections.restoreForAccountDeletion(memberId, saved.collections, now)
+          for (const [presetId, visibility] of Object.entries(saved.presets)) {
+            await likes.setAccountTargetVisibility('preset', presetId, visibility)
+            await moderation.setAccountTargetVisibility('preset', presetId, visibility)
+          }
+          for (const [collectionId, visibility] of Object.entries(saved.collections)) {
+            await likes.setAccountTargetVisibility('collection', collectionId, visibility)
+            await moderation.setAccountTargetVisibility('collection', collectionId, visibility)
+          }
+        },
+        async purge(memberId, now) {
+          const member = await members.findById(memberId)
+          const email = member?.authUserId
+            ? String(devAuthStore.marketplace_auth_users.find(
+                (row) => row.id === member.authUserId,
+              )?.email ?? '')
+            : ''
+          await likes.purgeAccount(memberId)
+          await publications.purgeAccount(memberId, now)
+          await collections.purgeAccount(memberId, now)
+          if (member?.authUserId) {
+            removeAuthRows('marketplace_auth_sessions', (row) => row.userId === member.authUserId)
+            removeAuthRows('marketplace_auth_accounts', (row) => row.userId === member.authUserId)
+            removeAuthRows('marketplace_auth_users', (row) => row.id === member.authUserId)
+          }
+          if (email) {
+            removeAuthRows('marketplace_auth_verifications', (row) => (
+              typeof row.value === 'string' && row.value.includes(`"email":"${email}"`)
+            ))
+          }
+          await rebuildTrending()
+        },
+        async revokeAuth(authUserId, email) {
+          removeAuthRows('marketplace_auth_sessions', (row) => row.userId === authUserId)
+          removeAuthRows('marketplace_auth_verifications', (row) => (
+            typeof row.value === 'string' && row.value.includes(`"email":"${email}"`)
+          ))
+        },
+      },
+    }),
+    sessions,
+    now: () => new Date(),
+    cronSecret: 'local-account-cron',
   })
   return {
     name: 'serve-marketplace-api',
@@ -257,6 +373,10 @@ function serveMarketplaceApi(): Plugin {
           })
           const response = req.url.startsWith('/api/auth/')
             ? await auth.handler(request)
+            : req.url.startsWith('/api/marketplace/me/export')
+              || req.url.startsWith('/api/marketplace/me/deletion')
+              || req.url.startsWith('/api/internal/marketplace/purge-deleted-accounts')
+              ? await accountApi.fetch(request)
             : req.url.startsWith('/api/marketplace/reports')
               || req.url.startsWith('/api/marketplace/infringement-notices')
               || req.url.startsWith('/api/marketplace/me/moderation')

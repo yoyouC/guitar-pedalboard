@@ -8,7 +8,7 @@ import {
   HandleUnavailableError,
   MemberUpdateConflictError,
 } from './repository.ts';
-import { communityWriteDenied } from './communityWriteApi.ts';
+import { communityWriteDenied, communityWriteErrorResponse } from './communityWriteApi.ts';
 
 const ME_PATH = '/api/marketplace/me';
 const PROFILE_PATH = '/api/marketplace/me/profile';
@@ -141,6 +141,8 @@ export function createMemberApi(dependencies: MemberApiDependencies): MemberApi 
           );
           return Response.json({ member: profile(updated) });
         } catch (cause) {
+          const standingDenied = communityWriteErrorResponse(cause);
+          if (standingDenied) return standingDenied;
           if (cause instanceof HandleUnavailableError) {
             return error(409, 'handle_unavailable', 'Handle is unavailable');
           }

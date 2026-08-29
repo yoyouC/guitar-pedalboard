@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { AuthenticatedIdentity } from '../server/auth/session.ts';
 import { createMemoryMemberRepository } from '../server/members/memoryRepository.ts';
+import { assertAccountActive } from '../server/members/standing.ts';
 import { createMarketplaceModerationApi } from '../server/moderation/api.ts';
 import { createMemoryMarketplaceModerationRepository } from '../server/moderation/memoryRepository.ts';
 
@@ -30,6 +31,11 @@ function fixture() {
     setMemberStatus: members.setCommunityStatus,
     async setTargetVisibility() {},
     async standingChanged() {},
+    async contentRestorable(memberId) {
+      const member = await members.findById(memberId);
+      if (!member) throw new Error('Member not found');
+      assertAccountActive(member);
+    },
   });
   let id = 0;
   const api = createMarketplaceModerationApi({
@@ -52,7 +58,7 @@ function fixture() {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     },
   ));
-  return { request };
+  return { members, request };
 }
 
 const report = {
@@ -190,4 +196,36 @@ test('banned members retain read access but cannot report, and admin actions can
   assert.equal((await request('/api/marketplace/admin/moderation/actions', 'POST', 'admin', {
     action: 'transfer', subjectKind: 'preset', subjectId: 'preset-a', reason: 'Not allowed.',
   })).status, 400);
+});
+
+test('pending account deletion blocks admin restore and an upheld appeal from exposing hidden content', async () => {
+  const { members, request } = fixture();
+  const hide = {
+    action: 'hide', subjectKind: 'preset', subjectId: 'preset-a', reason: 'Pending review.',
+  };
+  assert.equal((await request(
+    '/api/marketplace/admin/moderation/actions', 'POST', 'admin', hide,
+  )).status, 204);
+  const cases = (await (await request(
+    '/api/marketplace/me/moderation', 'GET', 'author',
+  )).json()).cases;
+  assert.equal((await request('/api/marketplace/moderation/appeals', 'POST', 'author', {
+    actionId: cases[0].actionId, statement: 'Please restore this work.',
+  })).status, 201);
+  const appealId = (await (await request(
+    '/api/marketplace/admin/moderation/queue', 'GET', 'admin',
+  )).json()).items.find((item: { kind: string }) => item.kind === 'appeal').id;
+  await members.setAccountStatus('member-author', 'pending_deletion', now);
+
+  const restore = await request('/api/marketplace/admin/moderation/actions', 'POST', 'admin', {
+    action: 'restore', subjectKind: 'preset', subjectId: 'preset-a', reason: 'Would expose deletion.',
+  });
+  assert.equal(restore.status, 403);
+  assert.equal((await restore.json()).error.code, 'account_deletion_pending');
+  const uphold = await request('/api/marketplace/admin/moderation/appeals', 'POST', 'admin', {
+    appealId, outcome: 'upheld', reason: 'Would expose deletion.',
+  });
+  assert.equal(uphold.status, 403);
+  assert.equal((await uphold.json()).error.code, 'account_deletion_pending');
+  assert.equal((await request('/api/marketplace/reports', 'POST', 'reporter', report)).status, 404);
 });

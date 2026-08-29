@@ -14,7 +14,7 @@ import {
   type MarketplaceLikeRepository,
 } from './repository.ts';
 import { MARKETPLACE_LIKE_WRITE_LOCK } from './postgresLock.ts';
-import { BannedMemberError } from '../members/standing.ts';
+import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
 
 interface TargetConfig {
   targetTable: string;
@@ -169,11 +169,7 @@ export function createPostgresMarketplaceLikeRepository(pool: Pool): Marketplace
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock($1)', [MARKETPLACE_LIKE_WRITE_LOCK]);
-        const standing = await client.query<{ community_status: 'active' | 'banned' } & QueryResultRow>(
-          `SELECT community_status FROM marketplace_members WHERE id = $1 FOR SHARE`,
-          [memberId],
-        );
-        if (standing.rows[0]?.community_status === 'banned') throw new BannedMemberError();
+        await lockCommunityWriteMember(client, memberId);
         const target = await client.query<{ creator_id: string } & QueryResultRow>(
           `SELECT creator_id FROM ${config.targetTable}
            WHERE id = $1 AND visibility IN ('public', 'unlisted') FOR SHARE`,

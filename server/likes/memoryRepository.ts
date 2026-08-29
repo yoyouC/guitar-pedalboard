@@ -12,6 +12,7 @@ import {
   SelfLikeForbiddenError,
   type MarketplaceLikeRepository,
 } from './repository.ts';
+import type { MarketplaceAccountExport } from '../../shared/account.ts';
 
 interface Target {
   id: string;
@@ -24,9 +25,20 @@ export function createMemoryMarketplaceLikeRepository(input: {
   presets: readonly PublishedPreset[];
   collections: readonly PresetCollection[];
   bannedMemberIds?: ReadonlySet<string>;
+  writeAllowed?(memberId: string): Promise<void>;
 }): MarketplaceLikeRepository & MarketplaceLikeFactSource & {
   rebuildCounts(): Promise<void>;
   setTargetVisibility(
+    kind: MarketplaceLikeTargetKind,
+    targetId: string,
+    visibility: PublishedPreset['visibility'],
+  ): Promise<void>;
+  exportForAccount(memberId: string): Promise<Pick<
+    MarketplaceAccountExport['relationships'],
+    'presetLikes' | 'collectionLikes'
+  >>;
+  purgeAccount(memberId: string): Promise<void>;
+  setAccountTargetVisibility(
     kind: MarketplaceLikeTargetKind,
     targetId: string,
     visibility: PublishedPreset['visibility'],
@@ -85,6 +97,7 @@ export function createMemoryMarketplaceLikeRepository(input: {
       };
     },
     async setLiked({ kind, targetId, memberId, liked, now }) {
+      await input.writeAllowed?.(memberId);
       const target = requireTarget(kind, targetId);
       if (target.creator.id === memberId) throw new SelfLikeForbiddenError();
       const likeKey = key(kind, targetId, memberId);
@@ -150,6 +163,38 @@ export function createMemoryMarketplaceLikeRepository(input: {
       const target = targets(kind).get(targetId);
       if (!target) throw new LikeTargetNotFoundError();
       target.visibility = visibility;
+    },
+    async exportForAccount(memberId) {
+      const entries = [...likes.entries()]
+        .filter(([likeKey]) => likeKey.endsWith(`\u0000${memberId}`));
+      return {
+        presetLikes: entries.flatMap(([likeKey, createdAt]) => {
+          const [kind, presetId] = likeKey.split('\u0000');
+          return kind === 'preset' ? [{ presetId, createdAt }] : [];
+        }),
+        collectionLikes: entries.flatMap(([likeKey, createdAt]) => {
+          const [kind, collectionId] = likeKey.split('\u0000');
+          return kind === 'collection' ? [{ collectionId, createdAt }] : [];
+        }),
+      };
+    },
+    async purgeAccount(memberId) {
+      const removedTargets = new Set<string>();
+      for (const likeKey of [...likes.keys()]) {
+        const [kind, targetId, likerId] = likeKey.split('\u0000');
+        const target = targets(kind as MarketplaceLikeTargetKind).get(targetId) as Target | undefined;
+        if (likerId !== memberId && target?.creator.id !== memberId) continue;
+        likes.delete(likeKey);
+        removedTargets.add(`${kind}\u0000${targetId}`);
+      }
+      for (const value of removedTargets) {
+        const [kind, targetId] = value.split('\u0000');
+        recordCount(kind as MarketplaceLikeTargetKind, targetId);
+      }
+    },
+    async setAccountTargetVisibility(kind, targetId, visibility) {
+      const target = targets(kind).get(targetId);
+      if (target) target.visibility = visibility;
     },
   };
 }

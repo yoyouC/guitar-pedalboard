@@ -13,6 +13,7 @@ export interface MemberRecord {
   createdAt: Date;
   updatedAt: Date;
   communityStatus?: 'active' | 'banned';
+  accountStatus?: 'active' | 'pending_deletion' | 'tombstoned';
 }
 
 export interface CreateMemberInput {
