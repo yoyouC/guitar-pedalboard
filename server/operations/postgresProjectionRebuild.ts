@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { rebuildMarketplaceLikeCountsInTransaction } from '../likes/postgresRepository.ts';
 import { rebuildPublishedPresetSearchProjectionInTransaction } from '../search/postgresRepository.ts';
+import { rebuildMarketplaceTextSearchProjection } from '../search/postgresTextProjection.ts';
 import type { MarketplaceTrendingPolicy } from '../trending/policy.ts';
 import { rebuildMarketplaceTrendingInTransaction } from '../trending/postgresRepository.ts';
 
@@ -12,6 +13,7 @@ export async function rebuildAllMarketplaceProjections(
   try {
     await client.query('BEGIN');
     await rebuildPublishedPresetSearchProjectionInTransaction(client, input.now);
+    await rebuildMarketplaceTextSearchProjection(client);
     await rebuildMarketplaceLikeCountsInTransaction(client, input.now);
     await rebuildMarketplaceTrendingInTransaction(client, {
       now: input.now,

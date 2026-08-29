@@ -17,6 +17,7 @@
     "marketplace:rebuild-trending": "tsx scripts/marketplace-rebuild-trending.ts",
     "marketplace:rebuild-all": "tsx scripts/marketplace-rebuild-all.ts",
     "marketplace:backup": "tsx scripts/marketplace-backup.ts",
+    "marketplace:backup:status": "tsx scripts/marketplace-backup-status.ts",
     "marketplace:restore-drill": "tsx scripts/marketplace-restore-drill.ts",
     "marketplace:benchmark:prepare": "tsx scripts/marketplace-prepare-benchmark.ts",
     "marketplace:benchmark:verify": "tsx scripts/marketplace-verify-operations.ts",

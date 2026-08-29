@@ -3,7 +3,7 @@ export type MarketplaceBenchmarkOperation = 'list' | 'detail' | 'search' | 'revi
 export interface MarketplaceOperationalReportInput {
   dataset: { members: number; publicPresets: number };
   durationsMs: Record<MarketplaceBenchmarkOperation, readonly number[]>;
-  searchConvergenceMs: number;
+  searchConvergenceMs: { publication: number; metadata: number };
 }
 
 export interface MarketplaceOperationalFailure {
@@ -44,10 +44,12 @@ export function evaluateMarketplaceOperationalReport(input: MarketplaceOperation
     requireAtMost(`latency.${operation}.p95`, p95[operation], MARKETPLACE_OPERATIONAL_TARGETS.readP95Ms);
   }
   requireAtMost('latency.revision.p95', p95.revision, MARKETPLACE_OPERATIONAL_TARGETS.revisionP95Ms);
-  requireAtMost(
-    'search.convergence', input.searchConvergenceMs,
-    MARKETPLACE_OPERATIONAL_TARGETS.searchConvergenceMs,
-  );
+  for (const mutation of ['publication', 'metadata'] as const) {
+    requireAtMost(
+      `search.${mutation}.convergence`, input.searchConvergenceMs[mutation],
+      MARKETPLACE_OPERATIONAL_TARGETS.searchConvergenceMs,
+    );
+  }
   return {
     passed: failures.length === 0,
     dataset: input.dataset,

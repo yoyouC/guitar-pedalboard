@@ -149,3 +149,46 @@ test('0005 backfills immutable revisions and 0006 pins Remix source pairs', {
     await client.end();
   }
 });
+
+test('0016 upgrades legacy trigram indexes to application-normalized projections', {
+  skip: connectionString ? false : 'Set MARKETPLACE_TEST_DATABASE_URL for PostgreSQL migration integration',
+}, async () => {
+  const client = new Client({ connectionString });
+  const schema = `marketplace_search_migration_${process.pid}_${Date.now()}`;
+  await client.connect();
+  try {
+    await client.query(`CREATE SCHEMA ${schema}`);
+    await client.query(`SET search_path TO ${schema}`);
+    for (const migration of [
+      '0001_published_presets.sql', '0002_authentication.sql', '0003_member_profiles.sql',
+      '0004_preset_publication.sql', '0005_preset_revision_management.sql',
+      '0006_preset_remix_provenance.sql', '0007_preset_collections.sql',
+      '0015_marketplace_text_search.sql', '0016_marketplace_normalized_search.sql',
+    ]) {
+      await client.query(await readFile(new URL(
+        `../server/marketplace/migrations/${migration}`, import.meta.url,
+      ), 'utf8'));
+    }
+    const columns = await client.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.columns
+       WHERE table_schema = $1 AND column_name = 'search_text' ORDER BY table_name`,
+      [schema],
+    );
+    assert.deepEqual(columns.rows.map((row) => row.table_name), [
+      'marketplace_members', 'marketplace_preset_collections',
+      'marketplace_published_presets', 'marketplace_tags',
+    ]);
+    const indexes = await client.query<{ indexdef: string }>(
+      `SELECT indexdef FROM pg_indexes
+       WHERE schemaname = $1 AND indexname LIKE 'marketplace_%_search_text_trgm_idx'`,
+      [schema],
+    );
+    assert.equal(indexes.rowCount, 4);
+    assert.equal(indexes.rows.every((row) => (
+      row.indexdef.includes('search_text') && row.indexdef.includes('gin_trgm_ops')
+    )), true);
+  } finally {
+    await client.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await client.end();
+  }
+});

@@ -1,0 +1,5 @@
+# Install on the persistent backup runner after loading credentials and paths
+# from /etc/guitar-pedalboard/marketplace-backup.env. Hourly invocation provides
+# catch-up after a transient failure; the UTC-day manifest makes success idempotent.
+17 * * * * cd /srv/guitar-pedalboard && set -a && . /etc/guitar-pedalboard/marketplace-backup.env && set +a && npm run marketplace:backup
+47 * * * * cd /srv/guitar-pedalboard && set -a && . /etc/guitar-pedalboard/marketplace-backup.env && set +a && npm run marketplace:backup:status

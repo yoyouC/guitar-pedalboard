@@ -10,6 +10,7 @@ import { UnavailableTagError } from '../server/marketplace/repository.ts';
 import { seedPublishedPreset } from '../server/marketplace/seed.ts';
 import { createPostgresPublishedPresetSearchRepository } from '../server/search/postgresRepository.ts';
 import { createPostgresMarketplaceDiscoveryRepository } from '../server/search/postgresDiscoveryRepository.ts';
+import { rebuildMarketplaceTextSearchProjection } from '../server/search/postgresTextProjection.ts';
 import type { PublishedPresetSearchInput } from '../server/search/repository.ts';
 import { createPostgresMarketplaceTagAdministrationRepository } from '../server/tags/postgresRepository.ts';
 import { createPostgresMarketplaceModerationRepository } from '../server/moderation/postgresRepository.ts';
@@ -145,6 +146,8 @@ test('PostgreSQL Tag merge atomically migrates content and keeps old search ids 
       '0010_marketplace_trending.sql', '0011_marketplace_moderation.sql',
       '0012_account_lifecycle.sql',
       '0013_tag_administration.sql',
+      '0015_marketplace_text_search.sql',
+      '0016_marketplace_normalized_search.sql',
     ]) {
       await client.query(await readFile(new URL(
         `../server/marketplace/migrations/${migration}`, import.meta.url,
@@ -153,6 +156,12 @@ test('PostgreSQL Tag merge atomically migrates content and keeps old search ids 
     await client.query('BEGIN');
     await seedPublishedPreset(client, demoPublishedPreset);
     await client.query('COMMIT');
+    await client.query(
+      `UPDATE marketplace_published_presets
+       SET title = 'Forwarded preset', description = ''
+       WHERE id = $1`,
+      [demoPublishedPreset.id],
+    );
     await client.query(
       `INSERT INTO marketplace_preset_collections
          (id, creator_id, title, description, visibility, created_at, updated_at)
@@ -202,6 +211,7 @@ test('PostgreSQL Tag merge atomically migrates content and keeps old search ids 
       reason: 'Delayed retry after the target was merged again.',
       now: new Date('2026-08-29T16:04:00Z'),
     });
+    await rebuildMarketplaceTextSearchProjection(client);
 
     const managed = await repository.list();
     assert.equal(managed.find((tag) => tag.id === 'tone-crunch')?.mergedIntoId, 'tone-final');

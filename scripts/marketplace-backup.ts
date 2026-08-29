@@ -1,8 +1,14 @@
-import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { spawn } from 'node:child_process';
+import { Pool } from 'pg';
+import {
+  readMarketplaceBackupFacts,
+  runDailyMarketplaceBackup,
+  marketplaceFileSha256,
+} from '../server/operations/backup.ts';
+import { marketplaceDatabaseIdentity } from '../server/operations/restoreSafety.ts';
+import { postgresCommandEnvironment } from '../server/operations/postgresCommand.ts';
 
 const connectionString = process.env.MARKETPLACE_BACKUP_DATABASE_URL
   ?? process.env.DATABASE_URL
@@ -12,28 +18,46 @@ if (!connectionString) throw new Error('Set MARKETPLACE_BACKUP_DATABASE_URL, DAT
 if (!backupDirectory) throw new Error('Set MARKETPLACE_BACKUP_DIR to durable encrypted storage');
 
 const startedAt = new Date();
-const stamp = startedAt.toISOString().replaceAll(':', '-');
-const directory = resolve(backupDirectory);
-await mkdir(directory, { recursive: true });
-const archivePath = resolve(directory, `marketplace-${stamp}.dump`);
-if (!archivePath.startsWith(`${directory}/`)) throw new Error('Backup path escaped its configured directory');
-
-await command('pg_dump', [
-  '--format=custom', '--compress=9', '--no-owner', '--no-privileges',
-  `--file=${archivePath}`,
-], { PGDATABASE: connectionString });
-const completedAt = new Date();
-const sha256 = await digest(archivePath);
-const manifestPath = `${archivePath}.json`;
-await writeFile(manifestPath, `${JSON.stringify({
-  formatVersion: 1,
-  archive: archivePath.split('/').at(-1),
-  sha256,
-  startedAt: startedAt.toISOString(),
-  completedAt: completedAt.toISOString(),
-  durationMs: completedAt.getTime() - startedAt.getTime(),
-}, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-console.log(JSON.stringify({ archivePath, manifestPath, sha256 }));
+const result = await runDailyMarketplaceBackup({
+  directory: backupDirectory,
+  now: startedAt,
+  processId: process.pid,
+}, async (paths) => {
+  const pool = new Pool({ connectionString, max: 1 });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const snapshotResult = await client.query<{ snapshot_id: string }>(
+      'SELECT pg_export_snapshot() AS snapshot_id',
+    );
+    const facts = await readMarketplaceBackupFacts(client);
+    await command('pg_dump', [
+      '--format=custom', '--compress=9', '--no-owner', '--no-privileges',
+      `--snapshot=${snapshotResult.rows[0].snapshot_id}`,
+      `--file=${paths.partialArchivePath}`,
+    ], postgresCommandEnvironment(connectionString));
+    await client.query('COMMIT');
+    const completedAt = new Date();
+    const sha256 = await marketplaceFileSha256(paths.partialArchivePath);
+    await writeFile(paths.partialManifestPath, `${JSON.stringify({
+      formatVersion: 2,
+      archive: basename(paths.archivePath),
+      sha256,
+      source: marketplaceDatabaseIdentity(connectionString),
+      facts,
+      startedAt: startedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      durationMs: completedAt.getTime() - startedAt.getTime(),
+    }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  } catch (cause) {
+    try { await client.query('ROLLBACK'); } catch { /* preserve original error */ }
+    throw cause;
+  } finally {
+    client.release();
+    await pool.end();
+  }
+});
+console.log(JSON.stringify({ status: result.status, ...result.paths }));
 
 async function command(executable: string, args: string[], extraEnvironment: Record<string, string>) {
   await new Promise<void>((resolveCommand, reject) => {
@@ -47,15 +71,4 @@ async function command(executable: string, args: string[], extraEnvironment: Rec
       else reject(new Error(`${executable} failed (${signal ?? code ?? 'unknown'})`));
     });
   });
-}
-
-async function digest(path: string): Promise<string> {
-  const hash = createHash('sha256');
-  await new Promise<void>((resolveDigest, reject) => {
-    const stream = createReadStream(path);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.once('error', reject);
-    stream.once('end', resolveDigest);
-  });
-  return hash.digest('hex');
 }

@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { demoPublishedPreset } from '../server/marketplace/demoPreset.ts';
 import { assertDisposableBenchmarkDatabase } from '../server/operations/restoreSafety.ts';
+import { rebuildMarketplaceTextSearchProjection } from '../server/search/postgresTextProjection.ts';
 
 const connectionString = process.env.MARKETPLACE_BENCHMARK_DATABASE_URL;
 if (!connectionString) throw new Error('Set MARKETPLACE_BENCHMARK_DATABASE_URL');
@@ -62,6 +63,7 @@ try {
      FROM generate_series(1, 100000) AS value`,
   );
   await pool.query('COMMIT');
+  await rebuildMarketplaceTextSearchProjection(pool);
   await pool.query('ANALYZE');
   console.log(JSON.stringify({ members: 10_000, publicPresets: 100_000 }));
 } catch (cause) {

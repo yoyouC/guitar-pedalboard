@@ -1,10 +1,13 @@
 import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { createMarketplaceHealthApi } from '../server/operations/healthApi.ts';
+import {
+  createMarketplaceHealthApi,
+  probeMarketplaceStorage,
+} from '../server/operations/healthApi.ts';
 
 const api = createMarketplaceHealthApi({
   async probe() {
     if (!marketplacePool) throw new Error('Marketplace database is not configured');
-    await marketplacePool.query('SELECT 1');
+    await probeMarketplaceStorage(marketplacePool);
   },
 });
 

@@ -130,21 +130,24 @@ async function collectionRows(
     values.push(candidate);
     const token = `$${values.length}`;
     clauses.push(`(
-      ${token}::text OPERATOR(public.<%) lower(subject.title)
-      OR ${token}::text OPERATOR(public.<%) lower(subject.description)
-      OR ${token}::text OPERATOR(public.<%) lower(creator.handle)
-      OR ${token}::text OPERATOR(public.<%) lower(creator.display_name)
+      subject.search_text IS NULL
+      OR ${token}::text OPERATOR(public.<%) subject.search_text
+      OR creator.search_text IS NULL
+      OR ${token}::text OPERATOR(public.<%) creator.search_text
       OR EXISTS (
         SELECT 1
         FROM marketplace_preset_collection_tags AS candidate_collection_tag
         JOIN marketplace_tags AS candidate_tag ON candidate_tag.id = candidate_collection_tag.tag_id
         WHERE candidate_collection_tag.collection_id = subject.id
           AND (
-            ${token}::text OPERATOR(public.<%) lower(candidate_tag.name_zh)
-            OR ${token}::text OPERATOR(public.<%) lower(candidate_tag.name_en)
+            candidate_tag.search_text IS NULL
+            OR ${token}::text OPERATOR(public.<%) candidate_tag.search_text
             OR EXISTS (
-              SELECT 1 FROM jsonb_array_elements_text(candidate_tag.aliases) AS alias(value)
-              WHERE ${token}::text OPERATOR(public.<%) lower(alias.value)
+              SELECT 1
+              FROM marketplace_tags AS forwarded_source_tag
+              WHERE forwarded_source_tag.merged_into_id = candidate_tag.id
+                AND (forwarded_source_tag.search_text IS NULL
+                  OR ${token}::text OPERATOR(public.<%) forwarded_source_tag.search_text)
             )
           )
       )
@@ -209,7 +212,7 @@ async function creatorRows(
   if (candidate) {
     values.push(candidate);
     const token = `$${values.length}`;
-    clauses.push(`(${token}::text OPERATOR(public.<%) lower(subject.handle) OR ${token}::text OPERATOR(public.<%) lower(subject.display_name))`);
+    clauses.push(`(subject.search_text IS NULL OR ${token}::text OPERATOR(public.<%) subject.search_text)`);
   }
   values.push(limit);
   const result = await database.query<CreatorSearchRow>(

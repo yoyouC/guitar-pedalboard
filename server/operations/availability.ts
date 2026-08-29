@@ -42,14 +42,20 @@ export function evaluateMarketplaceAvailability(input: {
     (input.end.getTime() - input.start.getTime())
       / (MARKETPLACE_AVAILABILITY_POLICY.syntheticIntervalMinutes * 60_000),
   );
-  const observedProbeSlots = new Set(probes.map((observation) => Math.floor(
-    (Date.parse(observation.observedAt) - input.start.getTime())
-      / (MARKETPLACE_AVAILABILITY_POLICY.syntheticIntervalMinutes * 60_000),
-  ))).size;
+  const probeSlots = new Map<number, boolean>();
+  for (const probe of probes) {
+    const slot = Math.floor(
+      (Date.parse(probe.observedAt) - input.start.getTime())
+        / (MARKETPLACE_AVAILABILITY_POLICY.syntheticIntervalMinutes * 60_000),
+    );
+    const healthy = probe.status >= 200 && probe.status < 300;
+    probeSlots.set(slot, (probeSlots.get(slot) ?? true) && healthy);
+  }
+  const observedProbeSlots = probeSlots.size;
   const goodRequests = requests.filter((observation) => observation.status >= 100 && observation.status < 500).length;
-  const goodProbes = probes.filter((observation) => observation.status >= 200 && observation.status < 300).length;
+  const goodProbes = [...probeSlots.values()].filter(Boolean).length;
   const denominator = requests.length + expectedProbeSlots;
-  const numerator = goodRequests + Math.min(goodProbes, observedProbeSlots);
+  const numerator = goodRequests + goodProbes;
   const availability = denominator === 0 ? 0 : numerator / denominator;
   return {
     policy: MARKETPLACE_AVAILABILITY_POLICY,

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { Client } from 'pg';
 import { createPostgresMarketplaceDiscoveryRepository } from '../server/search/postgresDiscoveryRepository.ts';
+import { rebuildMarketplaceTextSearchProjection } from '../server/search/postgresTextProjection.ts';
 
 const connectionString = process.env.MARKETPLACE_TEST_DATABASE_URL;
 const migrations = [
@@ -19,6 +20,7 @@ const migrations = [
   '0011_marketplace_moderation.sql',
   '0012_account_lifecycle.sql',
   '0015_marketplace_text_search.sql',
+  '0016_marketplace_normalized_search.sql',
 ];
 
 test('PostgreSQL discovery keeps collection and creator tabs private and cursor-stable', {
@@ -40,7 +42,7 @@ test('PostgreSQL discovery keeps collection and creator tabs private and cursor-
       `INSERT INTO marketplace_members
          (id, handle, display_name, bio, created_at, updated_at)
        VALUES
-         ('member-ada', 'ada-tones', 'Ada Lovelace', 'Analytical guitar tones',
+         ('member-ada', 'ada-tones', 'Ada Ｌｏｖｅｌａｃｅ', 'Analytical guitar tones',
           '2026-08-29T07:00:00.000Z', '2026-08-29T07:00:00.000Z'),
          ('member-grace', 'grace-rigs', 'Grace Hopper', 'Compiler and chorus tones',
           '2026-08-29T06:00:00.000Z', '2026-08-29T06:00:00.000Z')`,
@@ -49,25 +51,35 @@ test('PostgreSQL discovery keeps collection and creator tabs private and cursor-
       `INSERT INTO marketplace_preset_collections
          (id, creator_id, title, description, visibility, created_at, updated_at)
        VALUES
-         ('collection-3', 'member-ada', 'Rock Stage Three', 'Modern stage tones', 'public',
+         ('collection-3', 'member-ada', 'ＲＯＣＫ Stage Three', 'Modern stage tones', 'public',
           '2026-08-29T10:00:00.000Z', '2026-08-29T10:00:00.000Z'),
          ('collection-2', 'member-grace', 'Rock Stage Two', 'Classic stage tones', 'public',
           '2026-08-29T09:00:00.000Z', '2026-08-29T09:00:00.000Z'),
          ('collection-1', 'member-ada', 'Rock Stage One', 'Small stage tones', 'public',
           '2026-08-29T08:00:00.000Z', '2026-08-29T08:00:00.000Z'),
          ('collection-secret', 'member-ada', 'Secret Search Leak', 'Never discover this', 'unlisted',
-          '2026-08-29T11:00:00.000Z', '2026-08-29T11:00:00.000Z')`,
+          '2026-08-29T11:00:00.000Z', '2026-08-29T11:00:00.000Z'),
+         ('collection-unicode', 'member-ada', 'ＦＥＮＤＥＲ Archive', '', 'public',
+          '2026-08-29T05:00:00.000Z', '2026-08-29T05:00:00.000Z')`,
     );
     await client.query(
       `INSERT INTO marketplace_preset_collection_tags (collection_id, tag_id)
        VALUES ('collection-3', 'genre-rock'), ('collection-2', 'genre-rock'),
-              ('collection-1', 'genre-rock'), ('collection-secret', 'genre-rock')`,
+              ('collection-1', 'genre-rock'), ('collection-secret', 'genre-rock'),
+              ('collection-unicode', 'tone-clean')`,
     );
     await client.query(
       `UPDATE marketplace_tags SET aliases = '["arena-code"]'::jsonb WHERE id = 'genre-rock'`,
     );
+    await rebuildMarketplaceTextSearchProjection(client);
 
     const repository = createPostgresMarketplaceDiscoveryRepository(client);
+    assert.deepEqual(
+      (await repository.searchPublicCollections({
+        text: 'fender', limit: 20, cursor: null,
+      })).items.map((item) => item.id),
+      ['collection-unicode'],
+    );
     const first = await repository.searchPublicCollections({
       text: 'rock', limit: 2, cursor: null,
     });

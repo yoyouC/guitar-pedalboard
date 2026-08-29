@@ -1,10 +1,19 @@
-import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { Pool } from 'pg';
-import { assertDisposableRestoreDatabase } from '../server/operations/restoreSafety.ts';
+import {
+  assertMarketplaceBackupFactsMatch,
+  assertCompleteMarketplaceBackup,
+  readMarketplaceBackupManifest,
+  readMarketplaceBackupFacts,
+  type MarketplaceBackupFacts,
+} from '../server/operations/backup.ts';
+import {
+  assertDisposableRestoreDatabase,
+  assertExpectedMarketplaceBackupSource,
+} from '../server/operations/restoreSafety.ts';
+import { postgresCommandEnvironment } from '../server/operations/postgresCommand.ts';
 
 const restoreConnectionString = process.env.MARKETPLACE_RESTORE_DATABASE_URL;
 const archivePath = process.env.MARKETPLACE_RESTORE_DRILL_ARCHIVE;
@@ -21,34 +30,24 @@ assertDisposableRestoreDatabase(
 );
 
 const archive = resolve(archivePath);
-const manifest = JSON.parse(await readFile(resolve(manifestPath), 'utf8')) as {
-  formatVersion?: unknown; sha256?: unknown; completedAt?: unknown;
-};
-if (
-  manifest.formatVersion !== 1
-  || typeof manifest.sha256 !== 'string'
-  || typeof manifest.completedAt !== 'string'
-) throw new Error('Backup manifest is invalid');
-const actualDigest = await digest(archive);
-if (actualDigest !== manifest.sha256) throw new Error('Backup archive checksum does not match its manifest');
+const manifest = await readMarketplaceBackupManifest(resolve(manifestPath));
+const expectedSource = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
+if (expectedSource) assertExpectedMarketplaceBackupSource(expectedSource, manifest.source);
+await assertCompleteMarketplaceBackup(archive, manifest);
+const actualDigest = manifest.sha256;
 
 const startedAt = new Date();
 await command('pg_restore', [
   '--clean', '--if-exists', '--no-owner', '--no-privileges', '--single-transaction', archive,
-], { PGDATABASE: restoreConnectionString });
+], postgresCommandEnvironment(restoreConnectionString));
 const pool = new Pool({ connectionString: restoreConnectionString });
-let facts: Record<string, number>;
+let facts: MarketplaceBackupFacts;
 try {
-  const result = await pool.query<{
-    members: string; presets: string; revisions: string; collections: string;
-  }>(`SELECT
-      (SELECT count(*) FROM marketplace_members)::text AS members,
-      (SELECT count(*) FROM marketplace_published_presets)::text AS presets,
-      (SELECT count(*) FROM marketplace_published_preset_revisions)::text AS revisions,
-      (SELECT count(*) FROM marketplace_preset_collections)::text AS collections`);
-  const row = result.rows[0];
-  facts = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value)]));
-  if (facts.revisions < facts.presets) throw new Error('Restored facts violate preset/revision cardinality');
+  facts = await readMarketplaceBackupFacts(pool);
+  assertMarketplaceBackupFactsMatch(manifest.facts, facts);
+  if (facts.revisions.count < facts.presets.count) {
+    throw new Error('Restored facts violate preset/revision cardinality');
+  }
   const invalidCurrent = await pool.query(
     `SELECT 1 FROM marketplace_published_presets AS preset
      LEFT JOIN marketplace_published_preset_revisions AS revision
@@ -71,6 +70,7 @@ const report = {
   rpoHours: backupAgeMs / 3_600_000,
   rtoHours: durationMs / 3_600_000,
   targets: { rpoHours: 24, rtoHours: 8 },
+  source: manifest.source,
   facts,
 };
 if (process.env.MARKETPLACE_RESTORE_DRILL_REPORT) {
@@ -90,15 +90,4 @@ async function command(executable: string, args: string[], extraEnvironment: Rec
       else reject(new Error(`${executable} failed (${signal ?? code ?? 'unknown'})`));
     });
   });
-}
-
-async function digest(path: string): Promise<string> {
-  const hash = createHash('sha256');
-  await new Promise<void>((resolveDigest, reject) => {
-    const stream = createReadStream(path);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.once('error', reject);
-    stream.once('end', resolveDigest);
-  });
-  return hash.digest('hex');
 }

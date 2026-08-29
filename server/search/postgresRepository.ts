@@ -89,28 +89,28 @@ function buildWhere(input: PublishedPresetSearchInput): {
       SELECT set_config('pg_trgm.word_similarity_threshold', '0.3', true)
     ), candidate_presets AS MATERIALIZED (
       SELECT id AS preset_id FROM marketplace_published_presets CROSS JOIN search_settings
-      WHERE ${token}::text OPERATOR(public.<%) lower(title)
-      UNION
-      SELECT id FROM marketplace_published_presets CROSS JOIN search_settings
-      WHERE ${token}::text OPERATOR(public.<%) lower(description)
+      WHERE search_text IS NULL OR ${token}::text OPERATOR(public.<%) search_text
       UNION
       SELECT candidate_preset.id
       FROM marketplace_members AS candidate_creator
       JOIN marketplace_published_presets AS candidate_preset
         ON candidate_preset.creator_id = candidate_creator.id
       CROSS JOIN search_settings
-      WHERE ${token}::text OPERATOR(public.<%) lower(candidate_creator.handle)
-         OR ${token}::text OPERATOR(public.<%) lower(candidate_creator.display_name)
+      WHERE candidate_creator.search_text IS NULL
+         OR ${token}::text OPERATOR(public.<%) candidate_creator.search_text
       UNION
       SELECT candidate_preset_tag.preset_id
       FROM marketplace_published_preset_tags AS candidate_preset_tag
       JOIN marketplace_tags AS candidate_tag ON candidate_tag.id = candidate_preset_tag.tag_id
       CROSS JOIN search_settings
-      WHERE ${token}::text OPERATOR(public.<%) lower(candidate_tag.name_zh)
-         OR ${token}::text OPERATOR(public.<%) lower(candidate_tag.name_en)
+      WHERE candidate_tag.search_text IS NULL
+         OR ${token}::text OPERATOR(public.<%) candidate_tag.search_text
          OR EXISTS (
-           SELECT 1 FROM jsonb_array_elements_text(candidate_tag.aliases) AS alias(value)
-           WHERE ${token}::text OPERATOR(public.<%) lower(alias.value)
+           SELECT 1
+           FROM marketplace_tags AS forwarded_source_tag
+           WHERE forwarded_source_tag.merged_into_id = candidate_tag.id
+             AND (forwarded_source_tag.search_text IS NULL
+               OR ${token}::text OPERATOR(public.<%) forwarded_source_tag.search_text)
          )
     )`;
   }

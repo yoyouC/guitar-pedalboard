@@ -11,7 +11,7 @@ try {
     now: new Date(),
     trendingPolicy: parseMarketplaceTrendingPolicy(process.env),
   });
-  console.log('Marketplace search, Like count, Popular, and Trending projections rebuilt atomically');
+  console.log('Marketplace Rig/text search, Like count, Popular, and Trending projections rebuilt atomically');
 } finally {
   await pool.end();
 }
