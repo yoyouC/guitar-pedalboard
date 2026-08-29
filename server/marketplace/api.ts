@@ -24,10 +24,23 @@ import type { MemberRepository } from '../members/repository.ts';
 import { isReadyForPublicAttribution } from '../members/repository.ts';
 import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
 import { communityWriteDenied } from '../members/communityWriteApi.ts';
+import type {
+  RigResourceDependency,
+  Tone3000DependencyFact,
+} from '../../shared/marketplace.ts';
+import { evaluatePublishedPresetRevisionCompatibility } from '../../shared/marketplaceCompatibility.ts';
+
+export interface MarketplaceCompatibilityFacts {
+  inspectTone3000Dependencies(
+    dependencies: readonly RigResourceDependency[],
+    request: Request,
+  ): Promise<readonly Tone3000DependencyFact[]>;
+}
 
 export interface MarketplaceApiDependencies {
   publishedPresets: PublishedPresetRepository;
   availableTags?: PublishedPresetManagementRepository;
+  compatibilityFacts?: MarketplaceCompatibilityFacts;
   publication?: {
     repository: PublishedPresetManagementRepository;
     sessions: SessionVerifier;
@@ -50,6 +63,7 @@ const PRESET_MANAGE_PATH = /^\/api\/marketplace\/presets\/([^/]+)\/manage$/;
 const PRESET_VISIBILITY_PATH = /^\/api\/marketplace\/presets\/([^/]+)\/visibility$/;
 const PRESET_REVISIONS_PATH = /^\/api\/marketplace\/presets\/([^/]+)\/revisions$/;
 const PRESET_REVISION_PATH = /^\/api\/marketplace\/presets\/([^/]+)\/revisions\/([^/]+)$/;
+const PRESET_REVISION_COMPATIBILITY_PATH = /^\/api\/marketplace\/presets\/([^/]+)\/revisions\/([^/]+)\/compatibility$/;
 const PRESET_REVISION_RESTORE_PATH = /^\/api\/marketplace\/presets\/([^/]+)\/revisions\/([^/]+)\/restore$/;
 const PRESETS_PATH = '/api/marketplace/presets';
 const MY_TONES_PATH = '/api/marketplace/me/tones';
@@ -98,6 +112,7 @@ async function jsonBody(request: Request): Promise<unknown> {
 export function createMarketplaceApi({
   publishedPresets,
   availableTags,
+  compatibilityFacts,
   publication,
 }: MarketplaceApiDependencies): MarketplaceApi {
   return {
@@ -198,6 +213,31 @@ export function createMarketplaceApi({
               { status: 400 },
             );
           }
+          return marketplaceUnavailable();
+        }
+      }
+
+      const compatibilityMatch = request.method === 'GET'
+        ? PRESET_REVISION_COMPATIBILITY_PATH.exec(url.pathname)
+        : null;
+      if (compatibilityMatch) {
+        const presetId = decodeURIComponent(compatibilityMatch[1]);
+        const revisionId = decodeURIComponent(compatibilityMatch[2]);
+        try {
+          const view = await publishedPresets.findVisibleRevisionById(presetId, revisionId);
+          if (!view) return publishedPresetNotFound();
+          const parsed = parsePublishedPresetRevisionView(view, presetId, revisionId);
+          if (!parsed) return marketplaceUnavailable();
+          const facts = compatibilityFacts
+            ? await compatibilityFacts.inspectTone3000Dependencies(
+                parsed.revision.resourceDependencies,
+                request,
+              )
+            : [];
+          return Response.json({
+            compatibility: evaluatePublishedPresetRevisionCompatibility(parsed.revision, facts),
+          });
+        } catch {
           return marketplaceUnavailable();
         }
       }

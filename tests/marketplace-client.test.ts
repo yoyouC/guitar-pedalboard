@@ -113,6 +113,25 @@ test('official client preserves a future revision as an explicit opaque payload'
   assert.deepEqual(await client.getPublishedPreset(demoPublishedPreset.id), future);
 });
 
+test('official client reads the revision compatibility contract', async () => {
+  const client = createMarketplaceClient(async (input) => {
+    assert.match(String(input), /\/compatibility$/);
+    return Response.json({
+      compatibility: {
+        status: 'incompatible',
+        blockers: [{
+          kind: 'tone3000', dependencyKey: 'tone3000:42:9001',
+          availability: 'unavailable', reason: 'deleted',
+        }],
+      },
+    });
+  });
+  assert.equal((await client.getPublishedPresetRevisionCompatibility(
+    demoPublishedPreset.id,
+    demoPublishedPreset.currentRevision.id,
+  )).status, 'incompatible');
+});
+
 test('official client lists controlled tags and publishes only the request contract', async () => {
   const tag: MarketplaceTag = {
     id: 'tone-crunch',

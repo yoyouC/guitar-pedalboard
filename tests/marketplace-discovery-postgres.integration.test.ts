@@ -61,6 +61,9 @@ test('PostgreSQL discovery keeps collection and creator tabs private and cursor-
        VALUES ('collection-3', 'genre-rock'), ('collection-2', 'genre-rock'),
               ('collection-1', 'genre-rock'), ('collection-secret', 'genre-rock')`,
     );
+    await client.query(
+      `UPDATE marketplace_tags SET aliases = '["arena-code"]'::jsonb WHERE id = 'genre-rock'`,
+    );
 
     const repository = createPostgresMarketplaceDiscoveryRepository(client);
     const first = await repository.searchPublicCollections({
@@ -80,6 +83,18 @@ test('PostgreSQL discovery keeps collection and creator tabs private and cursor-
     });
     assert.deepEqual(second.items.map((item) => item.id), ['collection-1']);
     assert.equal(JSON.stringify([...first.items, ...second.items]).includes('collection-secret'), false);
+    assert.deepEqual(
+      (await repository.searchPublicCollections({
+        text: 'arena-code', limit: 20, cursor: null,
+      })).items.map((item) => item.id),
+      ['collection-3', 'collection-2', 'collection-1'],
+    );
+    assert.deepEqual(
+      (await repository.searchPublicCollections({
+        text: 'hopper', limit: 20, cursor: null,
+      })).items.map((item) => item.id),
+      ['collection-2'],
+    );
 
     const creators = await repository.searchCreators({ text: 'lovel', limit: 20, cursor: null });
     assert.deepEqual(creators.items.map((item) => ({ id: item.id, url: item.url })), [{

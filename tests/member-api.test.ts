@@ -90,6 +90,17 @@ test('member can edit public profile without accepting an arbitrary avatar uploa
 
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error.code, 'invalid_profile');
+
+  const reservedNamespace = await api.fetch(new Request(
+    'https://pedalboard.test/api/marketplace/me/profile',
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ handle: 'id', expectedUpdatedAt: now.toISOString() }),
+    },
+  ));
+  assert.equal(reservedNamespace.status, 400);
+  assert.equal((await reservedNamespace.json()).error.code, 'invalid_profile');
 });
 
 test('public attribution becomes ready only after profile and current terms are submitted together', async () => {

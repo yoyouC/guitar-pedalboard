@@ -29,6 +29,8 @@ export default {
       requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}`;
     } else if (route === 'revision' && id && revisionId) {
       requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}`;
+    } else if (route === 'revision-compatibility' && id && revisionId) {
+      requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/compatibility`;
     } else if (route === 'revision-restore' && id && revisionId) {
       requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/restore`;
     } else if (route === 'revisions' && id) {

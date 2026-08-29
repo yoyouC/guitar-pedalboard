@@ -1,5 +1,10 @@
 import type { RigPresetState } from '../src/state/presetCodec.ts';
-import { normalizeRig } from '../src/state/presetCodec.ts';
+import {
+  normalizeRig,
+  normalizeRigPreset,
+  RIG_PRESET_VERSION,
+} from '../src/state/presetCodec.ts';
+import { MARKETPLACE_SUPPORTED_SCHEMA_RANGE } from './marketplaceCompatibility.ts';
 import { RIG_PRESET_CATALOG } from './rigPresetCatalog.ts';
 import type { RigDerivedAttributes, RigResourceDependency } from './marketplace.ts';
 import { rigResourceDependencyKey } from './marketplaceResource.ts';
@@ -72,6 +77,44 @@ export function analyzePublishableRig(value: unknown): PublishableRigAnalysis | 
   } catch {
     return null;
   }
+}
+
+function isLosslessSubset(source: unknown, normalized: unknown): boolean {
+  if (Array.isArray(source)) {
+    return Array.isArray(normalized)
+      && source.length === normalized.length
+      && source.every((item, index) => isLosslessSubset(item, normalized[index]));
+  }
+  if (isRecord(source)) {
+    return isRecord(normalized)
+      && Object.entries(source).every(([key, item]) => (
+        key in normalized && isLosslessSubset(item, normalized[key])
+      ));
+  }
+  return Object.is(source, normalized);
+}
+
+export function isMarketplaceSchemaVersionSupported(value: unknown): value is number {
+  return typeof value === 'number'
+    && Number.isInteger(value)
+    && value >= MARKETPLACE_SUPPORTED_SCHEMA_RANGE.min
+    && value <= MARKETPLACE_SUPPORTED_SCHEMA_RANGE.max;
+}
+
+/** Normalizes only migrations that preserve every field supplied by the old client. */
+export function analyzePublishableRigAtSchema(
+  schemaVersion: unknown,
+  value: unknown,
+): PublishableRigAnalysis | null {
+  if (!isMarketplaceSchemaVersionSupported(schemaVersion)) return null;
+  if (schemaVersion === RIG_PRESET_VERSION) return analyzePublishableRig(value);
+  const migrated = normalizeRigPreset({
+    version: schemaVersion,
+    name: 'Marketplace schema migration',
+    rig: value,
+  }, RIG_PRESET_CATALOG);
+  if (!migrated || !isLosslessSubset(value, migrated.rig)) return null;
+  return analyzePublishableRig(migrated.rig);
 }
 
 export function sameResourceDependencies(

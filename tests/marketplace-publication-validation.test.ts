@@ -46,6 +46,36 @@ test('first publication accepts only explicit Public or Unlisted visibility', ()
   }, new Set(['tone-crunch'])).value, null);
 });
 
+test('publication losslessly normalizes supported old schemas and rejects lossy payloads', () => {
+  const { preAmpEq: _removedInV4, ...v4Rig } = structuredClone(validRequest().rig);
+  const { ir: _removedInV3, ...legacyCab } = v4Rig.cab;
+  for (const [schemaVersion, rig] of [
+    [2, { ...v4Rig, cab: legacyCab }],
+    [3, { ...v4Rig, cab: legacyCab }],
+    [4, v4Rig],
+  ] as const) {
+    const migrated = validatePublishPresetRequest({
+      ...validRequest(), schemaVersion, rig,
+    }, tags);
+
+    assert.deepEqual(migrated.errors, {});
+    assert.equal(migrated.value?.request.schemaVersion, 5);
+    assert.equal(migrated.value?.request.rig.preAmpEq.enabled, false);
+    assert.deepEqual(Object.values(migrated.value!.request.rig.preAmpEq.bands), Array(10).fill(0));
+    assert.deepEqual(migrated.value?.request.rig.cab.ir, { kind: 'builtin', id: rig.cab.id });
+  }
+
+  const lossy = validatePublishPresetRequest({
+    ...validRequest(), schemaVersion: 4, rig: { ...v4Rig, unknownSoundField: 42 },
+  }, tags);
+  assert.equal(lossy.value, null);
+  assert.equal(lossy.errors.rig, '旧版 Rig 无法无损迁移，请升级客户端后发布');
+
+  const future = validatePublishPresetRequest({ ...validRequest(), schemaVersion: 999 }, tags);
+  assert.equal(future.value, null);
+  assert.equal(future.errors.rig, 'Rig 版本不受支持（支持 2–5），请升级客户端');
+});
+
 test('publication rejects forged ownership and local-only Rig resources', () => {
   const forged = validatePublishPresetRequest({
     ...validRequest(),

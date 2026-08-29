@@ -7,8 +7,12 @@ import type {
   UpdatePublishedPresetVisibilityRequest,
 } from './marketplace.ts';
 import { validatePublicationFields, type PublicationErrors } from './marketplacePublication.ts';
-import { analyzePublishableRig } from './publishableRig.ts';
+import {
+  analyzePublishableRigAtSchema,
+  isMarketplaceSchemaVersionSupported,
+} from './publishableRig.ts';
 import { RIG_PRESET_VERSION } from '../src/state/presetCodec.ts';
+import { MARKETPLACE_SUPPORTED_SCHEMA_RANGE } from './marketplaceCompatibility.ts';
 
 export type PresetManagementErrors = PublicationErrors & Partial<Record<
   'expectedUpdatedAt' | 'visibility',
@@ -82,13 +86,15 @@ export function validateRevisionAppend(
   if (!validExpectedUpdatedAt(value.expectedUpdatedAt)) {
     errors.expectedUpdatedAt = '并发版本无效';
   }
-  if (value.schemaVersion !== RIG_PRESET_VERSION) {
-    errors.rig = 'Rig 版本不受支持，请升级客户端';
+  if (!isMarketplaceSchemaVersionSupported(value.schemaVersion)) {
+    errors.rig = `Rig 版本不受支持（支持 ${MARKETPLACE_SUPPORTED_SCHEMA_RANGE.min}–${MARKETPLACE_SUPPORTED_SCHEMA_RANGE.max}），请升级客户端`;
   }
-  const analysis = value.schemaVersion === RIG_PRESET_VERSION
-    ? analyzePublishableRig(value.rig)
-    : null;
-  if (!analysis && !errors.rig) errors.rig = 'Rig 无法无损发布或包含本机资源';
+  const analysis = analyzePublishableRigAtSchema(value.schemaVersion, value.rig);
+  if (!analysis && !errors.rig) {
+    errors.rig = value.schemaVersion === RIG_PRESET_VERSION
+      ? 'Rig 无法无损发布或包含本机资源'
+      : '旧版 Rig 无法无损迁移，请升级客户端后发布';
+  }
   if (!analysis || Object.keys(errors).length > 0) return { value: null, errors };
   return {
     value: {

@@ -15,7 +15,7 @@ import type {
   MarketplaceDiscoverySearchInput,
 } from './repository.ts';
 import type { SearchBoundary } from './cursor.ts';
-import { matchesSearchText } from './text.ts';
+import { marketplaceTagSearchFields, matchesSearchText } from './text.ts';
 
 interface CollectionSearchTag extends MarketplaceTag {
   aliases: string[];
@@ -213,7 +213,8 @@ export function createPostgresMarketplaceDiscoveryRepository(
           row.title,
           row.description,
           row.creator_handle,
-          ...row.tags.flatMap((tag) => [tag.nameZh, tag.nameEn, ...tag.aliases]),
+          row.creator_display_name,
+          ...row.tags.flatMap(marketplaceTagSearchFields),
         ]),
         project: collectionFromRow,
       });

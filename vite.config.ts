@@ -76,7 +76,7 @@ function serveMarketplaceApi(): Plugin {
     publicProfileCompletedAt: demoCreatedAt,
     createdAt: demoCreatedAt,
     updatedAt: demoCreatedAt,
-  }])
+  }], [{ handle: 'guitar-pedalboard-old', memberId: demoPublishedPreset.creator.id }])
   const marketplaceTags: Array<MarketplaceTag & { aliases: string[] }> = [
     { id: 'tone-clean', dimension: 'tone', nameZh: '清音', nameEn: 'Clean', aliases: ['clean tone'] },
     { id: 'tone-crunch', dimension: 'tone', nameZh: 'Crunch', nameEn: 'Crunch', aliases: ['crunch tone', 'overdrive'] },
@@ -86,7 +86,21 @@ function serveMarketplaceApi(): Plugin {
     { id: 'use-live', dimension: 'use', nameZh: '现场', nameEn: 'Live', aliases: ['stage'] },
     { id: 'use-recording', dimension: 'use', nameZh: '录音', nameEn: 'Recording', aliases: ['studio'] },
   ]
-  const publications = createMemoryPublishedPresetRepository([demoPublishedPreset], marketplaceTags)
+  const demoUnlistedPreset = {
+    ...structuredClone(demoPublishedPreset),
+    id: 'preset-demo-unlisted',
+    title: 'Secret Demo Tone',
+    description: 'Direct-link-only development fixture.',
+    visibility: 'unlisted' as const,
+    currentRevision: {
+      ...structuredClone(demoPublishedPreset.currentRevision),
+      id: 'revision-demo-unlisted-1',
+    },
+  }
+  const publications = createMemoryPublishedPresetRepository(
+    [demoPublishedPreset, demoUnlistedPreset],
+    marketplaceTags,
+  )
   const sessions = createBetterAuthSessionVerifier(auth.api)
   const presetApi = createMarketplaceApi({
     publishedPresets: publications,

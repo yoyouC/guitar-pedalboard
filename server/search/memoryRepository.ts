@@ -10,7 +10,7 @@ import {
   type MarketplaceDiscoveryKind,
 } from './discoveryCursor.ts';
 import { isAfterCursor, isAtOrBefore, type SearchBoundary } from './cursor.ts';
-import { matchesSearchText } from './text.ts';
+import { marketplaceTagSearchFields, matchesSearchText } from './text.ts';
 
 interface Discoverable {
   id: string;
@@ -62,14 +62,18 @@ export function createMemoryMarketplaceDiscoveryRepository(input: {
           collection.title,
           collection.description,
           collection.creator.handle,
-          ...collection.tags.flatMap((tag) => [tag.nameZh, tag.nameEn]),
+          collection.creator.displayName,
+          ...collection.tags.flatMap(marketplaceTagSearchFields),
         ]))
         .map((collection) => ({
           id: collection.id,
           title: collection.title,
           description: collection.description,
           creator: structuredClone(collection.creator),
-          tags: structuredClone(collection.tags),
+          tags: collection.tags.map((tag) => {
+            const { aliases: _aliases, ...publicTag } = tag as typeof tag & { aliases?: string[] };
+            return publicTag;
+          }),
           url: `/marketplace/collections/${encodeURIComponent(collection.id)}`,
           createdAt: collection.createdAt,
           updatedAt: collection.updatedAt,
