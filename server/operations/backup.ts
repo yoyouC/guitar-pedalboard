@@ -137,7 +137,7 @@ export async function runDailyMarketplaceBackup(
       await rm(paths.partialBundlePath, { recursive: true, force: true });
     }
   } finally {
-    await releaseLease(paths.leasePath, lease);
+    await releaseLease(lease);
   }
 }
 
@@ -149,7 +149,7 @@ async function acquireLease(
 ): Promise<AcquiredMarketplaceBackupLease> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const ownerToken = randomUUID();
-    const candidatePath = `${leasePath}.candidate-${ownerToken}`;
+    const candidatePath = marketplaceLeaseOwnerPath(leasePath, ownerToken);
     const lease: MarketplaceBackupLease = {
       ownerToken,
       processId,
@@ -171,10 +171,15 @@ async function acquireLease(
       await rm(candidatePath, { force: true });
       if (!isAlreadyExists(cause)) throw cause;
       const existing = await readLease(leasePath);
+      const ownerProofMissing = !existing || !(await pathExists(
+        marketplaceLeaseOwnerPath(leasePath, existing.ownerToken),
+      ));
       if (
         attempt === 0
-        && leaseExpired(existing, now)
-        && !leaseOwnerIsAlive(existing)
+        && (
+          ownerProofMissing
+          || (leaseExpired(existing, now) && !leaseOwnerIsAlive(existing))
+        )
       ) {
         const stalePath = `${leasePath}.stale-${processId}-${now.getTime()}`;
         try {
@@ -186,7 +191,7 @@ async function acquireLease(
           }
           await rm(stalePath, { force: true });
           if (moved) {
-            await rm(`${leasePath}.candidate-${moved.ownerToken}`, { force: true });
+            await rm(marketplaceLeaseOwnerPath(leasePath, moved.ownerToken), { force: true });
           }
         } catch (renameCause) {
           if (!isNoEntry(renameCause)) throw renameCause;
@@ -236,23 +241,25 @@ async function assertLeaseOwner(leasePath: string, ownerToken: string): Promise<
 }
 
 async function releaseLease(
-  leasePath: string,
   lease: AcquiredMarketplaceBackupLease,
 ): Promise<void> {
-  const releasePath = `${leasePath}.release-${lease.ownerToken}`;
+  // The owner-specific hard link is the ownership proof. Removing only that
+  // proof makes this lease reclaimable without ever moving a successor's
+  // well-known lease path.
+  await rm(lease.ownerPath, { force: true });
+}
+
+function marketplaceLeaseOwnerPath(leasePath: string, ownerToken: string): string {
+  return `${leasePath}.candidate-${ownerToken}`;
+}
+
+async function pathExists(path: string): Promise<boolean> {
   try {
-    await rename(leasePath, releasePath);
-    const moved = await readLease(releasePath);
-    if (moved?.ownerToken !== lease.ownerToken) {
-      try { await link(releasePath, leasePath); } catch (cause) {
-        if (!isAlreadyExists(cause)) throw cause;
-      }
-    }
-    await rm(releasePath, { force: true });
+    await access(path);
+    return true;
   } catch (cause) {
-    if (!isNoEntry(cause)) throw cause;
-  } finally {
-    await rm(lease.ownerPath, { force: true });
+    if (isNoEntry(cause)) return false;
+    throw cause;
   }
 }
 

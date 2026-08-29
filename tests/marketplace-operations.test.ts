@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { watch } from 'node:fs';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -101,12 +102,12 @@ test('health endpoint probes only first-party marketplace storage and never cach
   });
   assert.equal((await unhealthy.fetch(new Request('https://pedalboard.test/tone3000/health'))).status, 404);
 
-  const queries: Array<string | { text: string; query_timeout: number }> = [];
+  const queries: Array<{ text: string; values?: unknown[]; query_timeout: number }> = [];
   const releases: boolean[] = [];
   await probeMarketplaceStorage({
     async connect() {
       return {
-        async query(config: string | { text: string; query_timeout: number }) {
+        async query(config: { text: string; values?: unknown[]; query_timeout: number }) {
           queries.push(config);
           return { rows: [], rowCount: 0 };
         },
@@ -114,19 +115,22 @@ test('health endpoint probes only first-party marketplace storage and never cach
       };
     },
   }, 50);
-  assert.equal(queries[0], 'BEGIN READ ONLY');
-  assert.match(String(queries[1]), /set_config/);
-  const probe = queries[2] as { text: string; query_timeout: number };
-  assert.equal(probe.query_timeout, 50);
+  assert.equal(queries[0]?.text, 'BEGIN READ ONLY');
+  assert.match(queries[1]?.text ?? '', /set_config/);
+  assert.match(String(queries[1]?.values?.[0]), /^\d+ms$/);
+  const probe = queries[2];
+  assert.ok(probe.query_timeout > 0 && probe.query_timeout <= 50);
   assert.match(probe.text, /marketplace_published_presets/);
   assert.match(probe.text, /marketplace_published_preset_revisions/);
+  assert.equal(queries[3]?.text, 'COMMIT');
+  assert.equal(queries.every((query) => query.query_timeout > 0 && query.query_timeout <= 50), true);
   assert.deepEqual(releases, [false]);
   await assert.rejects(
     () => probeMarketplaceStorage({
       async connect() {
         return {
-          async query(config: string | { text: string }) {
-            if (typeof config !== 'string' && config.text.includes('marketplace_published_presets')) {
+          async query(config: { text: string; query_timeout: number }) {
+            if (config.text.includes('marketplace_published_presets')) {
               throw new Error('canceling statement due to statement timeout');
             }
             return { rows: [], rowCount: 0 };
@@ -154,6 +158,27 @@ test('health endpoint probes only first-party marketplace storage and never cach
   );
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(lateConnectionDestroyed, true);
+});
+
+test('marketplace storage probe applies one deadline to every database operation', async () => {
+  const releases: boolean[] = [];
+  const outcome = await Promise.race([
+    probeMarketplaceStorage({
+      async connect() {
+        return {
+          async query() { return new Promise<never>(() => undefined); },
+          release(destroy = false) { releases.push(destroy); },
+        };
+      },
+    }, 5).then(
+      () => 'resolved',
+      () => 'rejected',
+    ),
+    new Promise<'test-timeout'>((resolve) => setTimeout(() => resolve('test-timeout'), 50)),
+  ]);
+
+  assert.equal(outcome, 'rejected');
+  assert.deepEqual(releases, [true]);
 });
 
 test('all rebuildable projections commit together and roll back on an injected failure', async () => {
@@ -381,9 +406,24 @@ test('expired backup owners cannot publish or release a successor lease', async 
       acquiredAt: now.toISOString(), expiresAt: new Date(now.getTime() + 60_000).toISOString(),
     };
     await writeFile(paths.leasePath, `${JSON.stringify(successor)}\n`);
-    resume();
-    await assert.rejects(oldOwner, /lost its lease/);
+    const successorLeaseVisibilityChecks: Array<Promise<boolean>> = [];
+    const successorLeaseWatcher = watch(paths.leasePath, (eventType) => {
+      if (eventType === 'rename') {
+        successorLeaseVisibilityChecks.push(access(paths.leasePath).then(
+          () => true,
+          () => false,
+        ));
+      }
+    });
+    try {
+      resume();
+      await assert.rejects(oldOwner, /lost its lease/);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    } finally {
+      successorLeaseWatcher.close();
+    }
     assert.deepEqual(JSON.parse(await readFile(paths.leasePath, 'utf8')), successor);
+    assert.equal((await Promise.all(successorLeaseVisibilityChecks)).every(Boolean), true);
     await assert.rejects(() => readFile(paths.archivePath), /ENOENT/);
     await assert.rejects(() => readFile(paths.manifestPath), /ENOENT/);
   } finally {
