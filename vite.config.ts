@@ -32,6 +32,8 @@ import {
 } from './server/members/standing.ts'
 import { createMemoryMarketplaceWriteLimiter } from './server/abuse/memoryWriteLimiter.ts'
 import { DEFAULT_MARKETPLACE_WRITE_POLICIES } from './server/abuse/policy.ts'
+import { createMarketplaceTagAdministrationApi } from './server/tags/api.ts'
+import { createMemoryMarketplaceTagAdministrationRepository } from './server/tags/memoryRepository.ts'
 
 // 本地评估模型(models-local/,git-ignored,许可不允许公开分发):
 // 仅开发期经此中间件提供;/models-local/** 不进入 dist,也不会被部署。
@@ -354,6 +356,26 @@ function serveMarketplaceApi(): Plugin {
     now: () => new Date(),
     cronSecret: 'local-account-cron',
   })
+  const tagAdministrationApi = createMarketplaceTagAdministrationApi({
+    repository: createMemoryMarketplaceTagAdministrationRepository({
+      tags: marketplaceTags.map((tag) => ({
+        ...tag, status: 'active' as const, mergedIntoId: null,
+      })),
+      presetTagIds: new Map([
+        [demoPublishedPreset.id, demoPublishedPreset.tags.map((tag) => tag.id)],
+        [demoUnlistedPreset.id, demoUnlistedPreset.tags.map((tag) => tag.id)],
+      ]),
+      collectionTagIds: new Map([
+        [demoCollection.id, demoCollection.tags.map((tag) => tag.id)],
+      ]),
+    }),
+    sessions,
+    adminAuthUserIds: new Set(
+      (process.env.VITE_DEV_ADMIN_AUTH_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
+    ),
+    now: () => new Date(),
+    createAuditId: () => crypto.randomUUID(),
+  })
   return {
     name: 'serve-marketplace-api',
     configureServer(server) {
@@ -389,6 +411,8 @@ function serveMarketplaceApi(): Plugin {
               || req.url.startsWith('/api/marketplace/me/deletion')
               || req.url.startsWith('/api/internal/marketplace/purge-deleted-accounts')
               ? await accountApi.fetch(request)
+              : req.url.startsWith('/api/marketplace/admin/tags')
+               ? await tagAdministrationApi.fetch(request)
             : req.url.startsWith('/api/marketplace/reports')
               || req.url.startsWith('/api/marketplace/infringement-notices')
               || req.url.startsWith('/api/marketplace/me/moderation')

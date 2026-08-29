@@ -12,7 +12,7 @@ const connectionString = process.env.MARKETPLACE_TEST_DATABASE_URL;
 
 test('write-limit migration stores only hashed subjects', async () => {
   const sql = await readFile(
-    new URL('../server/marketplace/migrations/0013_marketplace_write_limits.sql', import.meta.url),
+    new URL('../server/marketplace/migrations/0014_marketplace_write_limits.sql', import.meta.url),
     'utf8',
   );
   assert.match(sql, /subject_hash text NOT NULL/);
@@ -33,7 +33,7 @@ test('PostgreSQL-backed publication limits arbitrate bursts and reject deleting 
       account_status text NOT NULL CHECK (account_status IN ('active', 'pending_deletion', 'tombstoned'))
     )`);
     await pool.query(await readFile(
-      new URL('../server/marketplace/migrations/0013_marketplace_write_limits.sql', import.meta.url),
+      new URL('../server/marketplace/migrations/0014_marketplace_write_limits.sql', import.meta.url),
       'utf8',
     ));
     await pool.query(

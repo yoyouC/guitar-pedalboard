@@ -86,8 +86,11 @@ function buildWhere(input: PublishedPresetSearchInput): {
       `NOT EXISTS (
          SELECT 1 FROM unnest(${token}::text[]) AS required_tag(id)
          WHERE NOT EXISTS (
-           SELECT 1 FROM marketplace_published_preset_tags AS filter_tag
-           WHERE filter_tag.preset_id = preset.id AND filter_tag.tag_id = required_tag.id
+           SELECT 1
+           FROM marketplace_tags AS requested_tag
+           JOIN marketplace_published_preset_tags AS filter_tag
+             ON filter_tag.tag_id = COALESCE(requested_tag.merged_into_id, requested_tag.id)
+           WHERE requested_tag.id = required_tag.id AND filter_tag.preset_id = preset.id
          )
        )`,
     );
