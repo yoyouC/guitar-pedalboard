@@ -19,6 +19,17 @@ test('publication migration owns controlled tags and rebuildable Rig filter proj
   assert.match(sql, /COMMIT;\s*$/);
 });
 
+test('Tag administration migration preserves merged identity and audited atomic operations', async () => {
+  const sql = await readFile(
+    new URL('../server/marketplace/migrations/0013_tag_administration.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(sql, /marketplace_tags_merged_into_idx/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS marketplace_tag_administration_audit/);
+  assert.match(sql, /'create_tag', 'edit_tag', 'deprecate_tag', 'merge_tag'/);
+  assert.match(sql, /target_tag_id text REFERENCES marketplace_tags\(id\)/);
+});
+
 test('revision management migration indexes immutable history without weakening its trigger', async () => {
   const [base, management] = await Promise.all([
     readFile(new URL('../server/marketplace/migrations/0001_published_presets.sql', import.meta.url), 'utf8'),

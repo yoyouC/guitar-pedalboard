@@ -31,7 +31,11 @@ import {
 import { rigResourceDependencyKey } from '../../shared/marketplaceResource.ts';
 import type { MarketplaceAccountExport } from '../../shared/account.ts';
 
-type MemoryMarketplaceTag = MarketplaceTag & { aliases?: readonly string[] };
+type MemoryMarketplaceTag = MarketplaceTag & {
+  aliases?: readonly string[];
+  status?: 'active' | 'deprecated' | 'merged';
+  mergedIntoId?: string | null;
+};
 
 export function createMemoryPublishedPresetRepository(
   presets: readonly PublishedPreset[] = [],
@@ -57,8 +61,11 @@ export function createMemoryPublishedPresetRepository(
   purgeAccount(memberId: string, now: Date): Promise<void>;
 } & PublishedPresetSearchRepository {
   const presetsById = new Map(presets.map((preset) => [preset.id, preset]));
-  const tagsById = new Map(tags.map(({ aliases: _aliases, ...tag }) => [tag.id, tag]));
+  const tagsById = new Map(tags
+    .filter((tag) => (tag.status ?? 'active') === 'active')
+    .map(({ aliases: _aliases, status: _status, mergedIntoId: _mergedIntoId, ...tag }) => [tag.id, tag]));
   const tagAliasesById = new Map(tags.map((tag) => [tag.id, tag.aliases ?? []]));
+  const resolvedTagIds = new Map(tags.map((tag) => [tag.id, tag.mergedIntoId ?? tag.id]));
   const revisionsByPresetId = new Map<string, Map<string, PublishedPresetRevision>>(
     presets.map((preset) => [
       preset.id,
@@ -124,7 +131,10 @@ export function createMemoryPublishedPresetRepository(
     async searchPublicPresets(input) {
       const candidates = [...presetsById.values()]
         .filter((preset) => preset.visibility === 'public')
-        .filter((preset) => input.tagIds.every((id) => preset.tags.some((tag) => tag.id === id)))
+        .filter((preset) => input.tagIds.every((id) => {
+          const resolvedId = resolvedTagIds.get(id);
+          return Boolean(resolvedId) && preset.tags.some((tag) => tag.id === resolvedId);
+        }))
         .filter((preset) => input.pedalIds.every((id) => preset.derivedAttributes.pedalIds.includes(id)))
         .filter((preset) => input.ampIds.length === 0 || input.ampIds.includes(preset.derivedAttributes.ampId))
         .filter((preset) => input.cabIds.length === 0 || input.cabIds.includes(preset.derivedAttributes.cabId))
