@@ -9,6 +9,7 @@ import type {
 import { MarketplaceTagConflictError, MarketplaceTagNotFoundError } from './repository.ts';
 import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
 import { normalizeSearchText } from '../search/text.ts';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
 
 interface TagRow extends QueryResultRow {
   id: string;
@@ -142,6 +143,7 @@ export function createPostgresMarketplaceTagAdministrationRepository(
           const aliases = uniqueAliases([
             ...target.aliases, ...source.aliases, source.name_zh, source.name_en, source.id,
           ]);
+          await markMarketplaceTextSearchProjectionWrite(client);
           await client.query(
             `INSERT INTO marketplace_published_preset_tags (preset_id, tag_id)
              SELECT preset_id, $2 FROM marketplace_published_preset_tags WHERE tag_id = $1
@@ -187,6 +189,7 @@ export function createPostgresMarketplaceTagAdministrationRepository(
         if (!current) throw new MarketplaceTagNotFoundError();
         if (current.status === 'merged') throw new MarketplaceTagConflictError();
         if (command.action === 'edit') {
+          await markMarketplaceTextSearchProjectionWrite(client);
           await client.query(
             `UPDATE marketplace_tags
              SET dimension = $2, name_zh = $3, name_en = $4, aliases = $5::jsonb,

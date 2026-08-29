@@ -33,6 +33,7 @@ import {
 import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.ts';
 import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
 import { normalizeSearchText } from '../search/text.ts';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
 
 export interface PostgresQueryable {
   query<R extends QueryResultRow>(text: string, values?: readonly unknown[]): Promise<QueryResult<R>>;
@@ -627,6 +628,7 @@ export function createPostgresPublishedPresetPublicationRepository(
           [input.tagIds],
         );
         if (selected.rows.length !== input.tagIds.length) throw new UnavailableTagError();
+        await markMarketplaceTextSearchProjectionWrite(client);
         await client.query(
           `UPDATE marketplace_published_presets
            SET title = $3,

@@ -193,6 +193,28 @@ test('0016 upgrades legacy trigram indexes to application-normalized projections
         'utf8',
       ));
     });
+    await client.query(
+      `INSERT INTO marketplace_members (id, handle, display_name, search_text)
+       VALUES ('member-projection-protocol', 'projection-protocol', 'ROCK',
+               'projection protocol rock')`,
+    );
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('marketplace.search_projection_write', 'on', true)`);
+    await client.query(
+      `UPDATE marketplace_members
+       SET display_name = 'ＲＯＣＫ', search_text = 'projection protocol rock'
+       WHERE id = 'member-projection-protocol'`,
+    );
+    await client.query('COMMIT');
+    assert.equal((await client.query<{ search_text: string | null }>(
+      `SELECT search_text FROM marketplace_members WHERE id = 'member-projection-protocol'`,
+    )).rows[0].search_text, 'projection protocol rock');
+    await client.query(
+      `UPDATE marketplace_members SET display_name = 'Rock!' WHERE id = 'member-projection-protocol'`,
+    );
+    assert.equal((await client.query<{ search_text: string | null }>(
+      `SELECT search_text FROM marketplace_members WHERE id = 'member-projection-protocol'`,
+    )).rows[0].search_text, null);
   } finally {
     await client.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await client.end();

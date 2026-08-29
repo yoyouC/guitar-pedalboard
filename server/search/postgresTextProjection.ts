@@ -9,6 +9,14 @@ interface ProjectionSourceRow extends QueryResultRow {
 
 const BATCH_SIZE = 1_000;
 
+export async function markMarketplaceTextSearchProjectionWrite(
+  database: PostgresQueryable,
+): Promise<void> {
+  await database.query(
+    `SELECT set_config('marketplace.search_projection_write', 'on', true)`,
+  );
+}
+
 export async function rebuildMarketplaceTextSearchProjection(
   database: PostgresQueryable,
 ): Promise<void> {

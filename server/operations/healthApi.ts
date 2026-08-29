@@ -11,7 +11,25 @@ export async function probeMarketplaceStorage(
   },
   timeoutMs = 2_000,
 ): Promise<void> {
-  const client = await database.connect();
+  const connection = database.connect();
+  let connectionTimer: ReturnType<typeof setTimeout> | undefined;
+  let client: Awaited<ReturnType<typeof database.connect>>;
+  try {
+    client = await Promise.race([
+      connection,
+      new Promise<never>((_resolve, reject) => {
+        connectionTimer = setTimeout(
+          () => reject(new Error('Marketplace storage connection timed out')),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } catch (cause) {
+    void connection.then((lateClient) => lateClient.release(true), () => undefined);
+    throw cause;
+  } finally {
+    if (connectionTimer) clearTimeout(connectionTimer);
+  }
   let destroy = true;
   try {
     await client.query('BEGIN READ ONLY');

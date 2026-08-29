@@ -8,6 +8,7 @@ import type {
 } from './repository.ts';
 import { assertCommunityWriteAllowed } from './standing.ts';
 import { normalizeSearchText } from '../search/text.ts';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
 import {
   HANDLE_CHANGE_INTERVAL_MS,
   HandleChangeTooSoonError,
@@ -185,6 +186,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
           );
         }
 
+        await markMarketplaceTextSearchProjectionWrite(client);
         const result = await client.query<MemberRow>(
           `UPDATE marketplace_members AS member SET
              handle = $2,

@@ -19,6 +19,7 @@ import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
 import { canIncludePresetRevision } from './referencePolicy.ts';
 import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
 import { normalizeSearchText } from '../search/text.ts';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
 
 interface CollectionRow extends QueryResultRow {
   id: string;
@@ -355,6 +356,7 @@ export function createPostgresPresetCollectionManagementRepository(
         const current = await lockOwnedCollection(client, input);
         await requireTags(client, input.tagIds);
         await validateReferences(client, input, current.visibility);
+        await markMarketplaceTextSearchProjectionWrite(client);
         await client.query(
           `UPDATE marketplace_preset_collections
            SET title = $3,

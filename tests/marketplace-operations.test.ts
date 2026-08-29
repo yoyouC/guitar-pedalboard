@@ -138,6 +138,22 @@ test('health endpoint probes only first-party marketplace storage and never cach
     /statement timeout/,
   );
   assert.equal(releases.at(-1), true);
+
+  let lateConnectionDestroyed = false;
+  await assert.rejects(
+    () => probeMarketplaceStorage({
+      async connect() {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return {
+          async query() { return { rows: [], rowCount: 0 }; },
+          release(destroy = false) { lateConnectionDestroyed = destroy; },
+        };
+      },
+    }, 1),
+    /connection timed out/,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(lateConnectionDestroyed, true);
 });
 
 test('all rebuildable projections commit together and roll back on an injected failure', async () => {

@@ -3,5 +3,10 @@ import { Pool } from 'pg';
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 
 export const marketplacePool = connectionString
-  ? new Pool({ connectionString, max: 5, idleTimeoutMillis: 10_000 })
+  ? new Pool({
+      connectionString,
+      max: 5,
+      idleTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 2_000,
+    })
   : null;

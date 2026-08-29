@@ -40,7 +40,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF NEW.search_text IS NOT DISTINCT FROM OLD.search_text THEN
+  IF current_setting('marketplace.search_projection_write', true) IS DISTINCT FROM 'on' THEN
     NEW.search_text := NULL;
   END IF;
   RETURN NEW;
