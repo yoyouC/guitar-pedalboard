@@ -23,7 +23,11 @@ import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
 import { isReadyForPublicAttribution } from '../members/repository.ts';
 import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
-import { communityWriteDenied, unverifiedEmailWriteDenied } from '../members/communityWriteApi.ts';
+import {
+  communityWriteDenied,
+  communityWriteErrorResponse,
+  unverifiedEmailWriteDenied,
+} from '../members/communityWriteApi.ts';
 import type {
   RigResourceDependency,
   Tone3000DependencyFact,
@@ -198,6 +202,8 @@ export function createMarketplaceApi({
             ? Response.json({ preset: parsed }, { status: 201 })
             : marketplaceUnavailable();
         } catch (cause) {
+          const denied = communityWriteErrorResponse(cause);
+          if (denied) return denied;
           if (cause instanceof UnavailableTagError) {
             return Response.json(
               {
@@ -398,6 +404,8 @@ export function createMarketplaceApi({
                 : marketplaceUnavailable();
             }
           } catch (cause) {
+            const denied = communityWriteErrorResponse(cause);
+            if (denied) return denied;
             if (cause instanceof PublishedPresetConflictError) {
               return apiError(409, 'preset_update_conflict', 'Preset changed since it was loaded', {
                 current: cause.current,

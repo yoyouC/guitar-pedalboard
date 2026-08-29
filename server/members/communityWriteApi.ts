@@ -1,6 +1,10 @@
 import type { MemberRecord } from './repository.ts';
 import type { AuthenticatedIdentity } from '../auth/session.ts';
-import { assertCommunityWriteAllowed, BannedMemberError } from './standing.ts';
+import {
+  AccountDeletionPendingError,
+  assertCommunityWriteAllowed,
+  BannedMemberError,
+} from './standing.ts';
 
 export function communityWriteDenied(member: MemberRecord): Response | null {
   try {
@@ -27,6 +31,14 @@ export function unverifiedEmailWriteDenied(
 }
 
 export function communityWriteErrorResponse(cause: unknown): Response | null {
+  if (cause instanceof AccountDeletionPendingError) {
+    return Response.json({
+      error: {
+        code: 'account_deletion_pending',
+        message: 'Account deletion is pending; recover the account before writing',
+      },
+    }, { status: 403 });
+  }
   if (!(cause instanceof BannedMemberError)) return null;
   return Response.json({
     error: {

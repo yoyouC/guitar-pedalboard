@@ -23,6 +23,10 @@
     {
       "path": "/api/internal/marketplace/rebuild-trending",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/internal/marketplace/purge-deleted-accounts",
+      "schedule": "30 3 * * *"
     }
   ],
   "rewrites": [
@@ -33,6 +37,14 @@
     {
       "source": "/api/marketplace/me/profile",
       "destination": "/api/marketplace-member?route=profile"
+    },
+    {
+      "source": "/api/marketplace/me/export",
+      "destination": "/api/marketplace-account?route=export"
+    },
+    {
+      "source": "/api/marketplace/me/deletion",
+      "destination": "/api/marketplace-account?route=deletion"
     },
     {
       "source": "/api/marketplace/me",
@@ -129,6 +141,10 @@
     {
       "source": "/api/internal/marketplace/rebuild-trending",
       "destination": "/api/marketplace-trending-rebuild"
+    },
+    {
+      "source": "/api/internal/marketplace/purge-deleted-accounts",
+      "destination": "/api/marketplace-account?route=purge"
     },
     {
       "source": "/api/marketplace/likes/presets/:id",

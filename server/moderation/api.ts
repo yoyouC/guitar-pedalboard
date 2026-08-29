@@ -1,6 +1,10 @@
 import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRecord, MemberRepository } from '../members/repository.ts';
-import { communityWriteDenied, unverifiedEmailWriteDenied } from '../members/communityWriteApi.ts';
+import {
+  communityWriteDenied,
+  communityWriteErrorResponse,
+  unverifiedEmailWriteDenied,
+} from '../members/communityWriteApi.ts';
 import {
   DuplicateModerationReportError,
   ModerationAppealForbiddenError,
@@ -131,6 +135,8 @@ export function createMarketplaceModerationApi(input: {
         return new Response(null, { status: 404 });
       } catch (cause) {
         if (cause instanceof ResponseError) return cause.response;
+        const denied = communityWriteErrorResponse(cause);
+        if (denied) return denied;
         if (cause instanceof ApiError) return error(cause.status, cause.code, cause.message);
         if (cause instanceof DuplicateModerationReportError) {
           return error(409, 'duplicate_report', 'This target was already reported');

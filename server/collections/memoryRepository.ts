@@ -8,6 +8,7 @@ import {
   PresetCollectionReferenceError,
   PresetCollectionTagError,
 } from './repository.ts';
+import type { MarketplaceAccountExport } from '../../shared/account.ts';
 import { canIncludePresetRevision } from './referencePolicy.ts';
 import type {
   PresetCollectionReferenceSource,
@@ -20,12 +21,24 @@ export function createMemoryPresetCollectionRepository(
   initialCollections: readonly PresetCollection[],
   presets: PresetCollectionReferenceSource,
   tags: readonly MarketplaceTag[],
+  writeAllowed?: (memberId: string) => Promise<void>,
 ): PresetCollectionRepository & PresetCollectionManagementRepository & {
   listForDiscovery(): Promise<PresetCollection[]>;
   setModerationVisibility(
     collectionId: string,
     visibility: PresetCollection['visibility'],
   ): Promise<void>;
+  exportForAccount(memberId: string): Promise<MarketplaceAccountExport['collections']>;
+  withdrawForAccountDeletion(
+    memberId: string,
+    now: Date,
+  ): Promise<Record<string, PresetCollection['visibility']>>;
+  restoreForAccountDeletion(
+    memberId: string,
+    snapshot: Record<string, PresetCollection['visibility']>,
+    now: Date,
+  ): Promise<void>;
+  purgeAccount(memberId: string, now: Date): Promise<void>;
 } {
   const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
   const publicTag = (tag: MarketplaceTag): MarketplaceTag => ({
@@ -168,6 +181,7 @@ export function createMemoryPresetCollectionRepository(
     },
 
     async create(input) {
+      await writeAllowed?.(input.creator.id);
       selectedTags(input.tagIds);
       const timestamp = input.now.toISOString();
       const stored: StoredPresetCollection = {
@@ -190,6 +204,7 @@ export function createMemoryPresetCollectionRepository(
     },
 
     async update(input) {
+      await writeAllowed?.(input.creatorId);
       const current = owned(input.collectionId, input.creatorId, input.expectedUpdatedAt);
       selectedTags(input.tagIds);
       await validateReferences(current, input.visibility, input.items);
@@ -222,6 +237,57 @@ export function createMemoryPresetCollectionRepository(
       const stored = collectionsById.get(collectionId);
       if (!stored) throw new PresetCollectionAccessError();
       collectionsById.set(collectionId, { ...stored, visibility });
+    },
+    async exportForAccount(memberId) {
+      return [...collectionsById.values()]
+        .filter((collection) => collection.creator.id === memberId)
+        .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+        .map((collection) => ({
+          id: collection.id,
+          title: collection.title,
+          description: collection.description,
+          visibility: collection.visibility,
+          tagIds: [...collection.tagIds].sort(),
+          items: collection.items.map((item, position) => ({ position, ...item })),
+          createdAt: collection.createdAt,
+          updatedAt: collection.updatedAt,
+        }));
+    },
+    async withdrawForAccountDeletion(memberId, now) {
+      const snapshot: Record<string, PresetCollection['visibility']> = {};
+      for (const collection of collectionsById.values()) {
+        if (collection.creator.id !== memberId
+          || (collection.visibility !== 'public' && collection.visibility !== 'unlisted')) continue;
+        snapshot[collection.id] = collection.visibility;
+        collectionsById.set(collection.id, {
+          ...collection, visibility: 'withdrawn', updatedAt: now.toISOString(),
+        });
+      }
+      return snapshot;
+    },
+    async restoreForAccountDeletion(memberId, snapshot, now) {
+      for (const [collectionId, visibility] of Object.entries(snapshot)) {
+        const collection = collectionsById.get(collectionId);
+        if (!collection || collection.creator.id !== memberId || collection.visibility !== 'withdrawn') continue;
+        collectionsById.set(collectionId, {
+          ...collection, visibility, updatedAt: now.toISOString(),
+        });
+      }
+    },
+    async purgeAccount(memberId, now) {
+      for (const collection of collectionsById.values()) {
+        if (collection.creator.id !== memberId) continue;
+        collectionsById.set(collection.id, {
+          ...collection,
+          title: 'Deleted collection',
+          description: '',
+          visibility: 'withdrawn',
+          tagIds: [],
+          items: [],
+          creator: { ...collection.creator, handle: 'deleted-member', displayName: 'Deleted member' },
+          updatedAt: now.toISOString(),
+        });
+      }
     },
   };
 }

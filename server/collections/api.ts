@@ -2,7 +2,7 @@ import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
 import { isReadyForPublicAttribution } from '../members/repository.ts';
 import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
-import { communityWriteDenied } from '../members/communityWriteApi.ts';
+import { communityWriteDenied, communityWriteErrorResponse } from '../members/communityWriteApi.ts';
 import {
   PresetCollectionAccessError,
   PresetCollectionConflictError,
@@ -132,6 +132,8 @@ export function createPresetCollectionApi(input: {
           });
           return Response.json({ collection });
         } catch (cause) {
+          const denied = communityWriteErrorResponse(cause);
+          if (denied) return denied;
           if (cause instanceof PresetCollectionConflictError) {
             return Response.json({
               error: {

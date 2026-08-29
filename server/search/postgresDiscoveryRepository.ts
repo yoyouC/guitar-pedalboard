@@ -152,7 +152,7 @@ async function creatorRows(
   limit: number,
 ): Promise<CreatorSearchRow[]> {
   const values: unknown[] = [];
-  const clauses = pagingWhere(snapshot, after, values);
+  const clauses = ["subject.account_status = 'active'", ...pagingWhere(snapshot, after, values)];
   values.push(limit);
   const result = await database.query<CreatorSearchRow>(
     `SELECT subject.id, subject.handle, subject.display_name, subject.bio,

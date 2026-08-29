@@ -10,6 +10,7 @@ import {
   type ModerationReportReason,
   type ModerationTargetKind,
 } from './repository.ts';
+import type { MarketplaceAccountExport } from '../../shared/account.ts';
 
 interface Target {
   kind: ModerationTargetKind;
@@ -62,7 +63,19 @@ export function createMemoryMarketplaceModerationRepository(input: {
     visibility: Target['visibility'],
   ): Promise<void>;
   standingChanged(now: Date): Promise<void>;
-}): MarketplaceModerationRepository {
+  writeAllowed?(memberId: string): Promise<void>;
+  contentRestorable?(memberId: string): Promise<void>;
+}): MarketplaceModerationRepository & {
+  exportForAccount(memberId: string): Promise<Pick<
+    MarketplaceAccountExport['relationships'],
+    'moderationReports' | 'moderationAppeals'
+  >>;
+  setAccountTargetVisibility(
+    kind: ModerationTargetKind,
+    targetId: string,
+    visibility: Target['visibility'],
+  ): Promise<void>;
+} {
   const targets = new Map(input.targets.map((item) => [`${item.kind}\u0000${item.id}`, { ...item }]));
   const reports = new Map<string, Report>();
   const notices = new Map<string, Notice>();
@@ -78,6 +91,7 @@ export function createMemoryMarketplaceModerationRepository(input: {
 
   return {
     async submitReport(value) {
+      await input.writeAllowed?.(value.reporterMemberId);
       const item = target(value.targetKind, value.targetId);
       if (item.visibility !== 'public' && item.visibility !== 'unlisted') {
         throw new ModerationTargetNotFoundError();
@@ -150,6 +164,7 @@ export function createMemoryMarketplaceModerationRepository(input: {
           await input.setTargetVisibility(value.subjectKind, value.subjectId, 'hidden');
           item.visibility = 'hidden';
         } else {
+          await input.contentRestorable?.(item.creatorId);
           if (item.visibility !== 'hidden') throw new ModerationTransitionError();
           const hidden = [...actions.values()].reverse().find((action) => (
             action.action === 'hide' && action.subjectKind === value.subjectKind
@@ -222,6 +237,7 @@ export function createMemoryMarketplaceModerationRepository(input: {
       }).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     },
     async submitAppeal(value) {
+      await input.writeAllowed?.(value.authorMemberId);
       const action = actions.get(value.actionId);
       if (!action || action.action !== 'hide'
         || (action.subjectKind !== 'preset' && action.subjectKind !== 'collection')
@@ -254,6 +270,7 @@ export function createMemoryMarketplaceModerationRepository(input: {
         && (original.subjectKind === 'preset' || original.subjectKind === 'collection')) {
         const item = target(original.subjectKind, original.subjectId);
         if (item.visibility === 'hidden' && original.previousVisibility) {
+          await input.contentRestorable?.(item.creatorId);
           await input.setTargetVisibility(
             original.subjectKind,
             original.subjectId,
@@ -278,6 +295,34 @@ export function createMemoryMarketplaceModerationRepository(input: {
       return [...actions.values()]
         .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
         .map(({ previousVisibility: _previousVisibility, ...entry }) => ({ ...entry }));
+    },
+    async exportForAccount(memberId) {
+      return {
+        moderationReports: [...reports.values()]
+          .filter((report) => report.reporterMemberId === memberId)
+          .map((report) => ({
+            id: report.id,
+            targetKind: report.targetKind,
+            targetId: report.targetId,
+            reason: report.reason,
+            details: report.details,
+            status: report.status,
+            createdAt: report.createdAt,
+          })),
+        moderationAppeals: [...appeals.values()]
+          .filter((appeal) => appeal.authorMemberId === memberId)
+          .map((appeal) => ({
+            id: appeal.id,
+            actionId: appeal.actionId,
+            statement: appeal.statement,
+            status: appeal.status,
+            createdAt: appeal.createdAt,
+          })),
+      };
+    },
+    async setAccountTargetVisibility(kind, targetId, visibility) {
+      const item = targets.get(`${kind}\u0000${targetId}`);
+      if (item) item.visibility = visibility;
     },
   };
 }

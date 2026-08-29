@@ -6,6 +6,7 @@ import type {
   MemberRepository,
   UpdateMemberProfileInput,
 } from './repository.ts';
+import { assertCommunityWriteAllowed } from './standing.ts';
 import {
   HANDLE_CHANGE_INTERVAL_MS,
   HandleChangeTooSoonError,
@@ -26,6 +27,7 @@ interface MemberRow extends QueryResultRow {
   created_at: Date | string;
   updated_at: Date | string;
   community_status: 'active' | 'banned';
+  account_status: 'active' | 'pending_deletion' | 'tombstoned';
 }
 
 function date(value: Date | string): Date {
@@ -48,6 +50,7 @@ function record(row: MemberRow): MemberRecord {
     createdAt: date(row.created_at),
     updatedAt: date(row.updated_at),
     communityStatus: row.community_status,
+    accountStatus: row.account_status,
   };
 }
 
@@ -71,7 +74,8 @@ const MEMBER_SELECT = `SELECT
   member.public_profile_completed_at,
   member.created_at,
   member.updated_at,
-  member.community_status
+  member.community_status,
+  member.account_status
 FROM marketplace_members AS member
 LEFT JOIN marketplace_member_auth_identities AS identity ON identity.member_id = member.id`;
 
@@ -79,7 +83,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
   return {
     async findById(memberId) {
       const result = await pool.query<MemberRow>(
-        `${MEMBER_SELECT} WHERE member.id = $1 LIMIT 1`,
+        `${MEMBER_SELECT} WHERE member.id = $1 AND member.account_status <> 'tombstoned' LIMIT 1`,
         [memberId],
       );
       return result.rows[0] ? record(result.rows[0]) : null;
@@ -128,6 +132,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
           createdAt: input.now,
           updatedAt: input.now,
           communityStatus: 'active',
+          accountStatus: 'active',
         };
       } catch (cause) {
         await rollback(client);
@@ -149,7 +154,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
       const result = await pool.query<MemberRow>(
         `${MEMBER_SELECT}
          JOIN marketplace_member_handle_claims AS claim ON claim.member_id = member.id
-         WHERE claim.handle = $1
+         WHERE claim.handle = $1 AND member.account_status <> 'tombstoned'
          LIMIT 1`,
         [handle],
       );
@@ -168,6 +173,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
         );
         const current = selected.rows[0] ? record(selected.rows[0]) : null;
         if (!current) throw new Error('Member not found');
+        assertCommunityWriteAllowed(current);
         if (current.updatedAt.getTime() !== update.expectedUpdatedAt.getTime()) {
           throw new MemberUpdateConflictError();
         }
@@ -201,7 +207,8 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
            RETURNING member.id, identity.auth_user_id, member.handle, member.display_name,
              member.bio, member.avatar_url, member.handle_changed_at,
              member.terms_accepted_version, member.public_profile_completed_at,
-             member.created_at, member.updated_at, member.community_status`,
+             member.created_at, member.updated_at, member.community_status,
+             member.account_status`,
           [
             memberId,
             changesHandle ? update.handle : current.handle,

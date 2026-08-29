@@ -23,7 +23,7 @@ npm run marketplace:migrate
 npm run marketplace:seed
 ```
 
-迁移脚本按文件名顺序运行全部 SQL，创建成员、认证、handle claim、作品、修订、受控标签和 Rig 筛选投影。数据库约束保证每个作品都有属于自己的当前修订，修订更新和删除由 trigger 拒绝；Remix 的来源作品/修订使用成对复合外键固定，来源撤回不级联删除 Remix；handle claim 不删除，因此旧 handle 不会被其他成员占用。首发事务一次写入作品、不可变修订、标签关系和从 Rig 派生的筛选投影，任一步失败都会回滚。声音更新同样在一个事务内追加修订、推进当前指针并重建筛选投影；每条修订同时冻结当时的派生器材属性，回退直接复制旧 Rig 与该快照，不依赖当前器材目录，也不移动历史指针。账号期满清理需要由对应生命周期迁移建立专用受控路径。seed 命令幂等创建 `preset-demo-crunch`，提交后会调用统一重建器补齐全部搜索投影字段。
+迁移脚本按文件名顺序运行全部 SQL，创建成员、认证、handle claim、作品、修订、受控标签和 Rig 筛选投影。数据库约束保证每个作品都有属于自己的当前修订，修订更新和删除由 trigger 拒绝；Remix 的来源作品/修订使用成对复合外键固定，来源撤回不级联删除 Remix；handle claim 不删除，因此旧 handle 不会被其他成员占用。首发事务一次写入作品、不可变修订、标签关系和从 Rig 派生的筛选投影，任一步失败都会回滚。声音更新同样在一个事务内追加修订、推进当前指针并重建筛选投影；每条修订同时冻结当时的派生器材属性，回退直接复制旧 Rig 与该快照，不依赖当前器材目录，也不移动历史指针。账号生命周期迁移记录 30 天恢复窗口和仅限本次注销撤回的可见性快照，并为到期清除提供只能擦除 Rig/依赖/派生属性、不能恢复正文的受控修订路径。seed 命令幂等创建 `preset-demo-crunch`，提交后会调用统一重建器补齐全部搜索投影字段。
 
 生产认证还需配置：
 
@@ -48,6 +48,8 @@ Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。�
 - `POST /api/auth/sign-in/social` 与登录后的 `POST /api/auth/link-social`
 - `GET /api/marketplace/me`
 - `PATCH /api/marketplace/me/profile`
+- `GET /api/marketplace/me/export`（私有、不可缓存的机器可读平台数据）
+- `GET|POST|DELETE /api/marketplace/me/deletion`（查看、申请与再次验证后的取消注销）
 - `GET /api/marketplace/creators/:handle`
 - `GET /api/marketplace/creators/id/:memberId`（创作者 canonical 身份；旧 handle 链接继续解析并跳转）
 - `GET /api/marketplace/tags`
@@ -85,6 +87,8 @@ Public 作品进入公开发现；Unlisted 只通过直接链接访问，页面�
 治理入口把普通成员举报与无需登录的正式侵权通知分开保存。管理员白名单使用认证系统生成的稳定 `auth_user_id`，不是邮箱；生产部署必须显式设置 `MARKETPLACE_ADMIN_AUTH_USER_IDS`，空值表示没有管理员。管理员私有队列包含处理正式通知所需的联系人，但公开内容与作者治理记录不会投影举报人或通知人信息。管理员动作只允许隐藏/恢复内容、封禁/解封成员、关闭举报/通知和复核申诉；没有冒充成员、读取认证凭据或转移作品所有权的接口。每次动作记录 actor、目标、动作、原因和时间。
 
 Hidden 与 Withdrawn 独立：管理员隐藏时保存治理前可见性，恢复或申诉成立时回到原来的 Public、Unlisted 或 Withdrawn。成员封禁会阻止发布、作品/合集管理、资料修改、点赞、举报和申诉等社区写入，但仍允许读取本人记录；既有点赞事实保留在私有事实表，公开计数、Popular 和 Trending 会立即重建并排除这些点赞。解封同样触发重建。
+
+账户导出只返回当前成员自己的资料、作品与修订正文、合集、点赞及治理关系；不展开他人资料，不返回 session、认证账户、token 或管理员私有数据。申请注销会在一个事务中保存本次受影响的 Public/Unlisted 可见性、撤回成员作品与合集、标记账户待删除并吊销全部既有 session；所有发布、合集、资料、点赞、举报与申诉写事务都会先锁定并复查成员状态，因此注销与并发社区写入之间没有读后写窗口。治理 Restore 和申诉成立同样不能在待删除状态重新公开 Hidden 正文。待删除成员重新验证后只能恢复该快照中的内容，Hidden 和申请前 Withdrawn 内容不变。每日 Vercel Cron 通过 `CRON_SECRET` 调用 `GET /api/internal/marketplace/purge-deleted-accounts`：到期事务删除认证身份、个人资料、明文历史 handle、标题介绍、修订 Rig、资源/器材派生内容和点赞；历史 handle 仅保留 SHA-256 预留摘要以防冒充复用。事务同时立即重建 Popular 与 Trending 投影，擦除自有合集正文，并保留 Remix 来源、他人合集条目及必要治理记录所需的匿名成员/作品占位。
 
 真实数据库验证可指向一次性 PostgreSQL 数据库：
 

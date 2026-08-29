@@ -300,6 +300,24 @@ test('banned member keeps read access but cannot update the community profile', 
   assert.equal((await response.json()).error.code, 'member_banned');
 });
 
+test('member pending deletion keeps recovery read access but cannot write', async () => {
+  const members = createMemoryMemberRepository([{
+    id: 'member-ada', authUserId: adaIdentity.authUserId,
+    handle: 'ada', displayName: 'Ada', bio: '', avatarUrl: null,
+    handleChangedAt: null, createdAt: now, updatedAt: now,
+    accountStatus: 'pending_deletion',
+  }]);
+  const api = createMemberApi({
+    members, sessions: session(adaIdentity), now: () => now,
+    createId: () => 'unused-member', createHandleSuffix: () => 'unused1',
+  });
+
+  assert.equal((await api.fetch(new Request('https://pedalboard.test/api/marketplace/me'))).status, 200);
+  const response = await api.fetch(profilePatch({ displayName: 'Cannot write' }));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'account_deletion_pending');
+});
+
 test('member fact-source failure becomes a stable unavailable response', async () => {
   const members = createMemoryMemberRepository();
   members.resolveHandle = async () => { throw new Error('database offline'); };

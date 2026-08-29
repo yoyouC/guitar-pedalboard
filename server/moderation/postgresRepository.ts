@@ -5,6 +5,10 @@ import { MARKETPLACE_LIKE_WRITE_LOCK } from '../likes/postgresLock.ts';
 import { rebuildMarketplaceTrendingInTransaction } from '../trending/postgresRepository.ts';
 import type { MarketplaceTrendingPolicy } from '../trending/policy.ts';
 import {
+  lockActiveContentCreator,
+  lockCommunityWriteMember,
+} from '../members/postgresStanding.ts';
+import {
   DuplicateModerationReportError,
   ModerationAppealForbiddenError,
   ModerationTargetNotFoundError,
@@ -91,9 +95,12 @@ export function createPostgresMarketplaceModerationRepository(
 ): MarketplaceModerationRepository {
   return {
     async submitReport(input) {
-      await target(pool, input.targetKind, input.targetId, 'accessible');
+      const client = await pool.connect();
       try {
-        await pool.query(
+        await client.query('BEGIN');
+        await lockCommunityWriteMember(client, input.reporterMemberId);
+        await target(client, input.targetKind, input.targetId, 'accessible');
+        await client.query(
           `INSERT INTO marketplace_moderation_reports
              (id, reporter_member_id, target_kind, target_id, reason, details, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -102,9 +109,13 @@ export function createPostgresMarketplaceModerationRepository(
             input.reason, input.details, input.now,
           ],
         );
+        await client.query('COMMIT');
       } catch (cause) {
+        await rollback(client);
         if (isUniqueViolation(cause)) throw new DuplicateModerationReportError();
         throw cause;
+      } finally {
+        client.release();
       }
     },
 
@@ -180,6 +191,14 @@ export function createPostgresMarketplaceModerationRepository(
             throw new ModerationTransitionError();
           }
           const config = TARGET[input.subjectKind];
+          if (input.action === 'restore') {
+            const creator = await client.query<{ creator_id: string } & QueryResultRow>(
+              `SELECT creator_id FROM ${config.table} WHERE id = $1`,
+              [input.subjectId],
+            );
+            if (!creator.rows[0]) throw new ModerationTargetNotFoundError();
+            await lockActiveContentCreator(client, creator.rows[0].creator_id);
+          }
           const selected = await client.query<VisibilityRow>(
             `SELECT visibility, creator_id FROM ${config.table} WHERE id = $1 FOR UPDATE`,
             [input.subjectId],
@@ -279,34 +298,41 @@ export function createPostgresMarketplaceModerationRepository(
     },
 
     async submitAppeal(input) {
-      const action = await pool.query<{
-        subject_kind: ModerationTargetKind;
-        subject_id: string;
-      } & QueryResultRow>(
-        `SELECT subject_kind, subject_id FROM marketplace_moderation_actions
-         WHERE id = $1 AND action = 'hide' LIMIT 1`,
-        [input.actionId],
-      );
-      const row = action.rows[0];
-      if (!row || (row.subject_kind !== 'preset' && row.subject_kind !== 'collection')) {
-        throw new ModerationAppealForbiddenError();
-      }
-      const owned = await pool.query(
-        `SELECT 1 FROM ${TARGET[row.subject_kind].table}
-         WHERE id = $1 AND creator_id = $2`,
-        [row.subject_id, input.authorMemberId],
-      );
-      if (!owned.rowCount) throw new ModerationAppealForbiddenError();
+      const client = await pool.connect();
       try {
-        await pool.query(
+        await client.query('BEGIN');
+        await lockCommunityWriteMember(client, input.authorMemberId);
+        const action = await client.query<{
+          subject_kind: ModerationTargetKind;
+          subject_id: string;
+        } & QueryResultRow>(
+          `SELECT subject_kind, subject_id FROM marketplace_moderation_actions
+           WHERE id = $1 AND action = 'hide' LIMIT 1`,
+          [input.actionId],
+        );
+        const row = action.rows[0];
+        if (!row || (row.subject_kind !== 'preset' && row.subject_kind !== 'collection')) {
+          throw new ModerationAppealForbiddenError();
+        }
+        const owned = await client.query(
+          `SELECT 1 FROM ${TARGET[row.subject_kind].table}
+           WHERE id = $1 AND creator_id = $2`,
+          [row.subject_id, input.authorMemberId],
+        );
+        if (!owned.rowCount) throw new ModerationAppealForbiddenError();
+        await client.query(
           `INSERT INTO marketplace_moderation_appeals
              (id, action_id, author_member_id, statement, created_at)
            VALUES ($1, $2, $3, $4, $5)`,
           [input.id, input.actionId, input.authorMemberId, input.statement, input.now],
         );
+        await client.query('COMMIT');
       } catch (cause) {
+        await rollback(client);
         if (isUniqueViolation(cause)) throw new ModerationTransitionError();
         throw cause;
+      } finally {
+        client.release();
       }
     },
 
@@ -331,6 +357,14 @@ export function createPostgresMarketplaceModerationRepository(
         const appeal = selected.rows[0];
         if (!appeal) throw new ModerationTransitionError();
         const targetTable = TARGET[appeal.subject_kind].table;
+        if (input.outcome === 'upheld') {
+          const creator = await client.query<{ creator_id: string } & QueryResultRow>(
+            `SELECT creator_id FROM ${targetTable} WHERE id = $1`,
+            [appeal.subject_id],
+          );
+          if (!creator.rows[0]) throw new ModerationTransitionError();
+          await lockActiveContentCreator(client, creator.rows[0].creator_id);
+        }
         const lockedTarget = await client.query<{ visibility: PublishedPresetVisibility } & QueryResultRow>(
           `SELECT visibility FROM ${targetTable} WHERE id = $1 FOR UPDATE`,
           [appeal.subject_id],
