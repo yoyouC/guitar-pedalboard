@@ -243,7 +243,7 @@ export function createMemoryPublishedPresetRepository(
         id: input.id,
         title: input.title,
         description: input.description,
-        visibility: 'public',
+        visibility: input.visibility ?? 'public',
         creator: input.creator,
         tags: selectedTags as MarketplaceTag[],
         derivedAttributes: input.derivedAttributes,
@@ -278,6 +278,13 @@ export function createMemoryPublishedPresetRepository(
 
     async findManagedById(presetId, creatorId) {
       return clone(hydrateSource(ownedCurrent(presetId, creatorId)));
+    },
+
+    async listManagedByCreator(creatorId) {
+      return [...presetsById.values()]
+        .filter((preset) => preset.creator.id === creatorId && preset.visibility !== 'hidden')
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .map((preset) => clone(hydrateSource(preset)));
     },
 
     async updateMetadata(input) {

@@ -237,6 +237,21 @@ test('official client manages metadata, immutable revisions, rollback, and visib
   ]);
 });
 
+test('official client reads the private My Tones list across owner-visible states', async () => {
+  const tones = [
+    demoPublishedPreset,
+    { ...demoPublishedPreset, id: 'tone-unlisted', visibility: 'unlisted' as const },
+    { ...demoPublishedPreset, id: 'tone-withdrawn', visibility: 'withdrawn' as const },
+  ];
+  let requested = '';
+  const client = createMarketplaceClient(async (input) => {
+    requested = String(input);
+    return Response.json({ tones });
+  });
+  assert.deepEqual(await client.listManagedPublishedPresets(), tones);
+  assert.equal(requested, '/api/marketplace/me/tones');
+});
+
 test('official client exposes recoverable preset concurrency state', async () => {
   const current = {
     updatedAt: demoPublishedPreset.updatedAt,

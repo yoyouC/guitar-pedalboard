@@ -45,6 +45,8 @@ test('future member destinations are content pages instead of the Pedalboard', (
   assert.deepEqual(resolveAppRoute('/login/'), { kind: 'login', section: 'account' });
   assert.deepEqual(resolveAppRoute('/library'), { kind: 'library', section: 'account' });
   assert.deepEqual(resolveAppRoute('/settings'), { kind: 'settings', section: 'account' });
+  assert.deepEqual(resolveAppRoute('/publish'), { kind: 'publish', section: 'account' });
+  assert.deepEqual(resolveAppRoute('/library/tones/tone-1'), { kind: 'tone-manage', section: 'account' });
 });
 
 test('unknown paths never fall through to the instrument surface', () => {

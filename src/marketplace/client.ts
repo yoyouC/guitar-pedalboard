@@ -62,6 +62,7 @@ export interface MarketplaceClient {
   listAvailableTags(): Promise<MarketplaceTag[]>;
   publishPreset(request: PublishPresetRequest): Promise<PublishedPreset>;
   getManagedPublishedPreset(id: string): Promise<PublishedPreset>;
+  listManagedPublishedPresets(): Promise<PublishedPreset[]>;
   getPublishedPresetRevision(id: string, revisionId: string): Promise<PublishedPresetRevisionView>;
   listPublishedPresetRevisions(id: string): Promise<PublishedPresetRevisionSummary[]>;
   updatePublishedPresetMetadata(
@@ -358,6 +359,17 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
       const preset = parseManagedPublishedPreset(body.preset, id);
       if (!preset) throw new MarketplaceClientError('invalid_response', '作品管理响应无效。');
       return preset;
+    },
+    async listManagedPublishedPresets() {
+      let response: Response;
+      try { response = await fetchResponse('/api/marketplace/me/tones'); }
+      catch { throw new MarketplaceClientError('network', '无法连接 My Tones。'); }
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { tones?: unknown };
+      if (!Array.isArray(body.tones)) throw new MarketplaceClientError('invalid_response', 'My Tones 响应无效。');
+      const tones = body.tones.map((tone) => parseManagedPublishedPreset(tone));
+      if (tones.some((tone) => !tone)) throw new MarketplaceClientError('invalid_response', 'My Tones 响应无效。');
+      return tones as PublishedPreset[];
     },
 
     async listPublishedPresetRevisions(id) {

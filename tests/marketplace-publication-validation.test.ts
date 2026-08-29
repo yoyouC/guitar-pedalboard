@@ -34,6 +34,18 @@ test('publication derives searchable Rig attributes and resource dependencies', 
   });
 });
 
+test('first publication accepts only explicit Public or Unlisted visibility', () => {
+  const result = validatePublishPresetRequest({
+    title: 'Private preview', description: '', tagIds: ['tone-crunch'],
+    schemaVersion: 5, rig: demoPublishedPreset.currentRevision.rig, visibility: 'unlisted',
+  }, new Set(['tone-crunch']));
+  assert.equal(result.value?.request.visibility, 'unlisted');
+  assert.equal(validatePublishPresetRequest({
+    title: 'Bad', description: '', tagIds: ['tone-crunch'], schemaVersion: 5,
+    rig: demoPublishedPreset.currentRevision.rig, visibility: 'friends',
+  }, new Set(['tone-crunch'])).value, null);
+});
+
 test('publication rejects forged ownership and local-only Rig resources', () => {
   const forged = validatePublishPresetRequest({
     ...validRequest(),

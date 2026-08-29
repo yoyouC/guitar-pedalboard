@@ -195,6 +195,7 @@ export interface PublishPresetRequest {
   schemaVersion: number;
   rig: RigPresetState;
   source?: PublishedPresetSourceReference;
+  visibility?: 'public' | 'unlisted';
 }
 
 export interface UpdatePublishedPresetMetadataRequest {

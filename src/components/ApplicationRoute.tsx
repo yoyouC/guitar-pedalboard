@@ -5,6 +5,9 @@ import { PublishedPresetRoute } from './PublishedPresetRoute.tsx';
 import { PublishedPresetSearchRoute } from './PublishedPresetSearchRoute.tsx';
 import { LoginPage } from './LoginPage.tsx';
 import { SettingsPage } from './SettingsPage.tsx';
+import { PublishPage } from './PublishPage.tsx';
+import { MyLibraryPage } from './MyLibraryPage.tsx';
+import { ToneManagePage } from './ToneManagePage.tsx';
 import type { AppPreferences } from '../app/preferences.ts';
 import type { AudioDiagnosticsSnapshot } from '../audio/audioDiagnostics.ts';
 import type { MidiState } from '../midi/useMidi.ts';
@@ -24,14 +27,6 @@ interface ApplicationRouteProps {
   onClearMidiBindings(): void;
 }
 
-const PLACEHOLDER_COPY = {
-  library: {
-    eyebrow: 'Member workspace',
-    title: 'My Library is being prepared',
-    description: 'Published Tone, Collections and Likes will live here without mixing them with browser-local Presets.',
-  },
-} as const;
-
 export function ApplicationRoute(props: ApplicationRouteProps) {
   const { route, pathname, search, onNavigate } = props;
   const close = () => onNavigate('/');
@@ -48,17 +43,11 @@ export function ApplicationRoute(props: ApplicationRouteProps) {
       return <LoginPage locale={props.preferences.locale} search={props.search} onNavigate={onNavigate} />;
     case 'settings':
       return <SettingsPage {...props} />;
-    case 'library': {
-      const copy = PLACEHOLDER_COPY[route.kind];
-      return (
-        <section className="app-route-placeholder">
-          <span className="marketplace-detail__eyebrow">{copy.eyebrow}</span>
-          <h1>{copy.title}</h1>
-          <p>{copy.description}</p>
-          <button type="button" onClick={close}>Return to Pedalboard</button>
-        </section>
-      );
-    }
+    case 'publish':
+      return <PublishPage onNavigate={onNavigate} />;
+    case 'tone-manage':
+      return <ToneManagePage pathname={pathname} onNavigate={onNavigate} />;
+    case 'library': return <MyLibraryPage onNavigate={onNavigate} />;
     case 'not-found':
       return (
         <section className="app-route-placeholder" role="alert">

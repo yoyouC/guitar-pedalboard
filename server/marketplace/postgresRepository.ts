@@ -433,6 +433,16 @@ export function createPostgresPublishedPresetPublicationRepository(
       return result.rows.map(tagFromRow);
     },
 
+    async listManagedByCreator(creatorId) {
+      const ids = await pool.query<{ id: string } & QueryResultRow>(
+        `SELECT id FROM marketplace_published_presets
+         WHERE creator_id = $1 AND visibility <> 'hidden'
+         ORDER BY updated_at DESC, id DESC`,
+        [creatorId],
+      );
+      return Promise.all(ids.rows.map((row) => managedPreset(pool, row.id)));
+    },
+
     async create(input: CreatePublishedPresetInput) {
       const client = await pool.connect();
       try {
@@ -488,12 +498,13 @@ export function createPostgresPublishedPresetPublicationRepository(
           `INSERT INTO marketplace_published_presets
              (id, creator_id, title, description, visibility, current_revision_id,
               source_preset_id, source_revision_id, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, 'public', $5, $6, $7, $8, $8)`,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
           [
             input.id,
             input.creator.id,
             input.title,
             input.description,
+            input.visibility ?? 'public',
             input.revisionId,
             input.source?.presetId ?? null,
             input.source?.revisionId ?? null,
@@ -533,7 +544,7 @@ export function createPostgresPublishedPresetPublicationRepository(
           id: input.id,
           title: input.title,
           description: input.description,
-          visibility: 'public',
+          visibility: input.visibility ?? 'public',
           creator: input.creator,
           tags: selected.rows.map(tagFromRow),
           derivedAttributes: input.derivedAttributes,

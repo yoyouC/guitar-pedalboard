@@ -45,6 +45,10 @@
       "destination": "/api/marketplace-preset?route=tags"
     },
     {
+      "source": "/api/marketplace/me/tones",
+      "destination": "/api/marketplace-preset?route=my-tones"
+    },
+    {
       "source": "/api/marketplace/search/presets",
       "destination": "/api/marketplace-search"
     },

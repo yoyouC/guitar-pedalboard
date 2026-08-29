@@ -51,6 +51,7 @@ const PRESET_REVISIONS_PATH = /^\/api\/marketplace\/presets\/([^/]+)\/revisions$
 const PRESET_REVISION_PATH = /^\/api\/marketplace\/presets\/([^/]+)\/revisions\/([^/]+)$/;
 const PRESET_REVISION_RESTORE_PATH = /^\/api\/marketplace\/presets\/([^/]+)\/revisions\/([^/]+)\/restore$/;
 const PRESETS_PATH = '/api/marketplace/presets';
+const MY_TONES_PATH = '/api/marketplace/me/tones';
 const TAGS_PATH = '/api/marketplace/tags';
 
 function publishedPresetNotFound(): Response {
@@ -160,6 +161,7 @@ export function createMarketplaceApi({
               displayName: member.displayName,
             },
             ...validation.value.request,
+            visibility: validation.value.request.visibility ?? 'public',
             resourceDependencies: validation.value.resourceDependencies,
             derivedAttributes: validation.value.derivedAttributes,
             now,
@@ -214,6 +216,19 @@ export function createMarketplaceApi({
       }
 
       if (publication) {
+        if (request.method === 'GET' && url.pathname === MY_TONES_PATH) {
+          try {
+            const identity = await publication.sessions.verify(request);
+            if (!identity) return apiError(401, 'authentication_required', 'Authentication required');
+            const member = await publication.members.findOrCreateForIdentity({
+              id: publication.createMemberId(), identity,
+              handle: `player-${publication.createHandleSuffix()}`, now: publication.now(),
+            });
+            const tones = await publication.repository.listManagedByCreator(member.id);
+            const parsed = tones.map((tone) => parseManagedPublishedPreset(tone, tone.id));
+            return parsed.every(Boolean) ? Response.json({ tones: parsed }) : marketplaceUnavailable();
+          } catch { return marketplaceUnavailable(); }
+        }
         const metadataMatch = request.method === 'PATCH'
           ? PRESET_METADATA_PATH.exec(url.pathname)
           : null;

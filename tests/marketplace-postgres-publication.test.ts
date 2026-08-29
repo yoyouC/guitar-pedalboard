@@ -99,7 +99,7 @@ test('PostgreSQL locks and persists only a real foreign Remix source pair', asyn
   const insert = statements.find((statement) => statement.text.includes(
     'INSERT INTO marketplace_published_presets',
   ));
-  assert.deepEqual(insert?.values?.slice(5, 7), [
+  assert.deepEqual(insert?.values?.slice(6, 8), [
     demoPublishedPreset.id,
     demoPublishedPreset.currentRevision.id,
   ]);

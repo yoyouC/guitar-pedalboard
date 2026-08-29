@@ -50,6 +50,7 @@ export interface CreatePublishedPresetInput {
   resourceDependencies: RigResourceDependency[];
   derivedAttributes: RigDerivedAttributes;
   source?: PublishedPresetSourceReference;
+  visibility?: 'public' | 'unlisted';
   now: Date;
 }
 
@@ -108,6 +109,7 @@ export interface PublishedPresetPublicationRepository {
 export interface PublishedPresetManagementRepository
   extends PublishedPresetPublicationRepository {
   findManagedById(presetId: string, creatorId: string): Promise<PublishedPreset>;
+  listManagedByCreator(creatorId: string): Promise<PublishedPreset[]>;
   listRevisions(presetId: string, creatorId: string): Promise<PublishedPresetRevisionSummary[]>;
   updateMetadata(input: UpdatePublishedPresetMetadataInput): Promise<PublishedPreset>;
   appendRevision(input: AppendPublishedPresetRevisionInput): Promise<PublishedPreset>;

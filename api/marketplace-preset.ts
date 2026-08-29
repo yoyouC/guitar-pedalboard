@@ -41,6 +41,8 @@ export default {
       requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/visibility`;
     } else if (route === 'presets') {
       requestUrl.pathname = '/api/marketplace/presets';
+    } else if (route === 'my-tones') {
+      requestUrl.pathname = '/api/marketplace/me/tones';
     } else if (route === 'tags') {
       requestUrl.pathname = '/api/marketplace/tags';
     } else return new Response(null, { status: 404 });
@@ -54,7 +56,8 @@ export default {
       const isPrivateRoute = request.method === 'POST'
         || request.method === 'PATCH'
         || route === 'revisions'
-        || route === 'manage';
+        || route === 'manage'
+        || route === 'my-tones';
       if (isPrivateRoute) {
         const baseURL = authenticationBaseURL();
         if (!hasCanonicalOrigin(request, baseURL)) {

@@ -3,9 +3,7 @@ import { rigToShareState } from '../state/rigStore';
 import { rigToPresetState } from '../state/rigStore';
 import { writeShareToLocation } from '../state/share';
 import { rigStore, useRig } from '../state/useRig';
-import type { RigPresetState, RigProvenance } from '../state/presetCodec';
-import { PublishPresetDialog } from './PublishPresetDialog';
-import { useMemberSession } from '../members/useMemberSession.ts';
+import { createPublishDraft } from '../marketplace/publishDraft.ts';
 
 interface PresetBarProps {
   onNavigate(pathname: string): void;
@@ -14,32 +12,11 @@ interface PresetBarProps {
 /** 完整 Rig 预设:localStorage 持久化、JSON 导入导出、URL 分享与显式广场发布。 */
 export function PresetBar({ onNavigate }: PresetBarProps) {
   const presets = useRig((s) => s.presets);
-  const provenance = useRig((s) => s.provenance);
   const importRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState('');
   const [shared, setShared] = useState(false);
   const [transferStatus, setTransferStatus] = useState('');
-  const [publication, setPublication] = useState<{
-    rig: RigPresetState;
-    sourceLabel: string;
-    initialTitle: string;
-    provenance: RigProvenance | null;
-    presetName?: string;
-  } | null>(null);
-  const memberSession = useMemberSession();
-
-  const beginPublication = (next: NonNullable<typeof publication>) => {
-    if (memberSession.status !== 'authenticated') {
-      onNavigate(`/login?return=${encodeURIComponent('/')}`);
-      return;
-    }
-    if (!memberSession.member.readyForPublicAttribution) {
-      onNavigate('/settings?section=account');
-      return;
-    }
-    setPublication(next);
-  };
 
   const handleLoad = async (presetName: string) => {
     const result = await rigStore.loadPreset(presetName);
@@ -157,43 +134,13 @@ export function PresetBar({ onNavigate }: PresetBarProps) {
       <button className={shared ? 'active' : ''} title="复制当前配置(链条+箱头+箱体)的分享链接" onClick={handleShare}>
         {shared ? '✓ 已复制' : '🔗 分享'}
       </button>
-      <button onClick={() => beginPublication({
-        rig: rigToPresetState(rigStore.getState()),
-        sourceLabel: '当前完整 Rig',
-        initialTitle: '',
-        provenance,
-      })}>发布当前 Rig</button>
-      <button disabled={!selected} onClick={() => {
-        const preset = presets.find((candidate) => candidate.name === selected);
-        if (preset) beginPublication({
-          rig: preset.rig,
-          sourceLabel: `本地 Preset · ${preset.name}`,
-          initialTitle: preset.name,
-          provenance: preset.provenance ?? null,
-          presetName: preset.name,
-        });
-      }}>发布所选 Preset</button>
+      <button onClick={() => {
+        const state = rigStore.getState();
+        createPublishDraft(rigToPresetState(state), state.provenance);
+        onNavigate('/publish');
+      }}>发布当前 Rig</button>
       <button onClick={() => void rigStore.startFromFactoryRig()}>从出厂 Rig 开始</button>
       <button onClick={() => void rigStore.startFromBlankRig()}>从空白 Rig 开始</button>
-      {publication && (
-        <PublishPresetDialog
-          rig={publication.rig}
-          sourceLabel={publication.sourceLabel}
-          initialTitle={publication.initialTitle}
-          provenance={publication.provenance}
-          onClose={() => setPublication(null)}
-          onPublished={(pathname, preset) => {
-            rigStore.recordPublishedProvenance({
-              presetId: preset.id,
-              revisionId: preset.currentRevision.id,
-              creatorId: preset.creator.id,
-              presetUpdatedAt: preset.updatedAt,
-            }, publication.presetName);
-            setPublication(null);
-            onNavigate(pathname);
-          }}
-        />
-      )}
     </div>
   );
 }

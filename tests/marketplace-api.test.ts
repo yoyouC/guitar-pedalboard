@@ -283,6 +283,35 @@ test('verified member atomically publishes the first immutable revision with ser
   assert.equal(await repository.count(), 1);
 });
 
+test('first publication preserves the explicitly selected Unlisted visibility', async () => {
+  const { api } = publicationApi();
+  const response = await api.fetch(publishRequest({ visibility: 'unlisted' }));
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).preset.visibility, 'unlisted');
+});
+
+test('My Tones returns every owner-visible state but no other creator or hidden work', async () => {
+  const owned = (id: string, visibility: PublishedPreset['visibility']): PublishedPreset => ({
+    ...structuredClone(publishedPreset), id, visibility,
+    creator: { id: 'member-ada', handle: 'ada', displayName: 'Ada' },
+  });
+  const repository = createMemoryPublishedPresetRepository([
+    owned('tone-public', 'public'), owned('tone-unlisted', 'unlisted'),
+    owned('tone-withdrawn', 'withdrawn'), owned('tone-hidden', 'hidden'),
+    { ...owned('tone-other', 'public'), creator: publishedPreset.creator },
+  ], controlledTags);
+  const { api } = publicationApi(repository);
+  const response = await api.fetch(new Request('https://pedalboard.test/api/marketplace/me/tones'));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.tones.map((tone: PublishedPreset) => tone.visibility).sort(), [
+    'public', 'unlisted', 'withdrawn',
+  ]);
+  assert.deepEqual(body.tones.map((tone: PublishedPreset) => tone.id).sort(), [
+    'tone-public', 'tone-unlisted', 'tone-withdrawn',
+  ]);
+});
+
 test('publishing requires public attribution setup but ordinary authentication does not complete it', async () => {
   const repository = createMemoryPublishedPresetRepository([], controlledTags);
   const api = createMarketplaceApi({
