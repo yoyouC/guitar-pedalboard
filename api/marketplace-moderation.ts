@@ -6,6 +6,8 @@ import { createPostgresMemberRepository } from '../server/members/postgresReposi
 import { createMarketplaceModerationApi } from '../server/moderation/api.ts';
 import { createPostgresMarketplaceModerationRepository } from '../server/moderation/postgresRepository.ts';
 import { parseMarketplaceTrendingPolicy } from '../server/trending/policy.ts';
+import { createPostgresMarketplaceWriteLimiter } from '../server/abuse/postgresWriteLimiter.ts';
+import { parseMarketplaceWritePolicies } from '../server/abuse/policy.ts';
 
 let api: ReturnType<typeof createMarketplaceModerationApi> | null = null;
 
@@ -43,6 +45,10 @@ export default {
           createId: () => crypto.randomUUID(),
           createMemberId: () => crypto.randomUUID(),
           createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+          writeLimiter: createPostgresMarketplaceWriteLimiter(
+            marketplacePool,
+            parseMarketplaceWritePolicies(process.env),
+          ),
         });
       }
       return await api.fetch(new Request(url, request));

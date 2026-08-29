@@ -6,6 +6,8 @@ import { createPostgresMarketplaceLikeRepository } from '../server/likes/postgre
 import { createPostgresMarketplaceTrendingRepository } from '../server/trending/postgresRepository.ts';
 import { marketplacePool } from '../server/marketplace/postgres.ts';
 import { createPostgresMemberRepository } from '../server/members/postgresRepository.ts';
+import { createPostgresMarketplaceWriteLimiter } from '../server/abuse/postgresWriteLimiter.ts';
+import { parseMarketplaceWritePolicies } from '../server/abuse/policy.ts';
 
 let api: ReturnType<typeof createMarketplaceLikesApi> | null = null;
 
@@ -49,6 +51,10 @@ export default {
           now: () => new Date(),
           createMemberId: () => crypto.randomUUID(),
           createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+          writeLimiter: createPostgresMarketplaceWriteLimiter(
+            marketplacePool,
+            parseMarketplaceWritePolicies(process.env),
+          ),
         });
       }
       return api.fetch(new Request(url, request));

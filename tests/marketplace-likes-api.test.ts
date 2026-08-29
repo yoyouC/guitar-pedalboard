@@ -7,6 +7,8 @@ import { createMemoryMemberRepository } from '../server/members/memoryRepository
 import type { AuthenticatedIdentity } from '../server/auth/session.ts';
 import type { CanonicalPublishedPreset, PresetCollection } from '../shared/marketplace.ts';
 import { demoPublishedPreset } from '../server/marketplace/demoPreset.ts';
+import { createMemoryMarketplaceWriteLimiter } from '../server/abuse/memoryWriteLimiter.ts';
+import type { MarketplaceWriteLimiter } from '../server/abuse/writeLimiter.ts';
 
 const presetA = structuredClone(demoPublishedPreset);
 const presetB: CanonicalPublishedPreset = {
@@ -39,7 +41,7 @@ const identities: Record<string, AuthenticatedIdentity> = {
   },
 };
 
-function fixture() {
+function fixture(writeLimiter?: MarketplaceWriteLimiter) {
   const repository = createMemoryMarketplaceLikeRepository({
     presets: [presetA, presetB, unlistedPreset, hiddenPreset], collections: [collection],
   });
@@ -73,10 +75,11 @@ function fixture() {
     now: () => new Date(Date.UTC(2026, 7, 29, 10, 0, tick++)),
     createMemberId: () => 'member-created',
     createHandleSuffix: () => 'created1',
+    writeLimiter,
   });
-  const request = (path: string, method = 'GET', user?: string, body?: string) => api.fetch(new Request(
+  const request = (path: string, method = 'GET', user?: string, body?: string, network = '198.51.100.10') => api.fetch(new Request(
     `https://pedalboard.test${path}`,
-    { method, headers: user ? { 'x-user': user } : undefined, body },
+    { method, headers: user ? { 'x-user': user, 'x-forwarded-for': network } : { 'x-forwarded-for': network }, body },
   ));
   return { repository, request };
 }
@@ -98,6 +101,44 @@ test('like writes are authenticated, idempotent, cancellable, and reject self/co
   assert.equal((await request(path, 'DELETE', 'ada')).status, 200);
   assert.equal((await request(path, 'DELETE', 'ada')).status, 200);
   assert.equal((await (await request(path, 'GET', 'ada')).json()).state.likeCount, 0);
+});
+
+test('Like bursts consume independent member and network buckets with a stable retry window', async () => {
+  const limiter = createMemoryMarketplaceWriteLimiter({
+    like: {
+      member: { refillPerMinute: 1, burst: 2 },
+      network: { refillPerMinute: 1, burst: 3 },
+    },
+  });
+  const { request } = fixture(limiter);
+  const path = `/api/marketplace/likes/presets/${presetA.id}`;
+  assert.equal((await request(path, 'PUT', 'ada')).status, 200);
+  assert.equal((await request(path, 'DELETE', 'ada')).status, 200);
+  const memberLimited = await request(path, 'PUT', 'ada');
+  assert.equal(memberLimited.status, 429);
+  assert.equal(memberLimited.headers.get('retry-after'), '58');
+  assert.deepEqual(await memberLimited.json(), {
+    error: {
+      code: 'write_rate_limited', message: 'Community write rate limit reached',
+      operation: 'like', retryAt: '2026-08-29T10:01:00.000Z',
+    },
+  });
+  assert.equal((await request(path, 'PUT', 'bob')).status, 200);
+  assert.equal((await request(path, 'DELETE', 'bob')).status, 429);
+  assert.equal((await request(path, 'PUT', 'bob', undefined, '203.0.113.8')).status, 200);
+});
+
+test('limiter storage failure affects writes but never invokes the limiter for reads', async () => {
+  let calls = 0;
+  const { request } = fixture({
+    async consume() { calls += 1; throw new Error('limiter unavailable'); },
+  });
+  const path = `/api/marketplace/likes/presets/${presetA.id}`;
+  assert.equal((await request(path, 'GET', 'ada')).status, 200);
+  assert.equal((await request('/api/marketplace/popular/presets')).status, 200);
+  assert.equal(calls, 0);
+  assert.equal((await request(path, 'PUT', 'ada')).status, 503);
+  assert.equal(calls, 1);
 });
 
 test('my likes are private, separate both target kinds, and never appear on public ranking rows', async () => {
