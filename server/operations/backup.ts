@@ -54,6 +54,10 @@ export interface MarketplaceBackupMutex {
   tryAcquire(dayKey: string): Promise<MarketplaceBackupMutexLease | null>;
 }
 
+export interface MarketplaceBackupReadObserver {
+  candidateSelected(paths: MarketplaceBackupArtifactPaths): Promise<void>;
+}
+
 interface MarketplaceBackupPostgresClient extends PostgresQueryable {
   release(destroy?: boolean): void;
 }
@@ -209,18 +213,45 @@ export async function runDailyMarketplaceBackup(
 export async function readCurrentMarketplaceBackup(
   directory: string,
   dayKey: string,
+  observer?: MarketplaceBackupReadObserver,
 ): Promise<{ paths: MarketplaceBackupArtifactPaths; manifest: MarketplaceBackupManifest } | null> {
-  const fencingToken = await highestMarketplaceBackupFence(directory, dayKey);
-  const paths = marketplaceBackupArtifactPathsForDay(directory, dayKey, 0, fencingToken);
-  try {
-    const manifest = await readMarketplaceBackupManifest(paths.manifestPath);
-    await assertCompleteMarketplaceBackup(
-      paths.archivePath, manifest, basename(paths.archivePath),
-    );
-    return { paths, manifest };
-  } catch {
-    return null;
+  for (;;) {
+    const fencingToken = await highestMarketplaceBackupFence(directory, dayKey);
+    const paths = marketplaceBackupArtifactPathsForDay(directory, dayKey, 0, fencingToken);
+    await observer?.candidateSelected(paths);
+    let candidate: { paths: MarketplaceBackupArtifactPaths; manifest: MarketplaceBackupManifest }
+      | null = null;
+    try {
+      const manifest = await readMarketplaceBackupManifest(paths.manifestPath);
+      await assertCompleteMarketplaceBackup(
+        paths.archivePath, manifest, basename(paths.archivePath),
+      );
+      candidate = { paths, manifest };
+    } catch {
+      // A failed highest claim remains current only if no newer claim appeared.
+    }
+    if (await highestMarketplaceBackupFence(directory, dayKey) === fencingToken) {
+      return candidate;
+    }
   }
+}
+
+export async function assertCurrentMarketplaceBackupSelection(
+  directory: string,
+  archivePath: string,
+  manifestPath: string,
+): Promise<{ paths: MarketplaceBackupArtifactPaths; manifest: MarketplaceBackupManifest }> {
+  const requestedManifest = await readMarketplaceBackupManifest(resolve(manifestPath));
+  const dayKey = requestedManifest.completedAt.slice(0, 10);
+  const current = await readCurrentMarketplaceBackup(directory, dayKey);
+  if (
+    !current
+    || current.paths.archivePath !== resolve(archivePath)
+    || current.paths.manifestPath !== resolve(manifestPath)
+  ) {
+    throw new Error('Marketplace backup is not the current fencing claim');
+  }
+  return current;
 }
 
 async function claimNextMarketplaceBackupFence(

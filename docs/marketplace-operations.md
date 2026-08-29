@@ -63,6 +63,7 @@ npm run marketplace:backup:status
 
 ```sh
 MARKETPLACE_ALLOW_RESTORE_DRILL=true \
+MARKETPLACE_BACKUP_DIR='/mounted/encrypted/durable/marketplace' \
 MARKETPLACE_EXPECTED_DATABASE_URL='postgresql://…/marketplace' \
 MARKETPLACE_RESTORE_DATABASE_URL='postgresql://…/marketplace_restore_drill' \
 MARKETPLACE_RESTORE_DRILL_ARCHIVE='artifacts/marketplace.dump' \

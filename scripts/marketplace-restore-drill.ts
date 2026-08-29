@@ -3,9 +3,8 @@ import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { Pool } from 'pg';
 import {
+  assertCurrentMarketplaceBackupSelection,
   assertMarketplaceBackupFactsMatch,
-  assertCompleteMarketplaceBackup,
-  readMarketplaceBackupManifest,
   readMarketplaceBackupFacts,
   type MarketplaceBackupFacts,
 } from '../server/operations/backup.ts';
@@ -21,21 +20,29 @@ const expectedSourceConnectionString = process.env.MARKETPLACE_EXPECTED_DATABASE
   ?? process.env.POSTGRES_URL;
 const archivePath = process.env.MARKETPLACE_RESTORE_DRILL_ARCHIVE;
 const manifestPath = process.env.MARKETPLACE_RESTORE_DRILL_MANIFEST;
+const backupDirectory = process.env.MARKETPLACE_BACKUP_DIR;
 if (process.env.MARKETPLACE_ALLOW_RESTORE_DRILL !== 'true') {
   throw new Error('Set MARKETPLACE_ALLOW_RESTORE_DRILL=true for this destructive disposable-target drill');
 }
-if (!restoreConnectionString || !archivePath || !manifestPath || !expectedSourceConnectionString) {
-  throw new Error('Set restore database, expected source database, archive, and manifest variables');
+if (
+  !restoreConnectionString || !archivePath || !manifestPath
+  || !expectedSourceConnectionString || !backupDirectory
+) {
+  throw new Error(
+    'Set backup directory, restore database, expected source database, archive, and manifest variables',
+  );
 }
 assertDisposableRestoreDatabase(
   restoreConnectionString,
   expectedSourceConnectionString,
 );
 
-const archive = resolve(archivePath);
-const manifest = await readMarketplaceBackupManifest(resolve(manifestPath));
+const selected = await assertCurrentMarketplaceBackupSelection(
+  resolve(backupDirectory), resolve(archivePath), resolve(manifestPath),
+);
+const archive = selected.paths.archivePath;
+const manifest = selected.manifest;
 assertExpectedMarketplaceBackupSource(expectedSourceConnectionString, manifest.source);
-await assertCompleteMarketplaceBackup(archive, manifest);
 const actualDigest = manifest.sha256;
 
 const startedAt = new Date();

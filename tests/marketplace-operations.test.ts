@@ -23,6 +23,7 @@ import {
 import { postgresCommandEnvironment } from '../server/operations/postgresCommand.ts';
 import { evaluateMarketplaceAvailability } from '../server/operations/availability.ts';
 import {
+  assertCurrentMarketplaceBackupSelection,
   assertMarketplaceBackupFactsMatch,
   createPostgresMarketplaceBackupMutex,
   evaluateMarketplaceBackupFreshness,
@@ -300,7 +301,8 @@ test('backup and restore commands keep credentials out of argv and restore atomi
   assert.match(restore, /--single-transaction/);
   assert.match(restore, /--dbname=\$\{restoreEnvironment\.PGDATABASE\}/);
   assert.match(restore, /MARKETPLACE_EXPECTED_DATABASE_URL/);
-  assert.match(restore, /assertCompleteMarketplaceBackup/);
+  assert.match(restore, /MARKETPLACE_BACKUP_DIR/);
+  assert.match(restore, /assertCurrentMarketplaceBackupSelection/);
   assert.match(restore, /assertMarketplaceBackupFactsMatch/);
 
   assert.deepEqual(postgresCommandEnvironment(
@@ -472,6 +474,71 @@ test('a disconnected backup owner cannot replace a successor with a newer fencin
   } finally {
     resumeOwner();
     resumeSuccessor();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('current backup selection retries when a higher claim appears during validation', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'marketplace-backup-stable-read-'));
+  const now = new Date('2026-08-29T01:00:00.000Z');
+  const first = marketplaceBackupArtifactPaths(directory, now, 1001, '1');
+  let resumeValidation: () => void = () => undefined;
+  let markSelected: () => void = () => undefined;
+  const selected = new Promise<void>((resolve) => { markSelected = resolve; });
+  const validationHeld = new Promise<void>((resolve) => { resumeValidation = resolve; });
+  try {
+    await mkdir(first.bundlePath, { recursive: true });
+    await writeFile(first.archivePath, 'old archive');
+    await writeFile(first.manifestPath, testBackupManifest(
+      first.archivePath, now, 'old archive',
+    ));
+    await writeFile(first.fencePath!, '', { flag: 'wx' });
+
+    const reading = readCurrentMarketplaceBackup(directory, first.dayKey, {
+      async candidateSelected(paths) {
+        if (paths.fencingToken !== '1') return;
+        markSelected();
+        await validationHeld;
+      },
+    });
+    const selectionObserved = await Promise.race([
+      selected.then(() => true),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 50)),
+    ]);
+    assert.equal(selectionObserved, true);
+    const second = marketplaceBackupArtifactPaths(directory, now, 1002, '2');
+    await writeFile(second.fencePath!, '', { flag: 'wx' });
+    resumeValidation();
+    assert.equal(await reading, null);
+  } finally {
+    resumeValidation();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('restore selection rejects a valid but superseded fencing token', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'marketplace-backup-restore-selection-'));
+  const now = new Date('2026-08-29T01:00:00.000Z');
+  const first = marketplaceBackupArtifactPaths(directory, now, 1001, '1');
+  const second = marketplaceBackupArtifactPaths(directory, now, 1002, '2');
+  try {
+    for (const [paths, archive] of [[first, 'old archive'], [second, 'new archive']] as const) {
+      await mkdir(paths.bundlePath, { recursive: true });
+      await writeFile(paths.archivePath, archive);
+      await writeFile(paths.manifestPath, testBackupManifest(paths.archivePath, now, archive));
+      await writeFile(paths.fencePath!, '', { flag: 'wx' });
+    }
+    await assert.rejects(
+      () => assertCurrentMarketplaceBackupSelection(
+        directory, first.archivePath, first.manifestPath,
+      ),
+      /not the current fencing claim/,
+    );
+    const selected = await assertCurrentMarketplaceBackupSelection(
+      directory, second.archivePath, second.manifestPath,
+    );
+    assert.equal(selected.paths.fencingToken, '2');
+  } finally {
     await rm(directory, { recursive: true, force: true });
   }
 });
