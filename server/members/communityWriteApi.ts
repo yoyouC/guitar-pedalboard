@@ -1,4 +1,5 @@
 import type { MemberRecord } from './repository.ts';
+import type { AuthenticatedIdentity } from '../auth/session.ts';
 import {
   AccountDeletionPendingError,
   assertCommunityWriteAllowed,
@@ -12,6 +13,21 @@ export function communityWriteDenied(member: MemberRecord): Response | null {
   } catch (cause) {
     return communityWriteErrorResponse(cause);
   }
+}
+
+export function unverifiedEmailWriteDenied(
+  identity: AuthenticatedIdentity,
+  returnPath: string,
+): Response | null {
+  if (identity.emailVerified !== false) return null;
+  const verificationUrl = `/login?verify=email&return=${encodeURIComponent(returnPath)}`;
+  return Response.json({
+    error: {
+      code: 'email_verification_required',
+      message: 'Verify your email before this community write',
+      verificationUrl,
+    },
+  }, { status: 403 });
 }
 
 export function communityWriteErrorResponse(cause: unknown): Response | null {

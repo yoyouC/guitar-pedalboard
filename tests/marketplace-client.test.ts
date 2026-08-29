@@ -182,6 +182,35 @@ test('official client preserves shared server publication field errors', async (
   );
 });
 
+test('official client exposes verification and retry feedback without changing the publication request', async () => {
+  const request = {
+    title: 'Keep This Draft', description: 'Unsaved editor input.', tagIds: ['tone-crunch'],
+    schemaVersion: 5 as const, rig: demoPublishedPreset.currentRevision.rig,
+  };
+  const verification = createMarketplaceClient(async (_input, init) => {
+    assert.deepEqual(JSON.parse(String(init?.body)), request);
+    return Response.json({ error: {
+      code: 'email_verification_required', verificationUrl: '/login?verify=email',
+    } }, { status: 403 });
+  });
+  await assert.rejects(
+    () => verification.publishPreset(request),
+    (error) => error instanceof MarketplaceClientError
+      && error.code === 'verification_required'
+      && error.verificationUrl === '/login?verify=email',
+  );
+
+  const limited = createMarketplaceClient(async () => Response.json({ error: {
+    code: 'write_rate_limited', operation: 'publish', retryAt: '2026-08-29T10:01:00.000Z',
+  } }, { status: 429 }));
+  await assert.rejects(
+    () => limited.publishPreset(request),
+    (error) => error instanceof MarketplaceClientError
+      && error.code === 'rate_limited'
+      && error.retryAt === '2026-08-29T10:01:00.000Z',
+  );
+});
+
 test('published metadata counts Unicode characters consistently with server validation', async () => {
   const unicodePreset = {
     ...demoPublishedPreset,
