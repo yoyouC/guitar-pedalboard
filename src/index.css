@@ -3285,3 +3285,85 @@ body.midi-learn-mode input:disabled {
   .diagnostics-grid dt { padding-bottom: 2px; }
   .diagnostics-grid dd { padding-top: 2px; }
 }
+
+.marketplace-demo-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #8dc7ff;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.marketplace-detail__close {
+  border: 0;
+  background: none;
+  color: #8dc7ff;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.marketplace-detail {
+  position: relative;
+  z-index: 2;
+  max-width: 980px;
+  margin: 0 auto 18px;
+  padding: 18px;
+  border: 1px solid rgba(141, 199, 255, 0.35);
+  border-radius: 12px;
+  background: rgba(18, 22, 28, 0.94);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+}
+
+.marketplace-detail__topline,
+.marketplace-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.marketplace-detail__eyebrow,
+.marketplace-detail__byline,
+.marketplace-detail small {
+  color: #aab3bf;
+  font-size: 12px;
+}
+
+.marketplace-detail h2 { margin: 14px 0 4px; }
+.marketplace-detail p { line-height: 1.5; }
+
+.marketplace-rig-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 16px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.marketplace-rig-summary div { padding: 10px; background: #20252c; }
+.marketplace-rig-summary dt { color: #8dc7ff; font-size: 11px; text-transform: uppercase; }
+.marketplace-rig-summary dd { margin: 5px 0 0; overflow-wrap: anywhere; }
+
+.marketplace-detail__error,
+.marketplace-detail__warning {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(240, 189, 85, 0.12);
+  color: #f0bd55;
+}
+
+.marketplace-detail__actions { justify-content: flex-start; }
+.marketplace-detail__actions span { color: #8fd3a8; font-size: 13px; }
+
+@media (max-width: 720px) {
+  .marketplace-detail { margin-inline: 10px; }
+  .marketplace-rig-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

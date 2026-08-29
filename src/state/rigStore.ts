@@ -393,6 +393,32 @@ export function rigToShareState(state: RigStoreState): ShareState {
   };
 }
 
+/** 当前状态 → 完整 canonical Rig 恢复输入；用于会话级事务恢复点。 */
+export function rigToApplyState(state: RigStoreState): ApplyRigState {
+  return {
+    chain: state.chain.map((item) => ({ ...item, values: { ...item.values } })),
+    amp: {
+      categoryId: state.ampCategoryId,
+      modelKey: state.ampModelKeys[state.ampCategoryId],
+      ...(state.ampTone3000ModelId ? { modelId: state.ampTone3000ModelId } : {}),
+      enabled: state.ampEnabled,
+      values: { ...state.ampValues },
+    },
+    cab: {
+      id: state.cabId,
+      ir: { ...state.cabIrRef },
+      enabled: state.cabEnabled,
+      values: { ...state.cabValues },
+    },
+    preAmpEq: { ...state.preAmpEq, bands: { ...state.preAmpEq.bands } },
+    globals: {
+      inputGain: state.inputGain,
+      masterVolume: state.masterVolume,
+      bypass: state.globalBypass,
+    },
+  };
+}
+
 /** 正向派生:当前状态 → 快照(= rig − globals;箱头记型号机制引用,见 ADR-0006) */
 export function toSnapshot(state: RigStoreState): Snapshot {
   return {

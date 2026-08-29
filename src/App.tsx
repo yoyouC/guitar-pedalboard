@@ -35,6 +35,7 @@ import { RigFooter } from './components/RigFooter';
 import { Tone3000RedirectSelection } from './components/Tone3000RedirectSelection';
 import { Analytics } from '@vercel/analytics/react';
 import type { AudioDiagnosticsSnapshot } from './audio/audioDiagnostics';
+import { PublishedPresetRoute } from './components/PublishedPresetRoute';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -89,6 +90,7 @@ const translateMidiBinding = createBindingTranslator();
  * 以及两个投影:URL hash 同步(防抖订阅)与 Learn 绑定翻译(翻译 + dispatch)。
  */
 export default function App() {
+  const [pathname, setPathname] = useState(window.location.pathname);
   const [inputType, setInputType] = useState<InputSourceType | null>(null);
   const [engineReady, setEngineReady] = useState(false);
   const [showMeters, setShowMeters] = useState(true);
@@ -99,6 +101,17 @@ export default function App() {
   const [diagnostics, setDiagnostics] = useState<AudioDiagnosticsSnapshot>(audioEngine.currentDiagnostics);
   const effectiveShowMeters = showMeters && !reduceVisualLoad;
   const effectiveShowTuner = showTuner && !reduceVisualLoad;
+
+  useEffect(() => {
+    const syncPathname = () => setPathname(window.location.pathname);
+    window.addEventListener('popstate', syncPathname);
+    return () => window.removeEventListener('popstate', syncPathname);
+  }, []);
+
+  const navigate = useCallback((nextPathname: string) => {
+    window.history.pushState(null, '', `${nextPathname}${window.location.hash}`);
+    setPathname(nextPathname);
+  }, []);
 
   useEffect(() => {
     try {
@@ -363,7 +376,16 @@ export default function App() {
 
       <header className="app-header">
         <h1>🎸 Guitar Pedalboard</h1>
+        <button
+          className="marketplace-demo-link"
+          type="button"
+          onClick={() => navigate('/marketplace/presets/preset-demo-crunch')}
+        >
+          音色广场 Demo
+        </button>
       </header>
+
+      <PublishedPresetRoute pathname={pathname} onClose={() => navigate('/')} />
 
       <TopBar
         inputType={inputType}
