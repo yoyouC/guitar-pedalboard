@@ -1,0 +1,28 @@
+import type { SessionVerifier } from './session.ts';
+
+interface BetterAuthSessionApi {
+  getSession(input: { headers: Headers }): Promise<{
+    user: {
+      id: string;
+      email: string;
+      emailVerified: boolean;
+      name: string;
+      image?: string | null;
+    };
+  } | null>;
+}
+
+export function createBetterAuthSessionVerifier(api: BetterAuthSessionApi): SessionVerifier {
+  return {
+    async verify(request) {
+      const session = await api.getSession({ headers: request.headers });
+      if (!session?.user.emailVerified) return null;
+      return {
+        authUserId: session.user.id,
+        email: session.user.email,
+        displayName: session.user.name.trim() || 'Guitar Player',
+        avatarUrl: session.user.image ?? null,
+      };
+    },
+  };
+}

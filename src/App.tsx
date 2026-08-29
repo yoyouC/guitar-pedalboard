@@ -36,6 +36,8 @@ import { Tone3000RedirectSelection } from './components/Tone3000RedirectSelectio
 import { Analytics } from '@vercel/analytics/react';
 import type { AudioDiagnosticsSnapshot } from './audio/audioDiagnostics';
 import { PublishedPresetRoute } from './components/PublishedPresetRoute';
+import { MemberPanel } from './components/MemberPanel';
+import { CreatorProfileRoute } from './components/CreatorProfileRoute';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -383,9 +385,11 @@ export default function App() {
         >
           音色广场 Demo
         </button>
+        <MemberPanel onNavigate={navigate} />
       </header>
 
       <PublishedPresetRoute pathname={pathname} onClose={() => navigate('/')} />
+      <CreatorProfileRoute pathname={pathname} onClose={() => navigate('/')} onNavigate={navigate} />
 
       <TopBar
         inputType={inputType}

@@ -18,6 +18,12 @@ try {
     [preset.creator.id, preset.creator.handle, preset.creator.displayName, preset.createdAt],
   );
   await client.query(
+    `INSERT INTO marketplace_member_handle_claims (handle, member_id, claimed_at)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (handle) DO NOTHING`,
+    [preset.creator.handle, preset.creator.id, preset.createdAt],
+  );
+  await client.query(
     `INSERT INTO marketplace_published_presets
        (id, creator_id, title, description, visibility, current_revision_id, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

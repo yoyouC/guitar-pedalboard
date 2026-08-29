@@ -4,6 +4,26 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/auth/:path*",
+      "destination": "/api/auth?path=:path*"
+    },
+    {
+      "source": "/api/marketplace/me/profile",
+      "destination": "/api/marketplace-member?route=profile"
+    },
+    {
+      "source": "/api/marketplace/me",
+      "destination": "/api/marketplace-member?route=me"
+    },
+    {
+      "source": "/api/marketplace/creators/:handle/presets",
+      "destination": "/api/marketplace-member?route=creator-presets&handle=:handle"
+    },
+    {
+      "source": "/api/marketplace/creators/:handle",
+      "destination": "/api/marketplace-member?route=creator&handle=:handle"
+    },
+    {
       "source": "/api/marketplace/presets/:id",
       "destination": "/api/marketplace-preset"
     },

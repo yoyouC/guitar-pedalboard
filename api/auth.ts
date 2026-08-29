@@ -1,0 +1,27 @@
+import { marketplacePool } from '../server/marketplace/postgres.ts';
+import { createAuthenticationApi } from '../server/auth/api.ts';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
+
+let authenticationApi: ReturnType<typeof createAuthenticationApi> | null = null;
+
+function unavailable(): Response {
+  return Response.json(
+    { error: { code: 'authentication_unavailable', message: 'Authentication is unavailable' } },
+    { status: 503 },
+  );
+}
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    if (!marketplacePool) return unavailable();
+    try {
+      authenticationApi ??= createAuthenticationApi(
+        authenticationBaseURL(),
+        createRuntimeAuth(marketplacePool),
+      );
+      return authenticationApi.fetch(request);
+    } catch {
+      return unavailable();
+    }
+  },
+};

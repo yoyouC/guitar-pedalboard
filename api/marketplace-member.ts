@@ -1,0 +1,68 @@
+import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.ts';
+import { hasCanonicalOrigin } from '../server/auth/api.ts';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
+import { marketplacePool } from '../server/marketplace/postgres.ts';
+import { createMemberApi } from '../server/members/api.ts';
+import { createPostgresMemberRepository } from '../server/members/postgresRepository.ts';
+import { createPostgresPublicCreatorWorks } from '../server/members/works.ts';
+
+let privateApi: ReturnType<typeof createMemberApi> | null = null;
+let publicApi: ReturnType<typeof createMemberApi> | null = null;
+
+function unavailable(): Response {
+  return Response.json(
+    { error: { code: 'marketplace_unavailable', message: 'Marketplace is temporarily unavailable' } },
+    { status: 503 },
+  );
+}
+
+export default {
+  async fetch(request: Request): Promise<Response> {
+    if (!marketplacePool) return unavailable();
+    const requestUrl = new URL(request.url);
+    const route = requestUrl.searchParams.get('route');
+    const handle = requestUrl.searchParams.get('handle');
+    if (route === 'me') requestUrl.pathname = '/api/marketplace/me';
+    else if (route === 'profile') requestUrl.pathname = '/api/marketplace/me/profile';
+    else if (route === 'creator' && handle) {
+      requestUrl.pathname = `/api/marketplace/creators/${encodeURIComponent(handle)}`;
+    } else if (route === 'creator-presets' && handle) {
+      requestUrl.pathname = `/api/marketplace/creators/${encodeURIComponent(handle)}/presets`;
+    } else return new Response(null, { status: 404 });
+    requestUrl.search = '';
+
+    try {
+      if (route === 'creator' || route === 'creator-presets') {
+        publicApi ??= createMemberApi({
+          members: createPostgresMemberRepository(marketplacePool),
+          sessions: { async verify() { return null; } },
+          now: () => new Date(),
+          createId: () => crypto.randomUUID(),
+          createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+          publicWorks: createPostgresPublicCreatorWorks(marketplacePool),
+        });
+        return publicApi.fetch(new Request(requestUrl, request));
+      }
+      const baseURL = authenticationBaseURL();
+      if (!hasCanonicalOrigin(request, baseURL)) {
+        return Response.json(
+          { error: { code: 'untrusted_auth_origin', message: 'Authentication origin is not trusted' } },
+          { status: 403 },
+        );
+      }
+      if (!privateApi) {
+        const auth = createRuntimeAuth(marketplacePool);
+        privateApi = createMemberApi({
+          members: createPostgresMemberRepository(marketplacePool),
+          sessions: createBetterAuthSessionVerifier(auth.api),
+          now: () => new Date(),
+          createId: () => crypto.randomUUID(),
+          createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+        });
+      }
+      return privateApi.fetch(new Request(requestUrl, request));
+    } catch {
+      return unavailable();
+    }
+  },
+};
