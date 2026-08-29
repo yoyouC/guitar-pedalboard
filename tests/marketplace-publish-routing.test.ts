@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { demoPublishedPreset } from '../server/marketplace/demoPreset.ts';
-import { publishRigFromLocalSource } from '../src/marketplace/publishRig.ts';
+import {
+  publishRigFromLocalSource,
+  repairProvenanceFromPublishedPreset,
+} from '../src/marketplace/publishRig.ts';
 import type { PublishPresetRequest } from '../shared/marketplace.ts';
 import type { RigProvenance } from '../src/state/presetCodec.ts';
 
@@ -46,7 +49,7 @@ test('another creator provenance publishes a new Remix with the fixed source pai
     },
     currentMemberId: 'member-ada',
     request,
-    provenance,
+    provenance: repairProvenanceFromPublishedPreset(demoPublishedPreset),
   });
 
   assert.equal(result.kind, 'remix');
@@ -80,4 +83,32 @@ test('own provenance appends a revision to the source work by default', async ()
     rig: request.rig,
     expectedUpdatedAt: provenance.presetUpdatedAt,
   }]]);
+});
+
+test('manual repair routes by ownership without mutating the historical source payload', async () => {
+  const historicalRig = structuredClone(demoPublishedPreset.currentRevision.rig);
+  const repairSource = repairProvenanceFromPublishedPreset(demoPublishedPreset);
+  const repairedRequest = {
+    ...request,
+    rig: {
+      ...structuredClone(request.rig),
+      amp: { ...structuredClone(request.rig.amp), values: { ...request.rig.amp.values, gain: 73 } },
+    },
+  };
+  const calls: unknown[] = [];
+  await publishRigFromLocalSource({
+    client: {
+      async publishPreset(next) { calls.push(next); return demoPublishedPreset; },
+      async appendPublishedPresetRevision() { throw new Error('unexpected append'); },
+    },
+    currentMemberId: 'member-repairer',
+    request: repairedRequest,
+    provenance: repairSource,
+  });
+
+  assert.deepEqual(demoPublishedPreset.currentRevision.rig, historicalRig);
+  assert.deepEqual((calls[0] as PublishPresetRequest).source, {
+    presetId: repairSource.presetId,
+    revisionId: repairSource.revisionId,
+  });
 });

@@ -1,6 +1,7 @@
 import type {
   AppendPublishedPresetRevisionRequest,
   PublishedPreset,
+  PublishedPresetRevisionView,
   PublishPresetRequest,
 } from '../../shared/marketplace';
 import type { RigProvenance } from '../state/presetCodec';
@@ -17,6 +18,18 @@ export type RigPublicationResult = {
   preset: PublishedPreset;
   kind: 'new-work' | 'remix' | 'new-revision';
 };
+
+/** Records a fixed repair source without pretending the incompatible Rig was applied. */
+export function repairProvenanceFromPublishedPreset(
+  source: PublishedPreset | PublishedPresetRevisionView,
+): RigProvenance {
+  return {
+    presetId: source.id,
+    revisionId: 'revision' in source ? source.revision.id : source.currentRevision.id,
+    creatorId: source.creator.id,
+    presetUpdatedAt: source.updatedAt,
+  };
+}
 
 export async function publishRigFromLocalSource(input: {
   client: RigPublicationClient;

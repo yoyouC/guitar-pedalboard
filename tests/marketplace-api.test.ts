@@ -182,6 +182,29 @@ test('visitor can read a public Published Preset by its stable id', async () => 
   assert.deepEqual(await response.json(), { preset: publishedPreset });
 });
 
+test('compatibility endpoint exposes recomputed external facts without withdrawing the work', async () => {
+  const api = createMarketplaceApi({
+    publishedPresets: createMemoryPublishedPresetRepository([publishedPreset]),
+    compatibilityFacts: {
+      async inspectTone3000Dependencies() { return []; },
+    },
+  });
+  const compatibility = await api.fetch(new Request(
+    `https://pedalboard.test/api/marketplace/presets/${publishedPreset.id}`
+      + `/revisions/${publishedPreset.currentRevision.id}/compatibility`,
+  ));
+  assert.equal(compatibility.status, 200);
+  assert.deepEqual(await compatibility.json(), {
+    compatibility: { status: 'compatible', blockers: [] },
+  });
+
+  const detail = await api.fetch(new Request(
+    `https://pedalboard.test/api/marketplace/presets/${publishedPreset.id}`,
+  ));
+  assert.equal(detail.status, 200);
+  assert.equal((await detail.json()).preset.visibility, 'public');
+});
+
 test('missing and non-public presets share the same anonymous not-found response', async () => {
   const withdrawnPreset: PublishedPreset = {
     ...publishedPreset,
