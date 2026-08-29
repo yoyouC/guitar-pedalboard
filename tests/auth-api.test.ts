@@ -292,6 +292,7 @@ test('verified sessions become independent identities with a non-empty automatic
   const verifier = createBetterAuthSessionVerifier({
     async getSession() {
       return {
+        session: { createdAt: new Date('2026-08-29T12:00:00.000Z') },
         user: {
           id: 'auth-user',
           email: 'player@example.test',
@@ -309,5 +310,6 @@ test('verified sessions become independent identities with a non-empty automatic
     emailVerified: true,
     displayName: 'Guitar Player',
     avatarUrl: null,
+    authenticatedAt: new Date('2026-08-29T12:00:00.000Z'),
   });
 });

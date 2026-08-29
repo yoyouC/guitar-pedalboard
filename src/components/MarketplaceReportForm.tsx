@@ -23,20 +23,23 @@ export function MarketplaceReportForm({ kind, targetId, onNavigate }: {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
+  const [retryAt, setRetryAt] = useState<string | null>(null);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setMessage('');
     setVerificationUrl(null);
+    setRetryAt(null);
     try {
-      await marketplaceClient.submitReport({ targetKind: kind, targetId, reason, details });
+      const receipt = await marketplaceClient.submitReport({ targetKind: kind, targetId, reason, details });
       setDetails('');
-      setMessage('举报已提交，管理员会在私有队列中处理。');
+      setMessage(`举报已受理，编号 ${receipt.id}。管理员会在私有队列中处理。`);
     } catch (cause) {
       if (cause instanceof MarketplaceClientError && cause.verificationUrl) {
         setVerificationUrl(cause.verificationUrl);
       }
+      if (cause instanceof MarketplaceClientError && cause.retryAt) setRetryAt(cause.retryAt);
       setMessage(cause instanceof Error ? cause.message : '举报提交失败。');
     } finally {
       setBusy(false);
@@ -82,6 +85,7 @@ export function MarketplaceReportForm({ kind, targetId, onNavigate }: {
       {verificationUrl && (
         <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>
       )}
+      {retryAt && <small>可重试时间：{new Date(retryAt).toLocaleString()}</small>}
     </aside>
   );
 }

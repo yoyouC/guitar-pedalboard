@@ -49,6 +49,10 @@ test('marketplace routes select independent marketplace pages', () => {
     kind: 'creator-profile',
     section: 'marketplace',
   });
+  assert.deepEqual(resolveAppRoute('/marketplace/infringement-notice'), {
+    kind: 'infringement-notice',
+    section: 'marketplace',
+  });
 });
 
 test('future member destinations are content pages instead of the Pedalboard', () => {
@@ -56,6 +60,9 @@ test('future member destinations are content pages instead of the Pedalboard', (
   assert.deepEqual(resolveAppRoute('/library'), { kind: 'library', section: 'account' });
   assert.deepEqual(resolveAppRoute('/marketplace/me/likes'), { kind: 'library', section: 'account' });
   assert.deepEqual(resolveAppRoute('/settings'), { kind: 'settings', section: 'account' });
+  assert.deepEqual(resolveAppRoute('/marketplace/me/moderation'), {
+    kind: 'moderation-cases', section: 'account',
+  });
   assert.deepEqual(resolveAppRoute('/publish'), { kind: 'publish', section: 'account' });
   assert.deepEqual(resolveAppRoute('/library/tones/tone-1'), { kind: 'tone-manage', section: 'account' });
   assert.deepEqual(resolveAppRoute('/library/collections/set-1'), { kind: 'collection-manage', section: 'account' });

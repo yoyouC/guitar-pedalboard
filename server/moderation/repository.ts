@@ -1,10 +1,12 @@
 import type {
   MarketplaceAuthorModerationCase,
+  MarketplaceContentModerationTargetKind,
   MarketplaceModerationReportReason,
   MarketplaceModerationTargetKind,
 } from '../../shared/marketplace.ts';
 
 export type ModerationTargetKind = MarketplaceModerationTargetKind;
+export type ModerationContentTargetKind = MarketplaceContentModerationTargetKind;
 export type ModerationReportReason = MarketplaceModerationReportReason;
 export const MODERATION_ACTION_SUBJECT_KINDS = {
   hide: ['preset', 'collection'],
@@ -76,7 +78,7 @@ export interface MarketplaceModerationRepository {
     id: string;
     claimantName: string;
     claimantEmail: string;
-    targetKind: ModerationTargetKind;
+    targetKind: ModerationContentTargetKind;
     targetId: string;
     rightsStatement: string;
     now: Date;

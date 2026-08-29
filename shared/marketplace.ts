@@ -155,13 +155,14 @@ export interface MarketplaceRankingPage {
   nextCursor: string | null;
 }
 
-export type MarketplaceModerationTargetKind = 'preset' | 'collection';
+export type MarketplaceModerationTargetKind = 'preset' | 'collection' | 'member';
+export type MarketplaceContentModerationTargetKind = Exclude<MarketplaceModerationTargetKind, 'member'>;
 export type MarketplaceModerationReportReason =
   | 'copyright' | 'spam' | 'impersonation' | 'inappropriate';
 
 export interface MarketplaceAuthorModerationCase {
   actionId: string;
-  targetKind: MarketplaceModerationTargetKind;
+  targetKind: MarketplaceContentModerationTargetKind;
   targetId: string;
   action: 'hide';
   reason: string;

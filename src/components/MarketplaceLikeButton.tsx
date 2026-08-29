@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MarketplaceLikeState, MarketplaceLikeTargetKind } from '../../shared/marketplace';
-import { marketplaceClient } from '../marketplace/client';
+import { marketplaceClient, MarketplaceClientError } from '../marketplace/client';
 import {
   clearPendingMarketplaceLike,
   readPendingMarketplaceLike,
@@ -19,6 +19,8 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
   const [state, setState] = useState<MarketplaceLikeState | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
+  const [retryAt, setRetryAt] = useState<string | null>(null);
   const resuming = useRef(false);
 
   useEffect(() => {
@@ -26,6 +28,8 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
     resuming.current = false;
     setState(null);
     setMessage('');
+    setVerificationUrl(null);
+    setRetryAt(null);
     void marketplaceClient.getLikeState(kind, targetId).then(
       (next) => { if (active) setState(next); },
       () => { if (active) setMessage('点赞状态暂不可用'); },
@@ -52,6 +56,11 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
       onChange?.(next);
       setMessage('登录成功，已完成 Like。');
     }, (cause: unknown) => {
+      if (cause instanceof MarketplaceClientError && cause.verificationUrl) {
+        rememberPendingMarketplaceLike(window.sessionStorage, { kind, targetId });
+        setVerificationUrl(cause.verificationUrl);
+      }
+      if (cause instanceof MarketplaceClientError && cause.retryAt) setRetryAt(cause.retryAt);
       setMessage(cause instanceof Error ? cause.message : '登录后 Like 失败，请重试。');
     }).finally(() => setBusy(false));
   }, [kind, onChange, session, state, targetCreatorId, targetId]);
@@ -66,11 +75,18 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
     if (!state?.canLike) return;
     setBusy(true);
     setMessage('');
+    setVerificationUrl(null);
+    setRetryAt(null);
     try {
       const next = await marketplaceClient.setLike(kind, targetId, !state.liked);
       setState(next);
       onChange?.(next);
     } catch (cause) {
+      if (cause instanceof MarketplaceClientError && cause.verificationUrl) {
+        rememberPendingMarketplaceLike(window.sessionStorage, { kind, targetId });
+        setVerificationUrl(cause.verificationUrl);
+      }
+      if (cause instanceof MarketplaceClientError && cause.retryAt) setRetryAt(cause.retryAt);
       setMessage(cause instanceof Error ? cause.message : '点赞失败');
     } finally {
       setBusy(false);
@@ -93,6 +109,8 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
       {!ownContent && session.status === 'anonymous' && <small>登录后将自动完成 Like</small>}
       {!ownContent && session.status === 'authenticated' && state && !state.canLike && <small>当前账号无法 Like 此内容</small>}
       {message && <small role="alert">{message}</small>}
+      {verificationUrl && <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>}
+      {retryAt && <small>可重试时间：{new Date(retryAt).toLocaleString()}</small>}
     </div>
   );
 }

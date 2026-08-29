@@ -67,4 +67,13 @@ test('account client rejects malformed export and preserves lifecycle errors', a
     }, { status: 403 })),
     (cause) => cause instanceof MarketplaceAccountClientError && cause.code === 'account_deletion_pending',
   );
+  await assert.rejects(
+    recoverMarketplaceAccount(async () => Response.json({ error: {
+      code: 'recent_authentication_required', message: 'recent auth required',
+      verificationUrl: '/login?return=%2Fsettings%3Fsection%3Daccount',
+    } }, { status: 403 })),
+    (cause) => cause instanceof MarketplaceAccountClientError
+      && cause.code === 'recent_authentication_required'
+      && cause.verificationUrl === '/login?return=%2Fsettings%3Fsection%3Daccount',
+  );
 });

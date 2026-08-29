@@ -33,8 +33,10 @@ const migrations = [
   '0004_preset_publication.sql', '0005_preset_revision_management.sql',
   '0006_preset_remix_provenance.sql', '0007_preset_collections.sql',
   '0008_preset_search_indexes.sql', '0009_marketplace_likes.sql',
+  '0009_member_public_profile_terms.sql',
   '0010_marketplace_trending.sql', '0011_marketplace_moderation.sql',
-  '0012_account_lifecycle.sql',
+  '0012_account_lifecycle.sql', '0013_marketplace_write_limits.sql',
+  '0014_member_moderation_reports.sql',
 ];
 
 test('PostgreSQL account export, recovery, purge, and tombstones preserve only required facts', {
@@ -228,13 +230,21 @@ test('PostgreSQL account export, recovery, purge, and tombstones preserve only r
       }));
       return verification.headers.get('set-cookie');
     };
+    let lastAuthenticatedAt = currentTime;
     const signIn = async (email: string, name: string): Promise<string> => {
       const cookie = await verifyMagicLink(await requestMagicLink(email, name));
       assert.ok(cookie);
+      lastAuthenticatedAt = currentTime;
       return cookie;
     };
     let ownerCookie = await signIn('owner@example.test', 'Owner Secret Name');
-    const sessions = createBetterAuthSessionVerifier(auth.api);
+    const authSessions = createBetterAuthSessionVerifier(auth.api);
+    const sessions = {
+      async verify(request: Request) {
+        const identity = await authSessions.verify(request);
+        return identity ? { ...identity, authenticatedAt: lastAuthenticatedAt } : null;
+      },
+    };
     const api = createMarketplaceAccountApi({
       repository, sessions, now: () => currentTime, cronSecret: 'cron-secret',
     });
@@ -409,6 +419,10 @@ test('PostgreSQL account export, recovery, purge, and tombstones preserve only r
     assert.equal((await deniedWrite.json()).error.code, 'account_deletion_pending');
 
     currentTime = new Date(databaseNow.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const staleRecovery = await accountRequest('DELETE');
+    assert.equal(staleRecovery.status, 403);
+    assert.equal((await staleRecovery.json()).error.code, 'recent_authentication_required');
+    ownerCookie = await signIn('owner@example.test', 'Owner Secret Name');
     assert.equal((await accountRequest('DELETE')).status, 200);
     assert.equal((await getPreset(demoPublishedPreset.id)).status, 200);
     assert.equal((await getCollection('collection-owner')).status, 200);
@@ -427,11 +441,13 @@ test('PostgreSQL account export, recovery, purge, and tombstones preserve only r
     );
 
     currentTime = new Date(databaseNow.getTime() - 31 * 24 * 60 * 60 * 1000);
+    ownerCookie = await signIn('owner@example.test', 'Owner Secret Name');
     assert.equal((await accountRequest('POST')).status, 202);
     assert.equal((await accountRequest('GET')).status, 401);
     ownerCookie = await signIn('owner@example.test', 'Owner Secret Name');
     const lateMagicLink = await requestMagicLink('owner@example.test', 'Owner Secret Name');
     currentTime = databaseNow;
+    ownerCookie = await signIn('owner@example.test', 'Owner Secret Name');
     assert.equal((await accountRequest('DELETE')).status, 410);
     const purged = await api.fetch(new Request(
       'https://pedalboard.test/api/internal/marketplace/purge-deleted-accounts',

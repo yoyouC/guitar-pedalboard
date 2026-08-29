@@ -5,6 +5,8 @@ export interface AuthenticatedIdentity {
   emailVerified?: boolean;
   displayName: string;
   avatarUrl: string | null;
+  /** Omitted test adapters are treated as recent; production always supplies this fact. */
+  authenticatedAt?: Date;
 }
 
 export interface SessionVerifier {

@@ -16,6 +16,7 @@ import {
   MODERATION_ACTION_FAMILIES,
   type AuthorModerationCase,
   type MarketplaceModerationRepository,
+  type ModerationContentTargetKind,
   type ModerationTargetKind,
 } from './repository.ts';
 
@@ -51,9 +52,9 @@ async function rollback(client: PoolClient): Promise<void> {
   try { await client.query('ROLLBACK'); } catch { /* preserve original failure */ }
 }
 
-async function target(
+async function contentTarget(
   database: Pool | PoolClient,
-  kind: ModerationTargetKind,
+  kind: ModerationContentTargetKind,
   id: string,
   visibility?: 'accessible' | 'any',
 ): Promise<VisibilityRow> {
@@ -65,6 +66,24 @@ async function target(
   );
   if (!result.rows[0]) throw new ModerationTargetNotFoundError();
   return result.rows[0];
+}
+
+async function reportTarget(
+  database: Pool | PoolClient,
+  kind: ModerationTargetKind,
+  id: string,
+): Promise<void> {
+  if (kind !== 'member') {
+    await contentTarget(database, kind, id, 'accessible');
+    return;
+  }
+  const result = await database.query(
+    `SELECT id FROM marketplace_members
+     WHERE id = $1 AND account_status = 'active' AND community_status <> 'banned'
+     LIMIT 1`,
+    [id],
+  );
+  if (!result.rows[0]) throw new ModerationTargetNotFoundError();
 }
 
 async function recordAction(client: PoolClient, input: {
@@ -99,7 +118,7 @@ export function createPostgresMarketplaceModerationRepository(
       try {
         await client.query('BEGIN');
         await lockCommunityWriteMember(client, input.reporterMemberId);
-        await target(client, input.targetKind, input.targetId, 'accessible');
+        await reportTarget(client, input.targetKind, input.targetId);
         await client.query(
           `INSERT INTO marketplace_moderation_reports
              (id, reporter_member_id, target_kind, target_id, reason, details, created_at)
@@ -120,7 +139,7 @@ export function createPostgresMarketplaceModerationRepository(
     },
 
     async submitInfringementNotice(input) {
-      await target(pool, input.targetKind, input.targetId, 'any');
+      await contentTarget(pool, input.targetKind, input.targetId, 'any');
       await pool.query(
         `INSERT INTO marketplace_infringement_notices
            (id, claimant_name, claimant_email, target_kind, target_id,
@@ -303,7 +322,7 @@ export function createPostgresMarketplaceModerationRepository(
         await client.query('BEGIN');
         await lockCommunityWriteMember(client, input.authorMemberId);
         const action = await client.query<{
-          subject_kind: ModerationTargetKind;
+          subject_kind: ModerationContentTargetKind;
           subject_id: string;
         } & QueryResultRow>(
           `SELECT subject_kind, subject_id FROM marketplace_moderation_actions
@@ -342,7 +361,7 @@ export function createPostgresMarketplaceModerationRepository(
         await client.query('BEGIN');
         const selected = await client.query<{
           action_id: string;
-          subject_kind: ModerationTargetKind;
+          subject_kind: ModerationContentTargetKind;
           subject_id: string;
           previous_visibility: PublishedPresetVisibility;
         } & QueryResultRow>(

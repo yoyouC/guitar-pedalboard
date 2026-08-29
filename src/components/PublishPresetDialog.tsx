@@ -37,6 +37,7 @@ export function PublishPresetDialog({
   const [tags, setTags] = useState<MarketplaceTag[]>([]);
   const [message, setMessage] = useState('');
   const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
+  const [retryAt, setRetryAt] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const session = useMemberSession();
   const currentMemberId = session.status === 'authenticated' ? session.member.id : null;
@@ -89,6 +90,7 @@ export function PublishPresetDialog({
     setBusy(true);
     setMessage('');
     setVerificationUrl(null);
+    setRetryAt(null);
     try {
       const request = preview.value?.request ?? {
         title: '',
@@ -108,6 +110,7 @@ export function PublishPresetDialog({
       if (cause instanceof MarketplaceClientError && cause.verificationUrl) {
         setVerificationUrl(cause.verificationUrl);
       }
+      if (cause instanceof MarketplaceClientError && cause.retryAt) setRetryAt(cause.retryAt);
       if (cause instanceof MarketplaceClientError && cause.fields) {
         setMessage(Object.values(cause.fields).join('；'));
       } else {
@@ -159,6 +162,7 @@ export function PublishPresetDialog({
               验证邮箱
             </button>
           )}
+          {retryAt && <p>可重试时间：{new Date(retryAt).toLocaleString()}</p>}
           <div className="publish-dialog__actions">
             <button type="button" onClick={onClose}>取消</button>
             <button type="submit" disabled={busy || !currentMemberId || !soundAnalysis || (!appendsOwnWork && !preview.value)}>

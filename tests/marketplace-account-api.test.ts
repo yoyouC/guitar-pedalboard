@@ -119,3 +119,27 @@ test('deletion request, verified recovery, and scheduler purge have separate aut
     'delete:auth-ada', 'status:auth-ada', 'recover:auth-ada', 'recover:auth-ada', 'purge',
   ]);
 });
+
+test('destructive lifecycle writes require recent authentication while reads remain available', async () => {
+  const repo = repository();
+  const api = createMarketplaceAccountApi({
+    repository: repo,
+    sessions: { async verify() { return {
+      authUserId: 'auth-ada', email: 'ada@example.test', displayName: 'Ada', avatarUrl: null,
+      authenticatedAt: new Date(now.getTime() - 11 * 60 * 1000),
+    }; } },
+    now: () => now,
+  });
+  const read = await api.fetch(new Request('https://pedalboard.test/api/marketplace/me/export'));
+  assert.equal(read.status, 200);
+  const write = await api.fetch(new Request(
+    'https://pedalboard.test/api/marketplace/me/deletion', { method: 'POST' },
+  ));
+  assert.equal(write.status, 403);
+  assert.deepEqual(await write.json(), { error: {
+    code: 'recent_authentication_required',
+    message: 'Recent authentication is required for account lifecycle changes',
+    verificationUrl: '/login?return=%2Fsettings%3Fsection%3Daccount',
+  } });
+  assert.deepEqual(repo.calls, ['export:auth-ada']);
+});

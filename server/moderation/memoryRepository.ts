@@ -7,6 +7,7 @@ import {
   type AuthorModerationCase,
   type MarketplaceModerationRepository,
   type ModerationAuditEntry,
+  type ModerationContentTargetKind,
   type ModerationReportReason,
   type ModerationTargetKind,
 } from './repository.ts';
@@ -58,7 +59,7 @@ export function createMemoryMarketplaceModerationRepository(input: {
   targets: Target[];
   setMemberStatus(memberId: string, status: 'active' | 'banned'): Promise<void>;
   setTargetVisibility(
-    kind: ModerationTargetKind,
+    kind: ModerationContentTargetKind,
     targetId: string,
     visibility: Target['visibility'],
   ): Promise<void>;
@@ -71,7 +72,7 @@ export function createMemoryMarketplaceModerationRepository(input: {
     'moderationReports' | 'moderationAppeals'
   >>;
   setAccountTargetVisibility(
-    kind: ModerationTargetKind,
+    kind: ModerationContentTargetKind,
     targetId: string,
     visibility: Target['visibility'],
   ): Promise<void>;

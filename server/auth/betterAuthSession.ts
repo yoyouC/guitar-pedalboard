@@ -2,6 +2,7 @@ import type { SessionVerifier } from './session.ts';
 
 interface BetterAuthSessionApi {
   getSession(input: { headers: Headers }): Promise<{
+    session: { createdAt: Date | string };
     user: {
       id: string;
       email: string;
@@ -23,6 +24,7 @@ export function createBetterAuthSessionVerifier(api: BetterAuthSessionApi): Sess
         emailVerified: session.user.emailVerified,
         displayName: session.user.name.trim() || 'Guitar Player',
         avatarUrl: session.user.image ?? null,
+        authenticatedAt: new Date(session.session.createdAt),
       };
     },
   };

@@ -9,6 +9,14 @@ import type { MidiState } from '../midi/useMidi.ts';
 import { beginGoogleAuth, updateMemberProfile } from '../members/client.ts';
 import { memberSession } from '../members/session.ts';
 import { useMemberSession } from '../members/useMemberSession.ts';
+import type { MarketplaceAccountDeletion } from '../../shared/account.ts';
+import {
+  fetchMarketplaceAccountDeletion,
+  fetchMarketplaceAccountExport,
+  MarketplaceAccountClientError,
+  recoverMarketplaceAccount,
+  requestMarketplaceAccountDeletion,
+} from '../accounts/client.ts';
 
 interface SettingsPageProps {
   preferences: AppPreferences;
@@ -152,13 +160,77 @@ function AccountSettings({ locale, onNavigate }: { locale: AppLocale; onNavigate
   const [acceptTerms, setAcceptTerms] = useState(member?.readyForPublicAttribution ?? false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [deletion, setDeletion] = useState<MarketplaceAccountDeletion | null>(null);
+  const [lifecycleLoading, setLifecycleLoading] = useState(true);
+  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   useEffect(() => {
     if (!member) return;
     setHandle(member.handle); setDisplayName(member.displayName); setBio(member.bio);
     setAcceptTerms(member.readyForPublicAttribution);
   }, [member]);
+  useEffect(() => {
+    let active = true;
+    setLifecycleLoading(true);
+    void fetchMarketplaceAccountDeletion().then(
+      (next) => { if (active) { setDeletion(next); setLifecycleLoading(false); } },
+      (cause: unknown) => { if (active) { setMessage(cause instanceof Error ? cause.message : '无法读取账户状态。'); setLifecycleLoading(false); } },
+    );
+    return () => { active = false; };
+  }, []);
   if (!member) return null;
+
+  const requireRecentAuthentication = async (cause: unknown): Promise<boolean> => {
+    if (!(cause instanceof MarketplaceAccountClientError)
+      || cause.code !== 'recent_authentication_required' || !cause.verificationUrl) return false;
+    setMessage(locale === 'zh-CN' ? '此操作需要重新验证身份；你的选择已保留。' : 'Re-authenticate to continue; your choice is preserved.');
+    await memberSession.logout();
+    onNavigate(cause.verificationUrl);
+    return true;
+  };
+
+  const downloadExport = async () => {
+    setBusy(true); setMessage('');
+    try {
+      const exported = await fetchMarketplaceAccountExport();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(exported.data, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url; link.download = exported.filename; link.click();
+      URL.revokeObjectURL(url);
+      setMessage(locale === 'zh-CN' ? '账户数据已导出。' : 'Account data exported.');
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'Account export failed.');
+    } finally { setBusy(false); }
+  };
+
+  const requestDeletion = async () => {
+    setBusy(true); setMessage('');
+    try {
+      const next = await requestMarketplaceAccountDeletion();
+      setDeletion(next);
+      await memberSession.refresh();
+      onNavigate(`/login?return=${encodeURIComponent('/settings?section=account')}`);
+    } catch (cause) {
+      if (!await requireRecentAuthentication(cause)) {
+        setMessage(cause instanceof Error ? cause.message : 'Account deletion failed.');
+      }
+    } finally { setBusy(false); }
+  };
+
+  const restoreAccount = async () => {
+    setBusy(true); setMessage('');
+    try {
+      await recoverMarketplaceAccount();
+      setDeletion(null);
+      setMessage(locale === 'zh-CN' ? '账户已恢复；公开作品会按原可见性重新出现。' : 'Account restored.');
+      await memberSession.refresh();
+    } catch (cause) {
+      if (!await requireRecentAuthentication(cause)) {
+        setMessage(cause instanceof Error ? cause.message : 'Account recovery failed.');
+      }
+    } finally { setBusy(false); }
+  };
 
   const save = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setMessage('');
@@ -194,6 +266,14 @@ function AccountSettings({ locale, onNavigate }: { locale: AppLocale; onNavigate
         <strong>{member.readyForPublicAttribution ? '✓ Public attribution ready' : 'Public attribution setup required'}</strong>
         <small>{locale === 'zh-CN' ? 'Like 等私有动作不要求完成此步骤；发布和创建公开作品前需要。' : 'Private actions such as Likes do not require this; publishing does.'}</small>
       </div>
+      {lifecycleLoading && <p>正在读取账户状态…</p>}
+      {deletion && (
+        <section className="settings-account__lifecycle settings-account__danger" aria-label="恢复账户">
+          <strong>账户正在等待最终删除</strong>
+          <p>公开作品已立即撤下。你可以在 {new Date(deletion.purgeAfter).toLocaleString()} 前恢复账户；我们不会静默恢复。</p>
+          <button disabled={busy} type="button" onClick={() => void restoreAccount()}>恢复账户</button>
+        </section>
+      )}
       <label>
         Handle
         <input
@@ -232,7 +312,28 @@ function AccountSettings({ locale, onNavigate }: { locale: AppLocale; onNavigate
         <button disabled={busy} type="submit">{busy ? '…' : locale === 'zh-CN' ? '保存账户资料' : 'Save account profile'}</button>
         <button disabled={busy} type="button" onClick={() => void linkGoogle()}>{locale === 'zh-CN' ? '验证并绑定 Google' : 'Verify and link Google'}</button>
         <button type="button" onClick={() => onNavigate(`/creators/${encodeURIComponent(member.handle)}`)}>{locale === 'zh-CN' ? '公开主页' : 'Public profile'}</button>
+        <button disabled={busy} type="button" onClick={() => void downloadExport()}>{locale === 'zh-CN' ? '导出我的数据（JSON）' : 'Export my data (JSON)'}</button>
+        <button type="button" onClick={() => onNavigate('/marketplace/me/moderation')}>{locale === 'zh-CN' ? '治理记录与申诉' : 'Moderation cases and appeals'}</button>
       </div>
+      {!deletion && (
+        <details className="settings-account__lifecycle settings-account__danger">
+          <summary>注销账户</summary>
+          <p>提交后会立即退出登录并撤下你的公开作品。30 天内重新验证身份后，可在这里选择恢复账户；到期后会最终删除个人资料和作品内容，只保留匿名化的归属、治理与审计占位信息。</p>
+          <label className="settings-page__check">
+            <input type="checkbox" checked={deleteAcknowledged} onChange={(event) => setDeleteAcknowledged(event.target.checked)} />
+            我理解此操作覆盖账户、预设、合集和社区关系。
+          </label>
+          <label>
+            输入 Handle “{member.handle}” 进行第二次确认
+            <input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} />
+          </label>
+          <button
+            disabled={busy || !deleteAcknowledged || deleteConfirmation !== member.handle}
+            type="button"
+            onClick={() => void requestDeletion()}
+          >确认注销账户</button>
+        </details>
+      )}
       {message && <p role="status">{message}</p>}
     </form>
   );

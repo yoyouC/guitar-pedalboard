@@ -13,6 +13,7 @@ import {
   type MarketplaceModerationRepository,
   MODERATION_ACTION_SUBJECT_KINDS,
   type ModerationActionCommand,
+  type ModerationContentTargetKind,
   type ModerationReportReason,
   type ModerationTargetKind,
 } from './repository.ts';
@@ -80,10 +81,11 @@ export function createMarketplaceModerationApi(input: {
             request, now,
           });
           if (limited) return limited;
+          const id = input.createId();
           await input.repository.submitReport({
-            id: input.createId(), reporterMemberId: current.id, ...body, now,
+            id, reporterMemberId: current.id, ...body, now,
           });
-          return new Response(null, { status: 201 });
+          return Response.json({ report: { id } }, { status: 201 });
         }
         if (request.method === 'POST' && path === NOTICES_PATH) {
           const body = noticeBody(await readBody(request));
@@ -199,6 +201,10 @@ function exactKeys(value: Record<string, unknown>, keys: string[]): boolean {
 }
 
 function targetKind(value: unknown): value is ModerationTargetKind {
+  return value === 'preset' || value === 'collection' || value === 'member';
+}
+
+function contentTargetKind(value: unknown): value is ModerationContentTargetKind {
   return value === 'preset' || value === 'collection';
 }
 
@@ -225,7 +231,7 @@ function noticeBody(value: unknown) {
   if (!body || !exactKeys(body, [
     'claimantName', 'claimantEmail', 'targetKind', 'targetId', 'rightsStatement', 'goodFaith',
   ]) || !text(body.claimantName, 1, 160) || !text(body.claimantEmail, 3, 320)
-    || !/^\S+@\S+\.\S+$/.test(body.claimantEmail) || !targetKind(body.targetKind)
+    || !/^\S+@\S+\.\S+$/.test(body.claimantEmail) || !contentTargetKind(body.targetKind)
     || !text(body.targetId, 1, 200) || !text(body.rightsStatement, 20, 4000)
     || body.goodFaith !== true) return null;
   return {

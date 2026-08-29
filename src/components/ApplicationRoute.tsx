@@ -10,6 +10,7 @@ import { MyLibraryPage } from './MyLibraryPage.tsx';
 import { ToneManagePage } from './ToneManagePage.tsx';
 import { CollectionManagePage } from './CollectionManagePage.tsx';
 import { MarketplaceRankingPage } from './MarketplaceLikesRoute.tsx';
+import { MarketplaceModerationRoute } from './MarketplaceModerationRoute.tsx';
 import type { AppPreferences } from '../app/preferences.ts';
 import type { AudioDiagnosticsSnapshot } from '../audio/audioDiagnostics.ts';
 import type { MidiState } from '../midi/useMidi.ts';
@@ -43,6 +44,9 @@ export function ApplicationRoute(props: ApplicationRouteProps) {
       return <PresetCollectionRoute pathname={pathname} onClose={close} onNavigate={onNavigate} />;
     case 'creator-profile':
       return <CreatorProfileRoute pathname={pathname} onClose={close} onNavigate={onNavigate} />;
+    case 'infringement-notice':
+    case 'moderation-cases':
+      return <MarketplaceModerationRoute pathname={pathname} onClose={close} onNavigate={onNavigate} />;
     case 'login':
       return <LoginPage locale={props.preferences.locale} search={props.search} onNavigate={onNavigate} />;
     case 'settings':

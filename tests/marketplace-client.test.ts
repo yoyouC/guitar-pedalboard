@@ -578,13 +578,16 @@ test('official client submits moderation requests, validates author cases, and p
     if (String(input) === '/api/marketplace/me/moderation') {
       return Response.json({ cases: [moderationCase] });
     }
+    if (String(input) === '/api/marketplace/reports') {
+      return Response.json({ report: { id: 'report-receipt-1' } }, { status: 201 });
+    }
     return new Response(null, { status: 201 });
   });
 
-  await client.submitReport({
+  assert.deepEqual(await client.submitReport({
     targetKind: 'preset', targetId: demoPublishedPreset.id,
     reason: 'impersonation', details: 'The author identity is misleading.',
-  });
+  }), { id: 'report-receipt-1' });
   await client.submitInfringementNotice({
     claimantName: 'Rights Holder', claimantEmail: 'rights@example.test',
     targetKind: 'preset', targetId: demoPublishedPreset.id,

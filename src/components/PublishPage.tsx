@@ -26,6 +26,8 @@ export function PublishPage({ onNavigate }: PublishPageProps) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [published, setPublished] = useState<PublishedPreset | null>(null);
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
+  const [retryAt, setRetryAt] = useState<string | null>(null);
 
   useEffect(() => {
     void marketplaceClient.listAvailableTags().then(setTags, (cause: unknown) => {
@@ -88,7 +90,7 @@ export function PublishPage({ onNavigate }: PublishPageProps) {
   const update = (patch: Partial<PublishDraft>) => setDraft((current) => current ? { ...current, ...patch } : current);
   const submit = async () => {
     if (!kind || !analysis || !canContinue) return;
-    setBusy(true); setMessage('');
+    setBusy(true); setMessage(''); setVerificationUrl(null); setRetryAt(null);
     try {
       const baseRequest = isRevision ? {
         title: '', description: '', tagIds: [], schemaVersion: RIG_PRESET_VERSION, rig: draft.rig,
@@ -103,6 +105,8 @@ export function PublishPage({ onNavigate }: PublishPageProps) {
       clearPublishDraft();
       setPublished(result.preset);
     } catch (cause) {
+      if (cause instanceof MarketplaceClientError && cause.verificationUrl) setVerificationUrl(cause.verificationUrl);
+      if (cause instanceof MarketplaceClientError && cause.retryAt) setRetryAt(cause.retryAt);
       setMessage(cause instanceof MarketplaceClientError && cause.fields
         ? Object.values(cause.fields).join('；')
         : cause instanceof Error ? cause.message : '发布失败；草稿仍保留。');
@@ -122,6 +126,8 @@ export function PublishPage({ onNavigate }: PublishPageProps) {
         {step === 4 && <><h2>最终预览</h2><dl><div><dt>Action</dt><dd>{kind && KIND_COPY[kind][0]}</dd></div><div><dt>Pedals</dt><dd>{draft.rig.chain.map((item) => item.effectId).join('、') || 'None'}</dd></div><div><dt>Amp / Cab</dt><dd>{draft.rig.amp.modelKey} / {draft.rig.cab.id}</dd></div>{!isRevision && <div><dt>Visibility</dt><dd>{draft.visibility}</dd></div>}</dl><label><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} />我确认当前预览、来源署名、可见性和社区条款</label></>}
       </div>
       {message && <p className="publish-dialog__error" role="alert">{message}</p>}
+      {verificationUrl && <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>}
+      {retryAt && <p>可重试时间：{new Date(retryAt).toLocaleString()}</p>}
       <div className="publish-page__actions"><button type="button" onClick={() => step === 0 ? onNavigate('/') : setStep((value) => value - 1)}>{step === 0 ? 'Cancel' : 'Back'}</button>{step < 4 ? <button type="button" disabled={!canContinue} onClick={() => setStep((value) => value + 1)}>Continue</button> : <button type="button" disabled={!canContinue || busy} onClick={() => void submit()}>{busy ? 'Publishing…' : kind && KIND_COPY[kind][0]}</button>}</div>
     </section>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import type {
   MarketplaceAuthorModerationCase,
+  MarketplaceContentModerationTargetKind,
   MarketplaceModerationTargetKind,
 } from '../../shared/marketplace';
 import { marketplaceClient } from '../marketplace/client';
@@ -28,7 +29,7 @@ function InfringementNoticeRoute({ onClose }: { onClose(): void }) {
   const initialKind = params.get('targetKind') === 'collection' ? 'collection' : 'preset';
   const [claimantName, setClaimantName] = useState('');
   const [claimantEmail, setClaimantEmail] = useState('');
-  const [targetKind, setTargetKind] = useState<MarketplaceModerationTargetKind>(initialKind);
+  const [targetKind, setTargetKind] = useState<MarketplaceContentModerationTargetKind>(initialKind);
   const [targetId, setTargetId] = useState(params.get('targetId') ?? '');
   const [rightsStatement, setRightsStatement] = useState('');
   const [goodFaith, setGoodFaith] = useState(false);
@@ -61,7 +62,7 @@ function InfringementNoticeRoute({ onClose }: { onClose(): void }) {
         <label>联系邮箱<input required type="email" maxLength={320} value={claimantEmail} onChange={(event) => setClaimantEmail(event.target.value)} /></label>
         <label>
           目标类型
-          <select value={targetKind} onChange={(event) => setTargetKind(event.target.value as MarketplaceModerationTargetKind)}>
+          <select value={targetKind} onChange={(event) => setTargetKind(event.target.value as MarketplaceContentModerationTargetKind)}>
             <option value="preset">广场预设</option>
             <option value="collection">预设合集</option>
           </select>

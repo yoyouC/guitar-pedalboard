@@ -13,6 +13,8 @@ export type AppRoute =
   | { kind: 'published-preset'; section: 'marketplace' }
   | { kind: 'preset-collection'; section: 'marketplace' }
   | { kind: 'creator-profile'; section: 'marketplace' }
+  | { kind: 'infringement-notice'; section: 'marketplace' }
+  | { kind: 'moderation-cases'; section: 'account' }
   | { kind: 'login'; section: 'account' }
   | { kind: 'library'; section: 'account' }
   | { kind: 'tone-manage'; section: 'account' }
@@ -56,6 +58,12 @@ export function resolveAppRoute(pathname: string): AppRoute {
   }
   if (creatorRouteFromPath(pathname)) {
     return { kind: 'creator-profile', section: 'marketplace' };
+  }
+  if (exactPath(pathname, '/marketplace/infringement-notice')) {
+    return { kind: 'infringement-notice', section: 'marketplace' };
+  }
+  if (exactPath(pathname, '/marketplace/me/moderation')) {
+    return { kind: 'moderation-cases', section: 'account' };
   }
   if (exactPath(pathname, '/login')) return { kind: 'login', section: 'account' };
   if (exactPath(pathname, '/library') || exactPath(pathname, '/marketplace/me/likes')) {

@@ -483,6 +483,14 @@ export default function App() {
         </main>
       )}
 
+      {!isPedalboard && (
+        <footer className="community-safety-footer">
+          <button type="button" onClick={() => navigate('/marketplace/infringement-notice')}>
+            正式侵权通知（无需登录）
+          </button>
+        </footer>
+      )}
+
       <Tone3000RedirectSelection />
     </div>
   );

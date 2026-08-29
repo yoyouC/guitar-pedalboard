@@ -3,6 +3,7 @@ import type {
   CreatePresetCollectionRequest,
   MarketplaceTag,
   MarketplaceAuthorModerationCase,
+  MarketplaceContentModerationTargetKind,
   MarketplaceLikeState,
   MarketplaceLikeTargetKind,
   MarketplaceDiscoverySearchRequest,
@@ -145,11 +146,11 @@ export interface MarketplaceClient {
     targetId: string;
     reason: MarketplaceModerationReportReason;
     details: string;
-  }): Promise<void>;
+  }): Promise<{ id: string }>;
   submitInfringementNotice(request: {
     claimantName: string;
     claimantEmail: string;
-    targetKind: MarketplaceModerationTargetKind;
+    targetKind: MarketplaceContentModerationTargetKind;
     targetId: string;
     rightsStatement: string;
     goodFaith: true;
@@ -705,7 +706,13 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
     },
 
     async submitReport(request) {
-      await moderationWrite(fetchResponse, '/api/marketplace/reports', request);
+      const response = await moderationWrite(fetchResponse, '/api/marketplace/reports', request);
+      const body = await response.json() as { report?: unknown };
+      if (!isRecord(body.report) || Object.keys(body.report).length !== 1
+        || typeof body.report.id !== 'string' || !body.report.id) {
+        throw new MarketplaceClientError('invalid_response', '举报回执格式无效。');
+      }
+      return { id: body.report.id };
     },
 
     async submitInfringementNotice(request) {
@@ -754,7 +761,7 @@ async function moderationWrite(
   fetchResponse: Fetch,
   path: string,
   body: object,
-): Promise<void> {
+): Promise<Response> {
   const response = await fetchResponse(path, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -762,6 +769,7 @@ async function moderationWrite(
   }).catch(() => null);
   if (!response) throw new MarketplaceClientError('network', '无法连接音色广场。');
   if (!response.ok) throw await publicationError(response);
+  return response;
 }
 
 async function rankingRequest(

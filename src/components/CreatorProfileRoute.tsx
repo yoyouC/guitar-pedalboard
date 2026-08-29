@@ -9,6 +9,7 @@ import {
 import { loadCreatorProfile } from '../members/loadCreatorProfile.ts';
 import { useMarketplacePageMetadata } from '../marketplace/pageMetadata.ts';
 import { creatorRouteFromPath } from '../marketplace/route.ts';
+import { MarketplaceReportForm } from './MarketplaceReportForm.tsx';
 
 interface CreatorProfileRouteProps {
   pathname: string;
@@ -75,6 +76,7 @@ export function CreatorProfileRoute({ pathname, onClose, onNavigate }: CreatorPr
                 {work.title}
               </button>
             ))}
+            <MarketplaceReportForm kind="member" targetId={creator.id} onNavigate={onNavigate} />
           </div>
         </>
       )}

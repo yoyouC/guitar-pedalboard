@@ -32,6 +32,7 @@ function fixture(writeLimiter?: MarketplaceWriteLimiter) {
     targets: [
       { kind: 'preset', id: 'preset-a', creatorId: 'member-author', visibility: 'public' },
       { kind: 'collection', id: 'collection-a', creatorId: 'member-author', visibility: 'unlisted' },
+      { kind: 'member', id: 'member-author', creatorId: 'member-author', visibility: 'public' },
     ],
     setMemberStatus: members.setCommunityStatus,
     async setTargetVisibility() {},
@@ -74,13 +75,18 @@ const report = {
 test('verified members report accessible content once while formal notices stay anonymous and distinct', async () => {
   const { request } = fixture();
   assert.equal((await request('/api/marketplace/reports', 'POST', undefined, report)).status, 401);
-  assert.equal((await request('/api/marketplace/reports', 'POST', 'reporter', report)).status, 201);
+  const accepted = await request('/api/marketplace/reports', 'POST', 'reporter', report);
+  assert.equal(accepted.status, 201);
+  assert.deepEqual(await accepted.json(), { report: { id: 'governance-1' } });
   assert.equal((await request('/api/marketplace/reports', 'POST', 'reporter', report)).status, 409);
   assert.equal((await request('/api/marketplace/reports', 'POST', 'reporter', {
     ...report, targetId: 'missing',
   })).status, 404);
   assert.equal((await request('/api/marketplace/reports', 'POST', 'reporter', {
     ...report, targetKind: 'collection', targetId: 'collection-a',
+  })).status, 201);
+  assert.equal((await request('/api/marketplace/reports', 'POST', 'other', {
+    ...report, targetKind: 'member', targetId: 'member-author', reason: 'impersonation',
   })).status, 201);
 
   const notice = {
@@ -98,7 +104,7 @@ test('verified members report accessible content once while formal notices stay 
 
   assert.equal((await request('/api/marketplace/admin/moderation/queue', 'GET', 'reporter')).status, 403);
   const queue = await (await request('/api/marketplace/admin/moderation/queue', 'GET', 'admin')).json();
-  assert.deepEqual(queue.items.map((item: { kind: string }) => item.kind), ['report', 'report', 'notice']);
+  assert.deepEqual(queue.items.map((item: { kind: string }) => item.kind), ['report', 'report', 'report', 'notice']);
   const queuedNotice = queue.items.find((item: { kind: string }) => item.kind === 'notice');
   assert.equal(queuedNotice.claimantName, 'Rights Holder');
   assert.equal(queuedNotice.claimantEmail, 'rights@example.test');

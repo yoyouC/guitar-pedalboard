@@ -9,6 +9,7 @@ import {
 const EXPORT_PATH = '/api/marketplace/me/export';
 const DELETION_PATH = '/api/marketplace/me/deletion';
 const PURGE_PATH = '/api/internal/marketplace/purge-deleted-accounts';
+export const RECENT_ACCOUNT_AUTHENTICATION_MS = 10 * 60 * 1000;
 
 export interface MarketplaceAccountApi {
   fetch(request: Request): Promise<Response>;
@@ -63,11 +64,22 @@ export function createMarketplaceAccountApi(input: {
         if ((await request.text()).trim()) {
           return error(400, 'invalid_account_request', 'Account lifecycle requests do not accept a body');
         }
+        const now = input.now();
+        if (identity.authenticatedAt) {
+          const age = now.getTime() - identity.authenticatedAt.getTime();
+          if (!Number.isFinite(age) || age < -60_000 || age > RECENT_ACCOUNT_AUTHENTICATION_MS) {
+            return Response.json({ error: {
+              code: 'recent_authentication_required',
+              message: 'Recent authentication is required for account lifecycle changes',
+              verificationUrl: `/login?return=${encodeURIComponent('/settings?section=account')}`,
+            } }, { status: 403 });
+          }
+        }
         if (request.method === 'POST') {
-          const deletion = await input.repository.requestDeletion(identity.authUserId, input.now());
+          const deletion = await input.repository.requestDeletion(identity.authUserId, now);
           return Response.json({ deletion }, { status: 202 });
         }
-        await input.repository.recoverDeletion(identity.authUserId, input.now());
+        await input.repository.recoverDeletion(identity.authUserId, now);
         return Response.json({ recovered: true });
       } catch (cause) {
         if (cause instanceof MarketplaceAccountNotFoundError) {

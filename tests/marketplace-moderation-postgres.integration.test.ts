@@ -31,8 +31,10 @@ test('PostgreSQL moderation enforces lifecycle, privacy, bans, and recognition e
       '0004_preset_publication.sql', '0005_preset_revision_management.sql',
       '0006_preset_remix_provenance.sql', '0007_preset_collections.sql',
       '0008_preset_search_indexes.sql', '0009_marketplace_likes.sql',
+      '0009_member_public_profile_terms.sql',
       '0010_marketplace_trending.sql', '0011_marketplace_moderation.sql',
-      '0012_account_lifecycle.sql',
+      '0012_account_lifecycle.sql', '0013_marketplace_write_limits.sql',
+      '0014_member_moderation_reports.sql',
     ]) {
       await client.query(await readFile(
         new URL(`../server/marketplace/migrations/${migration}`, import.meta.url), 'utf8',
@@ -114,15 +116,20 @@ test('PostgreSQL moderation enforces lifecycle, privacy, bans, and recognition e
       targetKind: 'preset', targetId: demoPublishedPreset.id,
       reason: 'impersonation', details: 'The creator identity appears misleading.',
     })).status, 201);
+    assert.equal((await request('/api/marketplace/reports', 'POST', 'author', {
+      targetKind: 'member', targetId: 'member-reporter',
+      reason: 'impersonation', details: 'This public creator identity appears misleading.',
+    })).status, 201);
     assert.equal((await request('/api/marketplace/infringement-notices', 'POST', undefined, {
       claimantName: 'Rights Holder', claimantEmail: 'rights@example.test',
       targetKind: 'collection', targetId: 'collection-moderation',
       rightsStatement: 'I own the identified material and request formal review.', goodFaith: true,
     })).status, 201);
     const queue = await (await request('/api/marketplace/admin/moderation/queue', 'GET', 'admin')).json();
-    assert.deepEqual(queue.items.map((item: { kind: string }) => item.kind), ['report', 'notice']);
-    assert.equal(queue.items[1].claimantName, 'Rights Holder');
-    assert.equal(queue.items[1].claimantEmail, 'rights@example.test');
+    assert.deepEqual(queue.items.map((item: { kind: string }) => item.kind), ['report', 'report', 'notice']);
+    const queuedNotice = queue.items.find((item: { kind: string }) => item.kind === 'notice');
+    assert.equal(queuedNotice.claimantName, 'Rights Holder');
+    assert.equal(queuedNotice.claimantEmail, 'rights@example.test');
 
     assert.equal((await request('/api/marketplace/admin/moderation/actions', 'POST', 'admin', {
       action: 'hide', subjectKind: 'preset', subjectId: demoPublishedPreset.id,

@@ -227,6 +227,10 @@ function serveMarketplaceApi(): Plugin {
           kind: 'collection', id: demoCollection.id,
           creatorId: demoCollection.creator.id, visibility: demoCollection.visibility,
         },
+        {
+          kind: 'member', id: demoPublishedPreset.creator.id,
+          creatorId: demoPublishedPreset.creator.id, visibility: 'public',
+        },
       ],
       setMemberStatus: async (memberId, status) => {
         await members.setCommunityStatus(memberId, status)

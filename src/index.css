@@ -199,6 +199,10 @@ body {
 .settings-account__terms summary { cursor: pointer; font-weight: 650; }
 .settings-account__terms p { margin: 9px 0 0; color: var(--text-dim); font-size: 12px; line-height: 1.6; }
 .settings-account__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-account__lifecycle { display: grid; gap: 10px; padding: 14px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 10px; }
+.settings-account__danger { border-color: rgba(231, 91, 91, 0.4); background: rgba(111, 24, 24, 0.14); }
+.community-safety-footer { display: flex; justify-content: center; padding: 18px; }
+.community-safety-footer button { background: transparent; color: var(--text-dim); border: 0; text-decoration: underline; }
 .member-panel__notice { padding: 9px; border-radius: 8px; background: rgba(137, 92, 18, 0.18); }
 .member-menu__loading { display: grid; place-items: center; min-width: 34px; color: var(--text-dim); }
 
