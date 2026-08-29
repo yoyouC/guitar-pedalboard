@@ -46,6 +46,10 @@ Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。�
 - `PATCH /api/marketplace/me/profile`
 - `GET /api/marketplace/creators/:handle`
 - `GET /api/marketplace/tags`
+- `GET|PUT|DELETE /api/marketplace/likes/presets/:id`
+- `GET|PUT|DELETE /api/marketplace/likes/collections/:id`
+- `GET /api/marketplace/me/likes`
+- `GET /api/marketplace/popular/presets` 与 `GET /api/marketplace/popular/collections`
 - `POST /api/marketplace/presets`
 - `GET /api/marketplace/presets/:id`（Public / Unlisted 当前修订）
 - `GET /api/marketplace/presets/:id/revisions/:revisionId`（固定修订永久链接）

@@ -1,5 +1,8 @@
 import type {
   CanonicalPublishedPresetRevision,
+  MarketplaceLikeState,
+  MarketplaceMyLikes,
+  MarketplacePopularPage,
   PresetCollection,
   PublishedPresetSearchPage,
   PublishedPreset,
@@ -356,4 +359,48 @@ export function parsePublishedPresetSearchPage(value: unknown): PublishedPresetS
     ) return null;
   }
   return value as unknown as PublishedPresetSearchPage;
+}
+
+function isLikeSummary(value: unknown, withLikedAt: boolean): boolean {
+  if (!isRecord(value) || !isRecord(value.creator)) return false;
+  const keys = ['id', 'title', 'creator', 'likeCount', ...(withLikedAt ? ['likedAt'] : [])];
+  return hasOnlyKeys(value, keys)
+    && typeof value.id === 'string' && value.id.length > 0
+    && typeof value.title === 'string' && value.title.length > 0
+    && hasOnlyKeys(value.creator, ['id', 'handle', 'displayName'])
+    && typeof value.creator.id === 'string'
+    && typeof value.creator.handle === 'string'
+    && typeof value.creator.displayName === 'string'
+    && Number.isInteger(value.likeCount) && Number(value.likeCount) >= 0
+    && (!withLikedAt || typeof value.likedAt === 'string');
+}
+
+export function parseMarketplaceLikeState(value: unknown): MarketplaceLikeState | null {
+  return isRecord(value)
+    && hasOnlyKeys(value, ['liked', 'canLike', 'likeCount'])
+    && typeof value.liked === 'boolean'
+    && typeof value.canLike === 'boolean'
+    && Number.isInteger(value.likeCount)
+    && Number(value.likeCount) >= 0
+    ? value as unknown as MarketplaceLikeState
+    : null;
+}
+
+export function parseMarketplaceMyLikes(value: unknown): MarketplaceMyLikes | null {
+  if (
+    !isRecord(value) || !hasOnlyKeys(value, ['presets', 'collections'])
+    || !Array.isArray(value.presets) || !Array.isArray(value.collections)
+    || !value.presets.every((item) => isLikeSummary(item, true))
+    || !value.collections.every((item) => isLikeSummary(item, true))
+  ) return null;
+  return value as unknown as MarketplaceMyLikes;
+}
+
+export function parseMarketplacePopularPage(value: unknown): MarketplacePopularPage | null {
+  if (
+    !isRecord(value) || !hasOnlyKeys(value, ['items', 'nextCursor'])
+    || !Array.isArray(value.items) || !value.items.every((item) => isLikeSummary(item, false))
+    || (value.nextCursor !== null && typeof value.nextCursor !== 'string')
+  ) return null;
+  return value as unknown as MarketplacePopularPage;
 }

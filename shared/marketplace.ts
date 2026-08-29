@@ -92,6 +92,35 @@ export interface PublishedPresetSearchPage {
   nextCursor: string | null;
 }
 
+export type MarketplaceLikeTargetKind = 'preset' | 'collection';
+
+export interface MarketplaceLikeState {
+  liked: boolean;
+  canLike: boolean;
+  likeCount: number;
+}
+
+export interface MarketplaceLikeTargetSummary {
+  id: string;
+  title: string;
+  creator: MarketplaceMemberSummary;
+  likeCount: number;
+}
+
+export interface MarketplaceLikedTargetSummary extends MarketplaceLikeTargetSummary {
+  likedAt: string;
+}
+
+export interface MarketplaceMyLikes {
+  presets: MarketplaceLikedTargetSummary[];
+  collections: MarketplaceLikedTargetSummary[];
+}
+
+export interface MarketplacePopularPage {
+  items: MarketplaceLikeTargetSummary[];
+  nextCursor: string | null;
+}
+
 export interface PublishedPresetSearchRequest {
   text?: string;
   tagIds?: string[];

@@ -386,3 +386,47 @@ test('official client sends structured preset search and validates the public re
     (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
   );
 });
+
+test('official client reads and mutates likes without accepting private trajectory drift', async () => {
+  const calls: Array<{ path: string; method?: string }> = [];
+  const summary = {
+    id: demoPublishedPreset.id,
+    title: demoPublishedPreset.title,
+    creator: demoPublishedPreset.creator,
+    likeCount: 3,
+  };
+  const client = createMarketplaceClient(async (input, init) => {
+    const path = String(input);
+    calls.push({ path, method: init?.method });
+    if (path === '/api/marketplace/me/likes') {
+      return Response.json({
+        likes: { presets: [{ ...summary, likedAt: demoPublishedPreset.updatedAt }], collections: [] },
+      });
+    }
+    if (path.startsWith('/api/marketplace/popular/')) {
+      return Response.json({ items: [summary], nextCursor: 'popular-next' });
+    }
+    return Response.json({ state: { liked: init?.method !== 'DELETE', canLike: true, likeCount: 3 } });
+  });
+
+  assert.equal((await client.getLikeState('preset', demoPublishedPreset.id)).likeCount, 3);
+  assert.equal((await client.setLike('preset', demoPublishedPreset.id, true)).liked, true);
+  assert.equal((await client.setLike('preset', demoPublishedPreset.id, false)).liked, false);
+  assert.deepEqual((await client.getMyLikes()).presets.map((item) => item.id), [demoPublishedPreset.id]);
+  assert.deepEqual((await client.listPopular('preset', { limit: 1, cursor: 'current' })).items, [summary]);
+  assert.deepEqual(calls, [
+    { path: `/api/marketplace/likes/presets/${demoPublishedPreset.id}`, method: 'GET' },
+    { path: `/api/marketplace/likes/presets/${demoPublishedPreset.id}`, method: 'PUT' },
+    { path: `/api/marketplace/likes/presets/${demoPublishedPreset.id}`, method: 'DELETE' },
+    { path: '/api/marketplace/me/likes', method: undefined },
+    { path: '/api/marketplace/popular/presets?limit=1&cursor=current', method: undefined },
+  ]);
+
+  const leaked = createMarketplaceClient(async () => Response.json({
+    items: [{ ...summary, likedAt: demoPublishedPreset.updatedAt }], nextCursor: null,
+  }));
+  await assert.rejects(
+    () => leaked.listPopular('preset'),
+    (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
+  );
+});

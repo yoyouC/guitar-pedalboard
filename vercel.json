@@ -32,6 +32,26 @@
       "destination": "/api/marketplace-search"
     },
     {
+      "source": "/api/marketplace/me/likes",
+      "destination": "/api/marketplace-like?route=mine"
+    },
+    {
+      "source": "/api/marketplace/popular/presets",
+      "destination": "/api/marketplace-like?route=popular-presets"
+    },
+    {
+      "source": "/api/marketplace/popular/collections",
+      "destination": "/api/marketplace-like?route=popular-collections"
+    },
+    {
+      "source": "/api/marketplace/likes/presets/:id",
+      "destination": "/api/marketplace-like?route=like-preset&id=:id"
+    },
+    {
+      "source": "/api/marketplace/likes/collections/:id",
+      "destination": "/api/marketplace-like?route=like-collection&id=:id"
+    },
+    {
       "source": "/api/marketplace/presets",
       "destination": "/api/marketplace-preset?route=presets"
     },

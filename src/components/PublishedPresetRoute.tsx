@@ -12,6 +12,7 @@ import { marketplaceClient } from '../marketplace/client';
 import { publishedPresetRouteFromPath } from '../marketplace/route';
 import { rigStore } from '../state/useRig';
 import { PublishedPresetManager } from './PublishedPresetManager';
+import { MarketplaceLikeButton } from './MarketplaceLikeButton';
 
 interface DisplayedPreset {
   id: string;
@@ -225,6 +226,9 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
             <p className="marketplace-detail__tags">
               {loadState.displayed.tags.map((tag) => tag.nameZh).join(' · ')}
             </p>
+            {!loadState.displayed.fixedRevision && loadState.displayed.visibility !== 'withdrawn' && (
+              <MarketplaceLikeButton kind="preset" targetId={loadState.displayed.id} />
+            )}
           </div>
 
           {loadState.displayed.visibility === 'unlisted' && (

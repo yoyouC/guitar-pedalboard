@@ -2,6 +2,10 @@ import type {
   AppendPublishedPresetRevisionRequest,
   CreatePresetCollectionRequest,
   MarketplaceTag,
+  MarketplaceLikeState,
+  MarketplaceLikeTargetKind,
+  MarketplaceMyLikes,
+  MarketplacePopularPage,
   PresetCollection,
   PresetCollectionConcurrencyState,
   PublishedPresetSearchPage,
@@ -18,6 +22,9 @@ import type {
 } from '../../shared/marketplace';
 import {
   parseManagedPublishedPreset,
+  parseMarketplaceLikeState,
+  parseMarketplaceMyLikes,
+  parseMarketplacePopularPage,
   parsePresetCollection,
   parsePublishedPresetSearchPage,
   parsePublicPublishedPreset,
@@ -33,6 +40,7 @@ export type MarketplaceClientErrorCode =
   | 'invalid_publication'
   | 'invalid_update'
   | 'invalid_search'
+  | 'forbidden'
   | 'update_conflict';
 
 export class MarketplaceClientError extends Error {
@@ -89,6 +97,13 @@ export interface MarketplaceClient {
     request: UpdatePresetCollectionRequest,
   ): Promise<PresetCollection>;
   searchPublishedPresets(request: PublishedPresetSearchRequest): Promise<PublishedPresetSearchPage>;
+  getLikeState(kind: MarketplaceLikeTargetKind, id: string): Promise<MarketplaceLikeState>;
+  setLike(kind: MarketplaceLikeTargetKind, id: string, liked: boolean): Promise<MarketplaceLikeState>;
+  getMyLikes(): Promise<MarketplaceMyLikes>;
+  listPopular(
+    kind: MarketplaceLikeTargetKind,
+    request?: { limit?: number; cursor?: string },
+  ): Promise<MarketplacePopularPage>;
 }
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -111,6 +126,12 @@ async function publicationError(response: Response): Promise<MarketplaceClientEr
         : undefined;
       if (response.status === 401) {
         return new MarketplaceClientError('authentication_required', '请先登录再发布。');
+      }
+      if (error.code === 'self_like_forbidden') {
+        return new MarketplaceClientError('forbidden', '不能给自己的作品点赞。');
+      }
+      if (error.code === 'like_target_not_found') {
+        return new MarketplaceClientError('not_found', '点赞目标当前不可访问。');
       }
       if (error.code === 'invalid_publication') {
         return new MarketplaceClientError(
@@ -492,7 +513,61 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
       if (!page) throw new MarketplaceClientError('invalid_response', '搜索结果格式无效。');
       return page;
     },
+
+    async getLikeState(kind, id) {
+      return likeStateRequest(fetchResponse, kind, id, 'GET');
+    },
+
+    async setLike(kind, id, liked) {
+      return likeStateRequest(fetchResponse, kind, id, liked ? 'PUT' : 'DELETE');
+    },
+
+    async getMyLikes() {
+      const response = await fetchResponse('/api/marketplace/me/likes').catch(() => null);
+      if (!response) throw new MarketplaceClientError('network', '无法连接音色广场。');
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { likes?: unknown };
+      const likes = parseMarketplaceMyLikes(body.likes);
+      if (!likes) throw new MarketplaceClientError('invalid_response', '点赞列表格式无效。');
+      return likes;
+    },
+
+    async listPopular(kind, request = {}) {
+      const params = new URLSearchParams();
+      if (request.limit !== undefined) params.set('limit', String(request.limit));
+      if (request.cursor) params.set('cursor', request.cursor);
+      const response = await fetchResponse(
+        `/api/marketplace/popular/${likeTargetSegment(kind)}?${params}`,
+      ).catch(() => null);
+      if (!response) throw new MarketplaceClientError('network', '无法连接音色广场。');
+      if (!response.ok) throw await publicationError(response);
+      const page = parseMarketplacePopularPage(await response.json());
+      if (!page) throw new MarketplaceClientError('invalid_response', '热门列表格式无效。');
+      return page;
+    },
   };
+}
+
+async function likeStateRequest(
+  fetchResponse: Fetch,
+  kind: MarketplaceLikeTargetKind,
+  id: string,
+  method: 'GET' | 'PUT' | 'DELETE',
+): Promise<MarketplaceLikeState> {
+  const response = await fetchResponse(
+    `/api/marketplace/likes/${likeTargetSegment(kind)}/${encodeURIComponent(id)}`,
+    { method },
+  ).catch(() => null);
+  if (!response) throw new MarketplaceClientError('network', '无法连接音色广场。');
+  if (!response.ok) throw await publicationError(response);
+  const body = await response.json() as { state?: unknown };
+  const state = parseMarketplaceLikeState(body.state);
+  if (!state) throw new MarketplaceClientError('invalid_response', '点赞状态格式无效。');
+  return state;
+}
+
+function likeTargetSegment(kind: MarketplaceLikeTargetKind): 'presets' | 'collections' {
+  return kind === 'preset' ? 'presets' : 'collections';
 }
 
 export const marketplaceClient = createMarketplaceClient();

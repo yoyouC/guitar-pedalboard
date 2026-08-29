@@ -3500,6 +3500,12 @@ body.midi-learn-mode input:disabled {
 .marketplace-search__results article button { padding: 0; border: 0; background: none; color: #8dc7ff; font-size: 16px; text-align: left; }
 .marketplace-search__results article p { margin: 0; }
 
+.marketplace-like { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.marketplace-like small { opacity: 0.72; }
+.marketplace-ranking-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.marketplace-ranking article { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; padding: 11px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
+.marketplace-ranking article small { grid-column: 2; }
+
 .publish-dialog__backdrop {
   position: fixed;
   inset: 0;
