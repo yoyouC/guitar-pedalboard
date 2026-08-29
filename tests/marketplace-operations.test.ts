@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { watch } from 'node:fs';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { Client, type Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { demoPublishedPreset } from '../server/marketplace/demoPreset.ts';
 import { seedPublishedPreset } from '../server/marketplace/seed.ts';
 import {
@@ -25,12 +24,14 @@ import { postgresCommandEnvironment } from '../server/operations/postgresCommand
 import { evaluateMarketplaceAvailability } from '../server/operations/availability.ts';
 import {
   assertMarketplaceBackupFactsMatch,
+  createPostgresMarketplaceBackupMutex,
   evaluateMarketplaceBackupFreshness,
   isMarketplaceBackupManifest,
   marketplaceBackupArtifactPaths,
   readMarketplaceBackupFacts,
   runDailyMarketplaceBackup,
   type MarketplaceBackupFacts,
+  type MarketplaceBackupMutex,
 } from '../server/operations/backup.ts';
 
 const connectionString = process.env.MARKETPLACE_TEST_DATABASE_URL;
@@ -52,6 +53,27 @@ function testBackupManifest(archivePath: string, completedAt: Date, archive = 'a
     completedAt: completedAt.toISOString(),
     durationMs: 1_000,
   });
+}
+
+function createTestBackupMutex(): MarketplaceBackupMutex {
+  let held = false;
+  return {
+    async tryAcquire() {
+      if (held) return null;
+      held = true;
+      let released = false;
+      return {
+        async fence() {
+          if (released || !held) throw new Error('Marketplace backup lost its publication mutex');
+        },
+        async release() {
+          if (released) return;
+          released = true;
+          held = false;
+        },
+      };
+    },
+  };
 }
 
 test('operations report enforces representative scale and every published latency target', () => {
@@ -299,6 +321,7 @@ test('backup and restore commands keep credentials out of argv and restore atomi
 test('daily backup uses one UTC artifact, rejects overlap, and retries cleanly after target failure', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'marketplace-backup-test-'));
   const now = new Date('2026-08-29T23:59:00.000Z');
+  const mutex = createTestBackupMutex();
   const paths = marketplaceBackupArtifactPaths(directory, now, 1234);
   assert.equal(paths.dayKey, '2026-08-29');
   assert.equal(paths.archivePath.endsWith('/marketplace-2026-08-29.dump'), true);
@@ -308,7 +331,7 @@ test('daily backup uses one UTC artifact, rejects overlap, and retries cleanly a
   const started = new Promise<void>((resolve) => { markStarted = resolve; });
   const held = new Promise<void>((resolve) => { release = resolve; });
   try {
-    const first = runDailyMarketplaceBackup({ directory, now, processId: 1234 }, async (owned) => {
+    const first = runDailyMarketplaceBackup({ directory, now, processId: 1234, mutex }, async (owned) => {
       markStarted();
       await held;
       await writeFile(owned.partialArchivePath, 'archive');
@@ -316,14 +339,14 @@ test('daily backup uses one UTC artifact, rejects overlap, and retries cleanly a
     });
     await started;
     await assert.rejects(
-      () => runDailyMarketplaceBackup({ directory, now, processId: 5678 }, async () => undefined),
+      () => runDailyMarketplaceBackup({ directory, now, processId: 5678, mutex }, async () => undefined),
       /already in progress/,
     );
     release();
     assert.equal((await first).status, 'completed');
     let repeated = false;
     const skipped = await runDailyMarketplaceBackup(
-      { directory, now, processId: 9999 },
+      { directory, now, processId: 9999, mutex },
       async () => { repeated = true; },
     );
     assert.equal(skipped.status, 'skipped');
@@ -331,13 +354,13 @@ test('daily backup uses one UTC artifact, rejects overlap, and retries cleanly a
 
     const nextDay = new Date('2026-08-30T00:01:00.000Z');
     await assert.rejects(
-      () => runDailyMarketplaceBackup({ directory, now: nextDay, processId: 1234 }, async () => {
+      () => runDailyMarketplaceBackup({ directory, now: nextDay, processId: 1234, mutex }, async () => {
         throw new Error('backup target unavailable');
       }),
       /backup target unavailable/,
     );
     const retried = await runDailyMarketplaceBackup(
-      { directory, now: nextDay, processId: 5678 },
+      { directory, now: nextDay, processId: 5678, mutex },
       async (owned) => {
         await writeFile(owned.partialArchivePath, 'archive');
         await writeFile(owned.partialManifestPath, testBackupManifest(owned.archivePath, nextDay));
@@ -354,7 +377,7 @@ test('daily backup uses one UTC artifact, rejects overlap, and retries cleanly a
     ));
     let recoveredCorruptManifest = false;
     const recovered = await runDailyMarketplaceBackup(
-      { directory, now: corruptDay, processId: 5678 },
+      { directory, now: corruptDay, processId: 5678, mutex },
       async (owned) => {
         recoveredCorruptManifest = true;
         await writeFile(owned.partialArchivePath, 'replacement archive');
@@ -380,54 +403,33 @@ test('backup manifest requires a restorable source and a real SHA-256 digest', (
   assert.equal(isMarketplaceBackupManifest({ ...valid, sha256: 'not-a-digest' }), false);
 });
 
-test('expired backup owners cannot publish or release a successor lease', async () => {
+test('backup publication is fenced when the owner loses its mutex', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'marketplace-backup-fencing-'));
   const now = new Date('2026-08-29T01:00:00.000Z');
   const paths = marketplaceBackupArtifactPaths(directory, now, 1234);
-  let resume: () => void = () => undefined;
-  let markReady: () => void = () => undefined;
-  const ready = new Promise<void>((resolve) => { markReady = resolve; });
-  const held = new Promise<void>((resolve) => { resume = resolve; });
+  let released = false;
+  const mutex: MarketplaceBackupMutex = {
+    async tryAcquire() {
+      return {
+        async fence() { throw new Error('Marketplace backup lost its publication mutex'); },
+        async release() { released = true; },
+      };
+    },
+  };
   try {
-    const oldOwner = runDailyMarketplaceBackup(
-      { directory, now, processId: 1234, leaseDurationMs: 1 },
+    await assert.rejects(() => runDailyMarketplaceBackup(
+      { directory, now, processId: 1234, mutex },
       async (owned) => {
-        await writeFile(owned.partialArchivePath, 'old archive');
+        await writeFile(owned.partialArchivePath, 'archive');
         await writeFile(owned.partialManifestPath, testBackupManifest(
-          owned.archivePath, now, 'old archive',
+          owned.archivePath, now,
         ));
-        markReady();
-        await held;
       },
-    );
-    await ready;
-    const successor = {
-      ownerToken: 'successor-owner', processId: 999_999, hostname: 'other-host',
-      acquiredAt: now.toISOString(), expiresAt: new Date(now.getTime() + 60_000).toISOString(),
-    };
-    await writeFile(paths.leasePath, `${JSON.stringify(successor)}\n`);
-    const successorLeaseVisibilityChecks: Array<Promise<boolean>> = [];
-    const successorLeaseWatcher = watch(paths.leasePath, (eventType) => {
-      if (eventType === 'rename') {
-        successorLeaseVisibilityChecks.push(access(paths.leasePath).then(
-          () => true,
-          () => false,
-        ));
-      }
-    });
-    try {
-      resume();
-      await assert.rejects(oldOwner, /lost its lease/);
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    } finally {
-      successorLeaseWatcher.close();
-    }
-    assert.deepEqual(JSON.parse(await readFile(paths.leasePath, 'utf8')), successor);
-    assert.equal((await Promise.all(successorLeaseVisibilityChecks)).every(Boolean), true);
+    ), /lost its publication mutex/);
+    assert.equal(released, true);
     await assert.rejects(() => readFile(paths.archivePath), /ENOENT/);
     await assert.rejects(() => readFile(paths.manifestPath), /ENOENT/);
   } finally {
-    resume();
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -499,5 +501,26 @@ test('PostgreSQL backup facts fingerprint the actual restorable fact tables', {
   } finally {
     await client.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await client.end();
+  }
+});
+
+test('PostgreSQL backup mutex keeps takeover fenced until the publication owner releases', {
+  skip: connectionString ? false : 'Set MARKETPLACE_TEST_DATABASE_URL for backup mutex integration',
+}, async () => {
+  const pool = new Pool({ connectionString });
+  const mutex = createPostgresMarketplaceBackupMutex(pool);
+  try {
+    const owner = await mutex.tryAcquire('2026-08-29');
+    assert.ok(owner);
+    assert.equal(await mutex.tryAcquire('2026-08-29'), null);
+    await owner.fence();
+    assert.equal(await mutex.tryAcquire('2026-08-29'), null);
+    await owner.release();
+
+    const successor = await mutex.tryAcquire('2026-08-29');
+    assert.ok(successor);
+    await successor.release();
+  } finally {
+    await pool.end();
   }
 });

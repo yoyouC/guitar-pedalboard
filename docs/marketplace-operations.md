@@ -48,7 +48,7 @@ npm run marketplace:availability-report
 
 ## 每日备份和恢复演练
 
-备份 runner 必须是支持 `pg_dump` 的持久任务环境，不使用 Vercel Function 的 `/tmp` 作为归档。安装 `ops/marketplace-backup.crontab` 后每小时触发备份和 freshness 检查：runner 以 UTC 日期作幂等键，在 durable 目录用 owner token 与 owner-proof 硬链接原子领取可过期互斥 lease；只有当前 owner 能把 archive/manifest 所在目录作为一个原子 bundle 发布。释放只删除自己的 owner-proof，不移动公共 lease 路径；因此已接管的 successor 不会短暂失锁，后续 runner 可安全回收已释放或过期的 lease。失败不会生成成功 manifest，所以下一小时自动补跑。`marketplace:backup:status` 要求完整 manifest、实际 archive 和 SHA-256 一致；当前 UTC 日已有成功备份时保持健康，否则应用 23 小时 catch-up 上限，避免日末固定误报并在跨日失败后及时告警。完成只指 archive 与 manifest 已进入加密、跨故障域的持久存储。
+备份 runner 必须是支持 `pg_dump` 的持久任务环境，不使用 Vercel Function 的 `/tmp` 作为归档。安装 `ops/marketplace-backup.crontab` 后每小时触发备份和 freshness 检查：runner 以 UTC 日期作幂等键，通过独占 PostgreSQL session advisory mutex 原子领取执行权；mutex 与专用连接同生命周期，runner 崩溃或连接断开时由 PostgreSQL 自动释放，不需要在 durable 目录执行有竞态的 stale lease 接管。发布前在同一 session 重入 mutex 形成 fencing，随后才把已校验的 archive/manifest 目录原子发布，并在发布完成后解锁。失败不会生成成功 manifest，所以下一小时自动补跑。`marketplace:backup:status` 要求完整 manifest、实际 archive 和 SHA-256 一致；当前 UTC 日已有成功备份时保持健康，否则应用 23 小时 catch-up 上限，避免日末固定误报并在跨日失败后及时告警。完成只指 archive 与 manifest 已进入加密、跨故障域的持久存储。
 
 ```sh
 MARKETPLACE_BACKUP_DATABASE_URL='postgresql://…/marketplace' \

@@ -1,7 +1,6 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { access, link, mkdir, open, readFile, rename, rm } from 'node:fs/promises';
-import { hostname } from 'node:os';
+import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import type { QueryResultRow } from 'pg';
 import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
@@ -10,7 +9,6 @@ import {
   type MarketplaceDatabaseIdentity,
 } from './restoreSafety.ts';
 
-const DEFAULT_LEASE_DURATION_MS = 2 * 60 * 60 * 1_000;
 const DEFAULT_BACKUP_MAX_AGE_MS = 23 * 60 * 60 * 1_000;
 
 export interface MarketplaceBackupFactSummary {
@@ -30,7 +28,6 @@ export interface MarketplaceBackupArtifactPaths {
   bundlePath: string;
   archivePath: string;
   manifestPath: string;
-  leasePath: string;
   partialBundlePath: string;
   partialArchivePath: string;
   partialManifestPath: string;
@@ -47,16 +44,79 @@ export interface MarketplaceBackupManifest {
   durationMs: number;
 }
 
-interface MarketplaceBackupLease {
-  ownerToken: string;
-  processId: number;
-  hostname: string;
-  acquiredAt: string;
-  expiresAt: string;
+export interface MarketplaceBackupMutexLease {
+  fence(): Promise<void>;
+  release(): Promise<void>;
 }
 
-interface AcquiredMarketplaceBackupLease extends MarketplaceBackupLease {
-  ownerPath: string;
+export interface MarketplaceBackupMutex {
+  tryAcquire(dayKey: string): Promise<MarketplaceBackupMutexLease | null>;
+}
+
+interface MarketplaceBackupPostgresClient extends PostgresQueryable {
+  release(destroy?: boolean): void;
+}
+
+export function createPostgresMarketplaceBackupMutex(database: {
+  connect(): Promise<MarketplaceBackupPostgresClient>;
+}): MarketplaceBackupMutex {
+  return {
+    async tryAcquire(dayKey) {
+      const client = await database.connect();
+      const key = `marketplace-backup:${dayKey}`;
+      try {
+        const acquired = await client.query<{ acquired: boolean }>(
+          `SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired`,
+          [key],
+        );
+        if (!acquired.rows[0]?.acquired) {
+          client.release();
+          return null;
+        }
+      } catch (cause) {
+        client.release(true);
+        throw cause;
+      }
+
+      let holdCount = 1;
+      let released = false;
+      return {
+        async fence() {
+          if (released) throw new Error('Marketplace backup mutex was already released');
+          const fenced = await client.query<{ acquired: boolean }>(
+            `SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired`,
+            [key],
+          );
+          if (!fenced.rows[0]?.acquired) {
+            throw new Error('Marketplace backup lost its publication mutex');
+          }
+          holdCount += 1;
+        },
+        async release() {
+          if (released) return;
+          released = true;
+          let destroy = false;
+          try {
+            while (holdCount > 0) {
+              const unlocked = await client.query<{ unlocked: boolean }>(
+                `SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked`,
+                [key],
+              );
+              if (!unlocked.rows[0]?.unlocked) {
+                throw new Error('Marketplace backup publication mutex was not held');
+              }
+              holdCount -= 1;
+            }
+          } catch (cause) {
+            destroy = true;
+            throw cause;
+          } finally {
+            client.release(destroy);
+          }
+        },
+      };
+    },
+  };
 }
 
 export function evaluateMarketplaceBackupFreshness(
@@ -94,7 +154,6 @@ export function marketplaceBackupArtifactPaths(
     bundlePath,
     archivePath,
     manifestPath,
-    leasePath: resolve(root, `marketplace-${dayKey}.lease`),
     partialBundlePath,
     partialArchivePath: resolve(partialBundlePath, archiveName),
     partialManifestPath: resolve(partialBundlePath, `${archiveName}.json`),
@@ -106,19 +165,15 @@ export async function runDailyMarketplaceBackup(
     directory: string;
     now: Date;
     processId: number;
-    leaseDurationMs?: number;
+    mutex: MarketplaceBackupMutex;
   },
   action: (paths: MarketplaceBackupArtifactPaths) => Promise<void>,
 ): Promise<{ status: 'completed' | 'skipped'; paths: MarketplaceBackupArtifactPaths }> {
   await mkdir(resolve(input.directory), { recursive: true });
   const paths = marketplaceBackupArtifactPaths(input.directory, input.now, input.processId);
   if (await isCompletedBackup(paths)) return { status: 'skipped', paths };
-  const lease = await acquireLease(
-    paths.leasePath,
-    input.now,
-    input.processId,
-    input.leaseDurationMs ?? DEFAULT_LEASE_DURATION_MS,
-  );
+  const lease = await input.mutex.tryAcquire(paths.dayKey);
+  if (!lease) throw new Error('Marketplace backup is already in progress');
   try {
     if (await isCompletedBackup(paths)) return { status: 'skipped', paths };
     await rm(paths.bundlePath, { recursive: true, force: true });
@@ -130,7 +185,7 @@ export async function runDailyMarketplaceBackup(
       await assertCompleteMarketplaceBackup(
         paths.partialArchivePath, manifest, basename(paths.archivePath),
       );
-      await assertLeaseOwner(paths.leasePath, lease.ownerToken);
+      await lease.fence();
       await rename(paths.partialBundlePath, paths.bundlePath);
       return { status: 'completed', paths };
     } finally {
@@ -141,134 +196,10 @@ export async function runDailyMarketplaceBackup(
   }
 }
 
-async function acquireLease(
-  leasePath: string,
-  now: Date,
-  processId: number,
-  leaseDurationMs: number,
-): Promise<AcquiredMarketplaceBackupLease> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const ownerToken = randomUUID();
-    const candidatePath = marketplaceLeaseOwnerPath(leasePath, ownerToken);
-    const lease: MarketplaceBackupLease = {
-      ownerToken,
-      processId,
-      hostname: hostname(),
-      acquiredAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + leaseDurationMs).toISOString(),
-    };
-    try {
-      const candidate = await open(candidatePath, 'wx', 0o600);
-      try {
-        await candidate.writeFile(`${JSON.stringify(lease)}\n`);
-        await candidate.sync();
-      } finally {
-        await candidate.close();
-      }
-      await link(candidatePath, leasePath);
-      return { ...lease, ownerPath: candidatePath };
-    } catch (cause) {
-      await rm(candidatePath, { force: true });
-      if (!isAlreadyExists(cause)) throw cause;
-      const existing = await readLease(leasePath);
-      const ownerProofMissing = !existing || !(await pathExists(
-        marketplaceLeaseOwnerPath(leasePath, existing.ownerToken),
-      ));
-      if (
-        attempt === 0
-        && (
-          ownerProofMissing
-          || (leaseExpired(existing, now) && !leaseOwnerIsAlive(existing))
-        )
-      ) {
-        const stalePath = `${leasePath}.stale-${processId}-${now.getTime()}`;
-        try {
-          await rename(leasePath, stalePath);
-          const moved = await readLease(stalePath);
-          if (moved?.ownerToken !== existing?.ownerToken) {
-            try { await link(stalePath, leasePath); } catch { /* another owner won */ }
-            throw new Error('Marketplace backup lease changed during takeover');
-          }
-          await rm(stalePath, { force: true });
-          if (moved) {
-            await rm(marketplaceLeaseOwnerPath(leasePath, moved.ownerToken), { force: true });
-          }
-        } catch (renameCause) {
-          if (!isNoEntry(renameCause)) throw renameCause;
-        }
-        continue;
-      }
-      throw new Error('Marketplace backup is already in progress');
-    }
-  }
-  throw new Error('Marketplace backup is already in progress');
-}
-
-async function readLease(path: string): Promise<MarketplaceBackupLease | null> {
-  try {
-    const lease = JSON.parse(await readFile(path, 'utf8')) as Partial<MarketplaceBackupLease>;
-    return typeof lease.ownerToken === 'string'
-      && typeof lease.processId === 'number'
-      && typeof lease.hostname === 'string'
-      && typeof lease.acquiredAt === 'string'
-      && typeof lease.expiresAt === 'string'
-      ? lease as MarketplaceBackupLease
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function leaseExpired(lease: MarketplaceBackupLease | null, now: Date): boolean {
-  return !lease || !Number.isFinite(Date.parse(lease.expiresAt))
-    || Date.parse(lease.expiresAt) <= now.getTime();
-}
-
-function leaseOwnerIsAlive(lease: MarketplaceBackupLease | null): boolean {
-  if (!lease || lease.hostname !== hostname()) return false;
-  try {
-    process.kill(lease.processId, 0);
-    return true;
-  } catch (cause) {
-    return Boolean(cause && typeof cause === 'object' && 'code' in cause && cause.code === 'EPERM');
-  }
-}
-
-async function assertLeaseOwner(leasePath: string, ownerToken: string): Promise<void> {
-  if ((await readLease(leasePath))?.ownerToken !== ownerToken) {
-    throw new Error('Marketplace backup lost its lease before publication');
-  }
-}
-
 async function releaseLease(
-  lease: AcquiredMarketplaceBackupLease,
+  lease: MarketplaceBackupMutexLease,
 ): Promise<void> {
-  // The owner-specific hard link is the ownership proof. Removing only that
-  // proof makes this lease reclaimable without ever moving a successor's
-  // well-known lease path.
-  await rm(lease.ownerPath, { force: true });
-}
-
-function marketplaceLeaseOwnerPath(leasePath: string, ownerToken: string): string {
-  return `${leasePath}.candidate-${ownerToken}`;
-}
-
-async function pathExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch (cause) {
-    if (isNoEntry(cause)) return false;
-    throw cause;
-  }
-}
-
-function isAlreadyExists(cause: unknown): boolean {
-  return Boolean(cause && typeof cause === 'object' && 'code' in cause && cause.code === 'EEXIST');
-}
-
-function isNoEntry(cause: unknown): boolean {
-  return Boolean(cause && typeof cause === 'object' && 'code' in cause && cause.code === 'ENOENT');
+  await lease.release();
 }
 
 async function isCompletedBackup(paths: MarketplaceBackupArtifactPaths): Promise<boolean> {
