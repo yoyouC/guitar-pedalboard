@@ -1,16 +1,28 @@
 import { useRef, useState } from 'react';
 import { rigToShareState } from '../state/rigStore';
+import { rigToPresetState } from '../state/rigStore';
 import { writeShareToLocation } from '../state/share';
 import { rigStore, useRig } from '../state/useRig';
+import type { RigPresetState } from '../state/presetCodec';
+import { PublishPresetDialog } from './PublishPresetDialog';
 
-/** 完整 Rig 预设:localStorage 持久化、JSON 导入导出与 URL 分享。 */
-export function PresetBar() {
+interface PresetBarProps {
+  onNavigate(pathname: string): void;
+}
+
+/** 完整 Rig 预设:localStorage 持久化、JSON 导入导出、URL 分享与显式广场发布。 */
+export function PresetBar({ onNavigate }: PresetBarProps) {
   const presets = useRig((s) => s.presets);
   const importRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState('');
   const [shared, setShared] = useState(false);
   const [transferStatus, setTransferStatus] = useState('');
+  const [publication, setPublication] = useState<{
+    rig: RigPresetState;
+    sourceLabel: string;
+    initialTitle: string;
+  } | null>(null);
 
   const handleLoad = async (presetName: string) => {
     const result = await rigStore.loadPreset(presetName);
@@ -128,6 +140,29 @@ export function PresetBar() {
       <button className={shared ? 'active' : ''} title="复制当前配置(链条+箱头+箱体)的分享链接" onClick={handleShare}>
         {shared ? '✓ 已复制' : '🔗 分享'}
       </button>
+      <button onClick={() => setPublication({
+        rig: rigToPresetState(rigStore.getState()),
+        sourceLabel: '当前完整 Rig',
+        initialTitle: '',
+      })}>发布当前 Rig</button>
+      <button disabled={!selected} onClick={() => {
+        const preset = presets.find((candidate) => candidate.name === selected);
+        if (preset) setPublication({
+          rig: preset.rig,
+          sourceLabel: `本地 Preset · ${preset.name}`,
+          initialTitle: preset.name,
+        });
+      }}>发布所选 Preset</button>
+      {publication && (
+        <PublishPresetDialog
+          {...publication}
+          onClose={() => setPublication(null)}
+          onPublished={(pathname) => {
+            setPublication(null);
+            onNavigate(pathname);
+          }}
+        />
+      )}
     </div>
   );
 }

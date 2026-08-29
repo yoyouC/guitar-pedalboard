@@ -1,8 +1,5 @@
 import type { EffectDefinition } from '../audio/effects/types';
-import { EFFECT_REGISTRY } from '../audio/effects';
-import { AMP_REGISTRY } from '../audio/amps';
-import { CAB_REGISTRY } from '../audio/cabs';
-import { AMP_CATEGORIES } from '../audio/ampCategories';
+import { RIG_PRESET_CATALOG } from '../../shared/rigPresetCatalog';
 import {
   createRigPreset,
   exportRigPresetsJson,
@@ -10,7 +7,6 @@ import {
   normalizeSnapshot,
   restoreRigPreset,
   type RigPreset,
-  type RigPresetCatalog,
   type RigPresetState,
   type RestoredRigPresetState,
   type Snapshot,
@@ -28,58 +24,18 @@ export interface ChainItem {
   post: boolean;
 }
 
-/** 默认进 FX Loop 的效果器类型(延迟/混响类惯例) */
-const FX_LOOP_EFFECTS = new Set([
-  'delay',
-  'reverb',
-  'springreverb',
-  'plate',
-  'shimmer',
-  'analogdelay',
-  'tapedelay',
-  'pingpong',
-]);
-
-/** 真实目录:由效果/箱头/箱体注册表与箱头分类构建,所有 normalize 路径共用(ADR-0006) */
-export const RIG_PRESET_CATALOG: RigPresetCatalog = {
-  effects: EFFECT_REGISTRY.map((definition) => ({
-    id: definition.id,
-    params: definition.params,
-    defaultPost: FX_LOOP_EFFECTS.has(definition.id),
-  })),
-  amps: AMP_REGISTRY.map((definition) => ({
-    id: definition.id,
-    params: definition.params,
-  })),
-  cabs: CAB_REGISTRY.map((definition) => ({
-      id: definition.id,
-      params: definition.params,
-    })),
-  ampModels: AMP_CATEGORIES.flatMap((category) =>
-    category.models.map((model) => ({
-      key: model.key,
-      categoryId: category.id,
-      ampId: model.kind === 'builtin' ? model.ref : 'nam-wasm',
-    })),
-  ),
-  ampCategoryIds: AMP_CATEGORIES.map((category) => category.id),
-  defaults: {
-    ampModelKey: 'builtin:crunch',
-    cabId: 'gb4x12',
-    inputGain: 1,
-    masterVolume: 0.5,
-  },
-};
+export { RIG_PRESET_CATALOG } from '../../shared/rigPresetCatalog';
 
 export function createChainItem(def: EffectDefinition): ChainItem {
   const values: Record<string, number> = {};
   for (const p of def.params) values[p.key] = p.defaultValue;
+  const catalogDefinition = RIG_PRESET_CATALOG.effects.find((candidate) => candidate.id === def.id);
   return {
     uid: crypto.randomUUID(),
     effectId: def.id,
     enabled: true,
     values,
-    post: FX_LOOP_EFFECTS.has(def.id),
+    post: catalogDefinition?.defaultPost ?? false,
   };
 }
 

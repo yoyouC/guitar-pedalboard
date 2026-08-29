@@ -103,6 +103,9 @@ export function PublishedPresetRoute({ pathname, onClose }: PublishedPresetRoute
             <p className="marketplace-detail__byline">
               @{loadState.preset.creator.handle} · revision {loadState.preset.currentRevision.id}
             </p>
+            <p className="marketplace-detail__tags">
+              {loadState.preset.tags.map((tag) => tag.nameZh).join(' · ')}
+            </p>
           </div>
 
           <dl className="marketplace-rig-summary">

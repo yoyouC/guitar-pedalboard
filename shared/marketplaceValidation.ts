@@ -1,7 +1,11 @@
 import type { PublishedPreset, RigResourceDependency } from './marketplace.ts';
-import type { RigPresetState } from '../src/state/presetCodec.ts';
-import { normalizeRig, RIG_PRESET_VERSION } from '../src/state/presetCodec.ts';
-import { RIG_PRESET_CATALOG } from '../src/state/store.ts';
+import { RIG_PRESET_VERSION } from '../src/state/presetCodec.ts';
+import {
+  analyzePublishableRig,
+  sameResourceDependencies,
+} from './publishableRig.ts';
+
+export { deriveRigResourceDependencies } from './publishableRig.ts';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -22,6 +26,10 @@ function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[])
   return Object.keys(value).every((key) => allowed.includes(key));
 }
 
+function textLength(value: string): number {
+  return [...value].length;
+}
+
 function isResourceDependency(value: unknown): value is RigResourceDependency {
   if (!isRecord(value) || typeof value.kind !== 'string') return false;
   if (value.kind === 'builtin') return hasOnlyKeys(value, ['kind']);
@@ -34,62 +42,21 @@ function isResourceDependency(value: unknown): value is RigResourceDependency {
   );
 }
 
-function dependencyKey(dependency: RigResourceDependency): string {
-  return dependency.kind === 'builtin'
-    ? 'builtin'
-    : `tone3000:${dependency.toneId}:${dependency.modelId ?? ''}`;
-}
-
-export function deriveRigResourceDependencies(rig: RigPresetState): RigResourceDependency[] {
-  const dependencies = new Map<string, RigResourceDependency>();
-  dependencies.set('builtin', { kind: 'builtin' });
-
-  const addTone3000 = (modelRef: string, modelId?: string) => {
-    const match = /^tone3000:(\d+)$/.exec(modelRef);
-    if (!match) return;
-    const dependency: RigResourceDependency = {
-      kind: 'tone3000',
-      toneId: match[1],
-      ...(modelId ? { modelId } : {}),
-    };
-    dependencies.set(dependencyKey(dependency), dependency);
-  };
-
-  addTone3000(rig.amp.modelKey, rig.amp.modelId);
-  for (const item of rig.chain) {
-    if (item.modelRef) addTone3000(item.modelRef, item.modelId);
-  }
-  return [...dependencies.values()];
-}
-
-function hasExactResourceDependencies(
-  rig: RigPresetState,
-  dependencies: RigResourceDependency[],
-): boolean {
-  const provided = new Set(dependencies.map(dependencyKey));
-  const derived = new Set(deriveRigResourceDependencies(rig).map(dependencyKey));
-  return (
-    provided.size === dependencies.length &&
-    provided.size === derived.size &&
-    [...provided].every((key) => derived.has(key))
-  );
+function isMarketplaceTag(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return hasOnlyKeys(value, ['id', 'dimension', 'nameZh', 'nameEn'])
+    && typeof value.id === 'string'
+    && typeof value.dimension === 'string'
+    && typeof value.nameZh === 'string'
+    && typeof value.nameEn === 'string';
 }
 
 function isLosslessPublishableCurrentRig(
   value: unknown,
   dependencies: RigResourceDependency[],
-): value is RigPresetState {
-  try {
-    const normalized = normalizeRig(value, RIG_PRESET_CATALOG);
-    return (
-      normalized.cab.ir.kind === 'builtin' &&
-      normalized.amp.modelKey !== 'nam-wasm:custom' &&
-      JSON.stringify(canonicalJsonValue(normalized)) === JSON.stringify(canonicalJsonValue(value)) &&
-      hasExactResourceDependencies(normalized, dependencies)
-    );
-  } catch {
-    return false;
-  }
+): boolean {
+  const analysis = analyzePublishableRig(value);
+  return Boolean(analysis && sameResourceDependencies(analysis.resourceDependencies, dependencies));
 }
 
 /** Published Preset 唯一可信入口：API 输出、未来写入与官方客户端共用。 */
@@ -102,21 +69,35 @@ export function parsePublicPublishedPreset(
   }
   const revision = value.currentRevision;
   const dependencies = revision.resourceDependencies;
+  const attributes = value.derivedAttributes;
   const validEnvelope = (
     typeof value.id === 'string' &&
     value.id.length > 0 &&
     (expectedId === undefined || value.id === expectedId) &&
     typeof value.title === 'string' &&
-    value.title.length > 0 &&
-    value.title.length <= 80 &&
+    textLength(value.title) > 0 &&
+    textLength(value.title) <= 80 &&
     typeof value.description === 'string' &&
-    value.description.length <= 2_000 &&
+    textLength(value.description) <= 2_000 &&
     value.visibility === 'public' &&
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string' &&
     typeof value.creator.id === 'string' &&
     typeof value.creator.handle === 'string' &&
     typeof value.creator.displayName === 'string' &&
+    Array.isArray(value.tags) &&
+    value.tags.length >= 1 &&
+    value.tags.length <= 5 &&
+    value.tags.every(isMarketplaceTag) &&
+    isRecord(attributes) &&
+    hasOnlyKeys(attributes, ['pedalIds', 'ampId', 'ampModelKey', 'cabId', 'resourceKinds']) &&
+    Array.isArray(attributes.pedalIds) &&
+    attributes.pedalIds.every((id) => typeof id === 'string') &&
+    typeof attributes.ampId === 'string' &&
+    typeof attributes.ampModelKey === 'string' &&
+    typeof attributes.cabId === 'string' &&
+    Array.isArray(attributes.resourceKinds) &&
+    attributes.resourceKinds.every((kind) => kind === 'builtin' || kind === 'tone3000') &&
     typeof revision.id === 'string' &&
     typeof revision.schemaVersion === 'number' &&
     typeof revision.createdAt === 'string' &&
@@ -136,6 +117,13 @@ export function parsePublicPublishedPreset(
     !isLosslessPublishableCurrentRig(revision.rig, dependencies)
   ) {
     return null;
+  }
+  if (revision.schemaVersion === RIG_PRESET_VERSION) {
+    const analysis = analyzePublishableRig(revision.rig);
+    if (!analysis
+      || !sameResourceDependencies(analysis.resourceDependencies, dependencies)
+      || JSON.stringify(canonicalJsonValue(analysis.derivedAttributes))
+        !== JSON.stringify(canonicalJsonValue(attributes))) return null;
   }
   return value as unknown as PublishedPreset;
 }

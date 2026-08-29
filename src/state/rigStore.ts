@@ -46,7 +46,7 @@ import {
   type PreAmpEqState,
 } from '../audio/preAmpEq';
 import type { ShareState } from './share';
-import type { RigPreset, Snapshot, SnapshotAmp, SnapshotCab } from './presetCodec';
+import type { RigPreset, RigPresetState, Snapshot, SnapshotAmp, SnapshotCab } from './presetCodec';
 import {
   createChainItem,
   currentRigToPreset,
@@ -416,6 +416,33 @@ export function rigToApplyState(state: RigStoreState): ApplyRigState {
       masterVolume: state.masterVolume,
       bypass: state.globalBypass,
     },
+  };
+}
+
+/** 当前运行态 → 可持久化的完整 canonical Rig（移除 Chain uid 等运行时身份）。 */
+export function rigToPresetState(state: RigStoreState): RigPresetState {
+  const rig = rigToApplyState(state);
+  const modelKey = state.ampModelKeys[state.ampCategoryId];
+  return {
+    chain: rig.chain.map(({ effectId, modelRef, modelId, enabled, values, post }) => ({
+      effectId,
+      ...(modelRef ? { modelRef } : {}),
+      ...(modelId ? { modelId } : {}),
+      enabled,
+      values,
+      post,
+    })),
+    amp: {
+      categoryId: state.ampCategoryId,
+      modelKey,
+      ...(state.ampTone3000ModelId ? { modelId: state.ampTone3000ModelId } : {}),
+      enabled: state.ampEnabled,
+      values: { ...state.ampValues },
+      customName: modelKey === 'nam-wasm:custom' ? state.namCustomName : null,
+    },
+    cab: rig.cab,
+    preAmpEq: rig.preAmpEq,
+    globals: rig.globals,
   };
 }
 
@@ -1021,30 +1048,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     // ---------- 预设 ----------
 
     savePreset(name) {
-      const modelKey = state.ampModelKeys[state.ampCategoryId];
-      const preset = currentRigToPreset(name, {
-        chain: state.chain,
-        amp: {
-          categoryId: state.ampCategoryId,
-          modelKey,
-          enabled: state.ampEnabled,
-          values: state.ampValues,
-          customName: modelKey === 'nam-wasm:custom' ? state.namCustomName : null,
-          ...(state.ampTone3000ModelId ? { modelId: state.ampTone3000ModelId } : {}),
-        },
-        cab: {
-          id: state.cabId,
-          ir: state.cabIrRef,
-          enabled: state.cabEnabled,
-          values: state.cabValues,
-        },
-        preAmpEq: state.preAmpEq,
-        globals: {
-          inputGain: state.inputGain,
-          masterVolume: state.masterVolume,
-          bypass: state.globalBypass,
-        },
-      });
+      const preset = currentRigToPreset(name, rigToPresetState(state));
       const presets = [...state.presets.filter((p) => p.name !== name), preset];
       savePresets(presets);
       state = { ...state, presets };

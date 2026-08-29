@@ -12,6 +12,19 @@ export const demoPublishedPreset: PublishedPreset = {
     handle: 'guitar-pedalboard',
     displayName: 'Guitar Pedalboard',
   },
+  tags: [{
+    id: 'tone-crunch',
+    dimension: 'tone',
+    nameZh: 'Crunch',
+    nameEn: 'Crunch',
+  }],
+  derivedAttributes: {
+    pedalIds: [],
+    ampId: 'crunch',
+    ampModelKey: 'builtin:crunch',
+    cabId: 'gb4x12',
+    resourceKinds: ['builtin'],
+  },
   currentRevision: {
     id: 'revision-demo-crunch-1',
     schemaVersion: 5,

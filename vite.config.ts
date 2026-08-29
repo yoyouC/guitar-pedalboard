@@ -38,9 +38,6 @@ function serveLocalModels(): Plugin {
 /** 开发期 API：用确定性种子跑同一 Request → Response 核心，不接触本地音频路径。 */
 function serveMarketplaceApi(): Plugin {
   const devAuthBaseURL = process.env.VITE_DEV_AUTH_BASE_URL ?? 'http://localhost:5173'
-  const presetApi = createMarketplaceApi({
-    publishedPresets: createMemoryPublishedPresetRepository([demoPublishedPreset]),
-  })
   const auth = createPlatformAuth({
     baseURL: devAuthBaseURL,
     secret: 'local-development-secret-at-least-32-characters',
@@ -56,19 +53,44 @@ function serveMarketplaceApi(): Plugin {
     },
   })
   const demoCreatedAt = new Date(demoPublishedPreset.createdAt)
+  const members = createMemoryMemberRepository([{
+    id: demoPublishedPreset.creator.id,
+    authUserId: null,
+    handle: demoPublishedPreset.creator.handle,
+    displayName: demoPublishedPreset.creator.displayName,
+    bio: 'Official Guitar Pedalboard demo tones.',
+    avatarUrl: null,
+    handleChangedAt: null,
+    createdAt: demoCreatedAt,
+    updatedAt: demoCreatedAt,
+  }])
+  const publications = createMemoryPublishedPresetRepository([demoPublishedPreset], [
+    { id: 'tone-clean', dimension: 'tone', nameZh: '清音', nameEn: 'Clean' },
+    { id: 'tone-crunch', dimension: 'tone', nameZh: 'Crunch', nameEn: 'Crunch' },
+    { id: 'tone-high-gain', dimension: 'tone', nameZh: '高增益', nameEn: 'High Gain' },
+    { id: 'genre-blues', dimension: 'genre', nameZh: '布鲁斯', nameEn: 'Blues' },
+    { id: 'genre-rock', dimension: 'genre', nameZh: '摇滚', nameEn: 'Rock' },
+    { id: 'use-live', dimension: 'use', nameZh: '现场', nameEn: 'Live' },
+    { id: 'use-recording', dimension: 'use', nameZh: '录音', nameEn: 'Recording' },
+  ])
+  const sessions = createBetterAuthSessionVerifier(auth.api)
+  const presetApi = createMarketplaceApi({
+    publishedPresets: publications,
+    availableTags: publications,
+    publication: {
+      repository: publications,
+      sessions,
+      members,
+      now: () => new Date(),
+      createPresetId: () => `preset-${crypto.randomUUID()}`,
+      createRevisionId: () => `revision-${crypto.randomUUID()}`,
+      createMemberId: () => crypto.randomUUID(),
+      createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+    },
+  })
   const memberApi = createMemberApi({
-    members: createMemoryMemberRepository([{
-      id: demoPublishedPreset.creator.id,
-      authUserId: null,
-      handle: demoPublishedPreset.creator.handle,
-      displayName: demoPublishedPreset.creator.displayName,
-      bio: 'Official Guitar Pedalboard demo tones.',
-      avatarUrl: null,
-      handleChangedAt: null,
-      createdAt: demoCreatedAt,
-      updatedAt: demoCreatedAt,
-    }]),
-    sessions: createBetterAuthSessionVerifier(auth.api),
+    members,
+    sessions,
     now: () => new Date(),
     createId: () => crypto.randomUUID(),
     createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),

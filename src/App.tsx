@@ -432,7 +432,7 @@ export default function App() {
       {/* 调音表:下拉面板,不占效果链位置 */}
       {effectiveShowTuner && <Tuner analyser={engineReady ? audioEngine.inputAnalyser : null} />}
 
-      <PresetBar />
+      <PresetBar onNavigate={navigate} />
 
       <main className="board">
         <SnapshotSwitches />

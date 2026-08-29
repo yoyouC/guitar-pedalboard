@@ -24,8 +24,16 @@
       "destination": "/api/marketplace-member?route=creator&handle=:handle"
     },
     {
+      "source": "/api/marketplace/tags",
+      "destination": "/api/marketplace-preset?route=tags"
+    },
+    {
+      "source": "/api/marketplace/presets",
+      "destination": "/api/marketplace-preset?route=presets"
+    },
+    {
       "source": "/api/marketplace/presets/:id",
-      "destination": "/api/marketplace-preset"
+      "destination": "/api/marketplace-preset?route=preset&id=:id"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
