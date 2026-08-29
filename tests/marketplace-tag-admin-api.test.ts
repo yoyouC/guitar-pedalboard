@@ -129,8 +129,13 @@ test('Tag merge flattens every older source onto the final active target', async
   assert.equal((await request('/api/marketplace/admin/tags/tag-b/merge', 'POST', 'admin', {
     targetId: 'tag-c', reason: 'Second consolidation.',
   })).status, 200);
+  assert.equal((await request('/api/marketplace/admin/tags/tag-a/merge', 'POST', 'admin', {
+    targetId: 'tag-b', reason: 'Delayed retry of the first consolidation.',
+  })).status, 200);
 
   const tags = (await (await request('/api/marketplace/admin/tags', 'GET', 'admin')).json()).tags;
   assert.equal(tags.find((tag: { id: string }) => tag.id === 'tag-a').mergedIntoId, 'tag-c');
   assert.equal(tags.find((tag: { id: string }) => tag.id === 'tag-c').presetCount, 1);
+  const audit = (await (await request('/api/marketplace/admin/tags/audit', 'GET', 'admin')).json()).entries;
+  assert.equal(audit.filter((entry: { action: string }) => entry.action === 'merge_tag').length, 2);
 });

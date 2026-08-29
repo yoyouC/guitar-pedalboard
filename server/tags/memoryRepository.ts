@@ -68,12 +68,13 @@ export function createMemoryMarketplaceTagAdministrationRepository(input: {
       const current = tags.get(command.tagId);
       if (!current) throw new MarketplaceTagNotFoundError();
       if (command.action === 'merge') {
-        if (current.status === 'merged') {
-          if (current.mergedIntoId !== command.targetId) throw new MarketplaceTagConflictError();
-          return present(current);
-        }
         const target = tags.get(command.targetId);
         if (!target) throw new MarketplaceTagNotFoundError();
+        if (current.status === 'merged') {
+          const targetFinalId = target.mergedIntoId ?? target.id;
+          if (current.mergedIntoId !== targetFinalId) throw new MarketplaceTagConflictError();
+          return present(current);
+        }
         if (target.id === current.id || target.status !== 'active') throw new MarketplaceTagConflictError();
         const aliasCandidates = [
           ...target.aliases, ...current.aliases, current.nameZh, current.nameEn, current.id,

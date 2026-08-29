@@ -215,7 +215,7 @@ async function lockOwnedCollection(
     `SELECT visibility, updated_at
      FROM marketplace_preset_collections
      WHERE id = $1 AND creator_id = $2 AND visibility <> 'hidden'
-     FOR UPDATE`,
+     FOR NO KEY UPDATE`,
     [input.collectionId, input.creatorId],
   );
   const current = result.rows[0];

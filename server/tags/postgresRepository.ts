@@ -123,7 +123,8 @@ export function createPostgresMarketplaceTagAdministrationRepository(
           const target = locked.rows.find((row) => row.id === command.targetId);
           if (!source || !target) throw new MarketplaceTagNotFoundError();
           if (source.status === 'merged') {
-            if (source.merged_into_id !== target.id) throw new MarketplaceTagConflictError();
+            const targetFinalId = target.merged_into_id ?? target.id;
+            if (source.merged_into_id !== targetFinalId) throw new MarketplaceTagConflictError();
             await client.query('COMMIT');
             return (await listTags(pool, source.id))[0];
           }

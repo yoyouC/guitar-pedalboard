@@ -364,7 +364,7 @@ async function lockOwnedPreset(
     `SELECT current_revision_id, updated_at, visibility
      FROM marketplace_published_presets
      WHERE id = $1 AND creator_id = $2 AND visibility <> 'hidden'
-     FOR UPDATE`,
+     FOR NO KEY UPDATE`,
     [presetId, creatorId],
   );
   const current = result.rows[0];
