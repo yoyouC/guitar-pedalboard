@@ -8,6 +8,7 @@ import type {
 } from './repository.ts';
 import { MarketplaceTagConflictError, MarketplaceTagNotFoundError } from './repository.ts';
 import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
+import { normalizeSearchText } from '../search/text.ts';
 
 interface TagRow extends QueryResultRow {
   id: string;
@@ -74,6 +75,15 @@ function uniqueAliases(values: readonly string[]): string[] {
   });
 }
 
+function tagSearchText(tag: {
+  id: string;
+  nameZh: string;
+  nameEn: string;
+  aliases: readonly string[];
+}): string {
+  return normalizeSearchText([tag.id, tag.nameZh, tag.nameEn, ...tag.aliases].join(' '));
+}
+
 async function audit(client: PostgresQueryable, command: MarketplaceTagCommand, tagId: string, targetTagId: string | null) {
   const action = `${command.action}_tag`;
   await client.query(
@@ -101,11 +111,11 @@ export function createPostgresMarketplaceTagAdministrationRepository(
         if (command.action === 'create') {
           const inserted = await client.query(
             `INSERT INTO marketplace_tags
-               (id, dimension, name_zh, name_en, aliases, status, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5::jsonb, 'active', $6, $6)
+               (id, dimension, name_zh, name_en, aliases, status, search_text, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5::jsonb, 'active', $6, $7, $7)
              ON CONFLICT (id) DO NOTHING RETURNING id`,
             [command.tag.id, command.tag.dimension, command.tag.nameZh, command.tag.nameEn,
-              JSON.stringify(command.tag.aliases), command.now],
+              JSON.stringify(command.tag.aliases), tagSearchText(command.tag), command.now],
           );
           if (inserted.rows.length === 0) throw new MarketplaceTagConflictError();
           await audit(client, command, command.tag.id, null);
@@ -147,8 +157,11 @@ export function createPostgresMarketplaceTagAdministrationRepository(
           await client.query('DELETE FROM marketplace_published_preset_tags WHERE tag_id = $1', [source.id]);
           await client.query('DELETE FROM marketplace_preset_collection_tags WHERE tag_id = $1', [source.id]);
           await client.query(
-            `UPDATE marketplace_tags SET aliases = $2::jsonb, updated_at = $3 WHERE id = $1`,
-            [target.id, JSON.stringify(aliases), command.now],
+            `UPDATE marketplace_tags
+             SET aliases = $2::jsonb, search_text = $3, updated_at = $4 WHERE id = $1`,
+            [target.id, JSON.stringify(aliases), tagSearchText({
+              id: target.id, nameZh: target.name_zh, nameEn: target.name_en, aliases,
+            }), command.now],
           );
           await client.query(
             `UPDATE marketplace_tags
@@ -176,10 +189,12 @@ export function createPostgresMarketplaceTagAdministrationRepository(
         if (command.action === 'edit') {
           await client.query(
             `UPDATE marketplace_tags
-             SET dimension = $2, name_zh = $3, name_en = $4, aliases = $5::jsonb, updated_at = $6
+             SET dimension = $2, name_zh = $3, name_en = $4, aliases = $5::jsonb,
+                 search_text = $6, updated_at = $7
              WHERE id = $1`,
             [command.tagId, command.tag.dimension, command.tag.nameZh, command.tag.nameEn,
-              JSON.stringify(command.tag.aliases), command.now],
+              JSON.stringify(command.tag.aliases), tagSearchText({ id: command.tagId, ...command.tag }),
+              command.now],
           );
         } else {
           await client.query(

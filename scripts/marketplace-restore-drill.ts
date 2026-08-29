@@ -16,30 +16,35 @@ import {
 import { postgresCommandEnvironment } from '../server/operations/postgresCommand.ts';
 
 const restoreConnectionString = process.env.MARKETPLACE_RESTORE_DATABASE_URL;
+const expectedSourceConnectionString = process.env.MARKETPLACE_EXPECTED_DATABASE_URL
+  ?? process.env.DATABASE_URL
+  ?? process.env.POSTGRES_URL;
 const archivePath = process.env.MARKETPLACE_RESTORE_DRILL_ARCHIVE;
 const manifestPath = process.env.MARKETPLACE_RESTORE_DRILL_MANIFEST;
 if (process.env.MARKETPLACE_ALLOW_RESTORE_DRILL !== 'true') {
   throw new Error('Set MARKETPLACE_ALLOW_RESTORE_DRILL=true for this destructive disposable-target drill');
 }
-if (!restoreConnectionString || !archivePath || !manifestPath) {
-  throw new Error('Set restore database, archive, and manifest variables');
+if (!restoreConnectionString || !archivePath || !manifestPath || !expectedSourceConnectionString) {
+  throw new Error('Set restore database, expected source database, archive, and manifest variables');
 }
 assertDisposableRestoreDatabase(
   restoreConnectionString,
-  process.env.DATABASE_URL ?? process.env.POSTGRES_URL,
+  expectedSourceConnectionString,
 );
 
 const archive = resolve(archivePath);
 const manifest = await readMarketplaceBackupManifest(resolve(manifestPath));
-const expectedSource = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
-if (expectedSource) assertExpectedMarketplaceBackupSource(expectedSource, manifest.source);
+assertExpectedMarketplaceBackupSource(expectedSourceConnectionString, manifest.source);
 await assertCompleteMarketplaceBackup(archive, manifest);
 const actualDigest = manifest.sha256;
 
 const startedAt = new Date();
+const restoreEnvironment = postgresCommandEnvironment(restoreConnectionString);
 await command('pg_restore', [
-  '--clean', '--if-exists', '--no-owner', '--no-privileges', '--single-transaction', archive,
-], postgresCommandEnvironment(restoreConnectionString));
+  '--clean', '--if-exists', '--no-owner', '--no-privileges', '--single-transaction',
+  `--dbname=${restoreEnvironment.PGDATABASE}`,
+  archive,
+], restoreEnvironment);
 const pool = new Pool({ connectionString: restoreConnectionString });
 let facts: MarketplaceBackupFacts;
 try {

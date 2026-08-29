@@ -211,6 +211,9 @@ test('PostgreSQL Tag merge atomically migrates content and keeps old search ids 
       reason: 'Delayed retry after the target was merged again.',
       now: new Date('2026-08-29T16:04:00Z'),
     });
+    assert.match((await client.query<{ search_text: string | null }>(
+      `SELECT search_text FROM marketplace_tags WHERE id = 'tone-final'`,
+    )).rows[0].search_text ?? '', /^tone final /);
     await rebuildMarketplaceTextSearchProjection(client);
 
     const managed = await repository.list();
@@ -270,6 +273,7 @@ test('collection Tag writes cannot race a merge and restore the merged source re
     '0008_preset_search_indexes.sql', '0009_marketplace_likes.sql',
     '0010_marketplace_trending.sql', '0011_marketplace_moderation.sql',
     '0012_account_lifecycle.sql', '0013_tag_administration.sql',
+    '0015_marketplace_text_search.sql', '0016_marketplace_normalized_search.sql',
   ]) {
     await admin.query(await readFile(new URL(
       `../server/marketplace/migrations/${migration}`, import.meta.url,
@@ -373,6 +377,7 @@ test('content Tag updates do not deadlock with a concurrent Tag merge', {
       '0008_preset_search_indexes.sql', '0009_marketplace_likes.sql',
       '0010_marketplace_trending.sql', '0011_marketplace_moderation.sql',
       '0012_account_lifecycle.sql', '0013_tag_administration.sql',
+      '0015_marketplace_text_search.sql', '0016_marketplace_normalized_search.sql',
     ]) {
       await admin.query(await readFile(new URL(
         `../server/marketplace/migrations/${migration}`, import.meta.url,

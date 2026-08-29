@@ -86,7 +86,7 @@ function buildWhere(input: PublishedPresetSearchInput): {
   if (candidate) {
     const token = parameter(candidate);
     candidateCte = `WITH search_settings AS MATERIALIZED (
-      SELECT set_config('pg_trgm.word_similarity_threshold', '0.3', true)
+      SELECT set_config('pg_trgm.word_similarity_threshold', '0.2', true)
     ), candidate_presets AS MATERIALIZED (
       SELECT id AS preset_id FROM marketplace_published_presets CROSS JOIN search_settings
       WHERE search_text IS NULL OR ${token}::text OPERATOR(public.<%) search_text

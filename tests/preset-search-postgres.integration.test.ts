@@ -92,7 +92,7 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
       'preset-search-older', 'Rock Rhythm', 'public', '2026-08-29T03:00:00.000Z',
     );
     const unicode = clonePreset(
-      'preset-search-unicode', 'ＦＥＮＤＥＲ Glass שָׁלוֹם ꟱tack', 'public',
+      'preset-search-unicode', 'ＦＥＮＤＥＲ Glass שָׁלוֹם ꟱tack axcd', 'public',
       '2026-08-29T00:30:00.000Z',
     );
     unicode.tags = [{ id: 'tone-clean', dimension: 'tone', nameZh: '清音', nameEn: 'Clean' }];
@@ -132,14 +132,14 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
     const projectedUnicode = await client.query<{ search_text: string }>(
       `SELECT search_text FROM marketplace_published_presets WHERE id = $1`, [unicode.id],
     );
-    assert.match(projectedUnicode.rows[0].search_text, /^fender glass שלום stack\b/);
+    assert.match(projectedUnicode.rows[0].search_text, /^fender glass שלום stack axcd\b/);
 
     const repository = createPostgresPublishedPresetSearchRepository(client);
     assert.deepEqual(
       (await repository.searchPublicPresets(searchInput({ text: 'fender' }))).items.map((item) => item.id),
       [unicode.id],
     );
-    for (const text of ['שלום', 'stack']) {
+    for (const text of ['שלום', 'stack', 'abcd']) {
       assert.deepEqual(
         (await repository.searchPublicPresets(searchInput({ text }))).items.map((item) => item.id),
         [unicode.id],
@@ -184,6 +184,9 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
       derivedAttributes: demoPublishedPreset.derivedAttributes,
       now: new Date('2026-08-29T03:30:00.000Z'),
     });
+    assert.equal((await client.query<{ search_text: string | null }>(
+      `SELECT search_text FROM marketplace_published_presets WHERE id = 'preset-fresh-publication'`,
+    )).rows[0].search_text, 'freshly published');
     assert.deepEqual(
       (await repository.searchPublicPresets(searchInput({ text: 'freshly' }))).items.map((item) => item.id),
       ['preset-fresh-publication'],

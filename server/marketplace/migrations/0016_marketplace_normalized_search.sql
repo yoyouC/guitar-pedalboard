@@ -15,13 +15,13 @@ DROP INDEX IF EXISTS marketplace_tag_name_zh_trgm_idx;
 DROP INDEX IF EXISTS marketplace_tag_name_name_en_trgm_idx;
 DROP INDEX IF EXISTS marketplace_tag_name_en_trgm_idx;
 
-CREATE INDEX marketplace_preset_search_text_trgm_idx
+CREATE INDEX IF NOT EXISTS marketplace_preset_search_text_trgm_idx
   ON marketplace_published_presets USING gin (search_text public.gin_trgm_ops);
-CREATE INDEX marketplace_collection_search_text_trgm_idx
+CREATE INDEX IF NOT EXISTS marketplace_collection_search_text_trgm_idx
   ON marketplace_preset_collections USING gin (search_text public.gin_trgm_ops);
-CREATE INDEX marketplace_member_search_text_trgm_idx
+CREATE INDEX IF NOT EXISTS marketplace_member_search_text_trgm_idx
   ON marketplace_members USING gin (search_text public.gin_trgm_ops);
-CREATE INDEX marketplace_tag_search_text_trgm_idx
+CREATE INDEX IF NOT EXISTS marketplace_tag_search_text_trgm_idx
   ON marketplace_tags USING gin (search_text public.gin_trgm_ops);
 
 -- NULL means the application projection is not yet rebuilt. These tiny partial
@@ -40,7 +40,9 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  NEW.search_text := NULL;
+  IF NEW.search_text IS NOT DISTINCT FROM OLD.search_text THEN
+    NEW.search_text := NULL;
+  END IF;
   RETURN NEW;
 END;
 $$;

@@ -25,14 +25,14 @@
     "revision": 20
   },
   "p95Ms": {
-    "list": 3.7482499999999845,
-    "detail": 1.2509590000000799,
-    "search": 77.86137499999995,
-    "revision": 5.876875000000041
+    "list": 3.578416000000061,
+    "detail": 1.1779160000000388,
+    "search": 70.29875000000004,
+    "revision": 3.8591250000000628
   },
   "searchConvergenceMs": {
-    "publication": 106.67504199999985,
-    "metadata": 98.50154100000009
+    "publication": 238.16774999999984,
+    "metadata": 90.44262499999991
   },
   "targets": {
     "readP95Ms": 500,
@@ -44,5 +44,5 @@
     "publication": true,
     "metadata": true
   },
-  "measuredAt": "2026-08-29T15:17:18.370Z"
+  "measuredAt": "2026-08-29T15:34:58.944Z"
 }

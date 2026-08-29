@@ -7,6 +7,7 @@ import type {
   UpdateMemberProfileInput,
 } from './repository.ts';
 import { assertCommunityWriteAllowed } from './standing.ts';
+import { normalizeSearchText } from '../search/text.ts';
 import {
   HANDLE_CHANGE_INTERVAL_MS,
   HandleChangeTooSoonError,
@@ -96,9 +97,10 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
 
         await client.query(
           `INSERT INTO marketplace_members
-            (id, handle, display_name, bio, avatar_url, created_at, updated_at)
-           VALUES ($1, $2, $3, '', $4, $5, $5)`,
-          [input.id, input.handle, input.identity.displayName, input.identity.avatarUrl, input.now],
+            (id, handle, display_name, bio, avatar_url, search_text, created_at, updated_at)
+           VALUES ($1, $2, $3, '', $4, $5, $6, $6)`,
+          [input.id, input.handle, input.identity.displayName, input.identity.avatarUrl,
+            normalizeSearchText(`${input.handle} ${input.identity.displayName}`), input.now],
         );
         await client.query(
           `INSERT INTO marketplace_member_handle_claims (handle, member_id, claimed_at)
@@ -189,7 +191,8 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
              display_name = $3,
              bio = $4,
              handle_changed_at = $5,
-             updated_at = $6
+             search_text = $6,
+             updated_at = $7
            FROM marketplace_member_auth_identities AS identity
            WHERE member.id = $1 AND identity.member_id = member.id
            RETURNING member.id, identity.auth_user_id, member.handle, member.display_name,
@@ -202,6 +205,9 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
             update.displayName ?? current.displayName,
             update.bio ?? current.bio,
             changesHandle ? now : current.handleChangedAt,
+            normalizeSearchText(`${
+              changesHandle ? update.handle : current.handle
+            } ${update.displayName ?? current.displayName}`),
             now,
           ],
         );

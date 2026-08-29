@@ -26,7 +26,7 @@ npm run marketplace:benchmark:verify
 DATABASE_URL='postgresql://…' npm run marketplace:rebuild-all
 ```
 
-该命令从事实数据在一个事务中重建应用规范化文本搜索、Rig 筛选、Preset/Collection Like 数量与版本化 Popular、Trending 排名。失败会回滚整个重建，旧投影仍可读。测试 `marketplace-operations.test.ts` 注入中途失败并验证没有提交；发布与修订的 PostgreSQL 测试验证投影写失败会回滚事实写；限流存储测试验证其失败只拒绝社区写，不影响读取。本地音频不调用 Marketplace 服务端，因此这些故障不进入音频链路。
+该命令用同一个数据库连接从事实数据在一个事务中重建应用规范化文本搜索、Rig 筛选、Preset/Collection Like 数量与版本化 Popular、Trending 排名。失败会回滚整个重建，旧投影仍可读。测试 `marketplace-operations.test.ts` 注入中途失败并验证没有提交；发布与修订的 PostgreSQL 测试验证投影写失败会回滚事实写；限流存储测试验证其失败只拒绝社区写，不影响读取。本地音频不调用 Marketplace 服务端，因此这些故障不进入音频链路。
 
 故障演练顺序：先保留事实表行数和摘要，分别令投影写、缓存/数据库健康探针、限流存储和备份目标失败，确认写事务回滚、现有事实不变、健康端点返回非缓存 503、本地 Rig 仍可编辑和发声；恢复组件后运行统一重建并比较事实和投影不变量。
 
@@ -48,7 +48,7 @@ npm run marketplace:availability-report
 
 ## 每日备份和恢复演练
 
-备份 runner 必须是支持 `pg_dump` 的持久任务环境，不使用 Vercel Function 的 `/tmp` 作为归档。安装 `ops/marketplace-backup.crontab` 后每小时触发备份和 freshness 检查：runner 以 UTC 日期作幂等键，在 durable 目录原子领取带 owner token 的可过期互斥 lease；只有当前 owner 能以不覆盖方式发布 archive/manifest 或释放 lease。失败不会生成成功 manifest，所以下一小时自动补跑。`marketplace:backup:status` 要求完整 manifest、实际 archive 和 SHA-256 一致；当前 UTC 日已有成功备份时保持健康，否则应用 23 小时 catch-up 上限，避免日末固定误报并在跨日失败后及时告警。完成只指 archive 与 manifest 已进入加密、跨故障域的持久存储。
+备份 runner 必须是支持 `pg_dump` 的持久任务环境，不使用 Vercel Function 的 `/tmp` 作为归档。安装 `ops/marketplace-backup.crontab` 后每小时触发备份和 freshness 检查：runner 以 UTC 日期作幂等键，在 durable 目录原子领取带 owner token 的可过期互斥 lease；只有当前 owner 能把 archive/manifest 所在目录作为一个原子 bundle 发布，释放流程会核对实际 owner 并保护已接管的 successor lease。失败不会生成成功 manifest，所以下一小时自动补跑。`marketplace:backup:status` 要求完整 manifest、实际 archive 和 SHA-256 一致；当前 UTC 日已有成功备份时保持健康，否则应用 23 小时 catch-up 上限，避免日末固定误报并在跨日失败后及时告警。完成只指 archive 与 manifest 已进入加密、跨故障域的持久存储。
 
 ```sh
 MARKETPLACE_BACKUP_DATABASE_URL='postgresql://…/marketplace' \
@@ -63,6 +63,7 @@ npm run marketplace:backup:status
 
 ```sh
 MARKETPLACE_ALLOW_RESTORE_DRILL=true \
+MARKETPLACE_EXPECTED_DATABASE_URL='postgresql://…/marketplace' \
 MARKETPLACE_RESTORE_DATABASE_URL='postgresql://…/marketplace_restore_drill' \
 MARKETPLACE_RESTORE_DRILL_ARCHIVE='artifacts/marketplace.dump' \
 MARKETPLACE_RESTORE_DRILL_MANIFEST='artifacts/marketplace.dump.json' \

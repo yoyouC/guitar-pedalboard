@@ -123,7 +123,7 @@ async function collectionRows(
   const candidate = searchCandidateToken(text);
   const settingsCte = candidate
     ? `WITH search_settings AS MATERIALIZED (
-         SELECT set_config('pg_trgm.word_similarity_threshold', '0.3', true)
+         SELECT set_config('pg_trgm.word_similarity_threshold', '0.2', true)
        )`
     : '';
   if (candidate) {
@@ -206,7 +206,7 @@ async function creatorRows(
   const candidate = searchCandidateToken(text);
   const settingsCte = candidate
     ? `WITH search_settings AS MATERIALIZED (
-         SELECT set_config('pg_trgm.word_similarity_threshold', '0.3', true)
+         SELECT set_config('pg_trgm.word_similarity_threshold', '0.2', true)
        )`
     : '';
   if (candidate) {

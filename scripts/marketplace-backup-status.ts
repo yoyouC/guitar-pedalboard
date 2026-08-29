@@ -11,13 +11,14 @@ if (!backupDirectory) throw new Error('Set MARKETPLACE_BACKUP_DIR to durable enc
 
 const directory = resolve(backupDirectory);
 const candidates = (await readdir(directory))
-  .filter((name) => /^marketplace-\d{4}-\d{2}-\d{2}\.dump\.json$/.test(name));
+  .filter((name) => /^marketplace-\d{4}-\d{2}-\d{2}\.backup$/.test(name));
 const completions: string[] = [];
 for (const candidate of candidates) {
   try {
-    const manifest = await readMarketplaceBackupManifest(resolve(directory, candidate));
-    const expectedArchive = candidate.slice(0, -'.json'.length);
-    await assertCompleteMarketplaceBackup(resolve(directory, expectedArchive), manifest);
+    const archiveName = `${candidate.slice(0, -'.backup'.length)}.dump`;
+    const archivePath = resolve(directory, candidate, archiveName);
+    const manifest = await readMarketplaceBackupManifest(`${archivePath}.json`);
+    await assertCompleteMarketplaceBackup(archivePath, manifest);
     completions.push(manifest.completedAt);
   } catch {
     // An invalid manifest cannot prove a successful backup.

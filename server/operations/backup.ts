@@ -27,9 +27,11 @@ export interface MarketplaceBackupFacts {
 
 export interface MarketplaceBackupArtifactPaths {
   dayKey: string;
+  bundlePath: string;
   archivePath: string;
   manifestPath: string;
   leasePath: string;
+  partialBundlePath: string;
   partialArchivePath: string;
   partialManifestPath: string;
 }
@@ -51,6 +53,10 @@ interface MarketplaceBackupLease {
   hostname: string;
   acquiredAt: string;
   expiresAt: string;
+}
+
+interface AcquiredMarketplaceBackupLease extends MarketplaceBackupLease {
+  ownerPath: string;
 }
 
 export function evaluateMarketplaceBackupFreshness(
@@ -78,15 +84,20 @@ export function marketplaceBackupArtifactPaths(
 ): MarketplaceBackupArtifactPaths {
   const root = resolve(directory);
   const dayKey = now.toISOString().slice(0, 10);
-  const archivePath = resolve(root, `marketplace-${dayKey}.dump`);
+  const bundlePath = resolve(root, `marketplace-${dayKey}.backup`);
+  const partialBundlePath = resolve(root, `.marketplace-${dayKey}.${processId}.backup.partial`);
+  const archiveName = `marketplace-${dayKey}.dump`;
+  const archivePath = resolve(bundlePath, archiveName);
   const manifestPath = `${archivePath}.json`;
   return {
     dayKey,
+    bundlePath,
     archivePath,
     manifestPath,
     leasePath: resolve(root, `marketplace-${dayKey}.lease`),
-    partialArchivePath: resolve(root, `.marketplace-${dayKey}.${processId}.dump.partial`),
-    partialManifestPath: resolve(root, `.marketplace-${dayKey}.${processId}.json.partial`),
+    partialBundlePath,
+    partialArchivePath: resolve(partialBundlePath, archiveName),
+    partialManifestPath: resolve(partialBundlePath, `${archiveName}.json`),
   };
 }
 
@@ -110,7 +121,9 @@ export async function runDailyMarketplaceBackup(
   );
   try {
     if (await isCompletedBackup(paths)) return { status: 'skipped', paths };
-    await Promise.all([rm(paths.archivePath, { force: true }), rm(paths.manifestPath, { force: true })]);
+    await rm(paths.bundlePath, { recursive: true, force: true });
+    await rm(paths.partialBundlePath, { recursive: true, force: true });
+    await mkdir(paths.partialBundlePath, { recursive: false, mode: 0o700 });
     try {
       await action(paths);
       const manifest = await readMarketplaceBackupManifest(paths.partialManifestPath);
@@ -118,22 +131,13 @@ export async function runDailyMarketplaceBackup(
         paths.partialArchivePath, manifest, basename(paths.archivePath),
       );
       await assertLeaseOwner(paths.leasePath, lease.ownerToken);
-      await publishWithoutOverwrite(paths.partialArchivePath, paths.archivePath);
-      try {
-        await publishWithoutOverwrite(paths.partialManifestPath, paths.manifestPath);
-      } catch (cause) {
-        await rm(paths.archivePath, { force: true });
-        throw cause;
-      }
+      await rename(paths.partialBundlePath, paths.bundlePath);
       return { status: 'completed', paths };
     } finally {
-      await Promise.all([
-        rm(paths.partialArchivePath, { force: true }),
-        rm(paths.partialManifestPath, { force: true }),
-      ]);
+      await rm(paths.partialBundlePath, { recursive: true, force: true });
     }
   } finally {
-    await releaseLease(paths.leasePath, lease.ownerToken);
+    await releaseLease(paths.leasePath, lease);
   }
 }
 
@@ -142,7 +146,7 @@ async function acquireLease(
   now: Date,
   processId: number,
   leaseDurationMs: number,
-): Promise<MarketplaceBackupLease> {
+): Promise<AcquiredMarketplaceBackupLease> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const ownerToken = randomUUID();
     const candidatePath = `${leasePath}.candidate-${ownerToken}`;
@@ -162,8 +166,7 @@ async function acquireLease(
         await candidate.close();
       }
       await link(candidatePath, leasePath);
-      await rm(candidatePath, { force: true });
-      return lease;
+      return { ...lease, ownerPath: candidatePath };
     } catch (cause) {
       await rm(candidatePath, { force: true });
       if (!isAlreadyExists(cause)) throw cause;
@@ -182,6 +185,9 @@ async function acquireLease(
             throw new Error('Marketplace backup lease changed during takeover');
           }
           await rm(stalePath, { force: true });
+          if (moved) {
+            await rm(`${leasePath}.candidate-${moved.ownerToken}`, { force: true });
+          }
         } catch (renameCause) {
           if (!isNoEntry(renameCause)) throw renameCause;
         }
@@ -229,18 +235,24 @@ async function assertLeaseOwner(leasePath: string, ownerToken: string): Promise<
   }
 }
 
-async function releaseLease(leasePath: string, ownerToken: string): Promise<void> {
-  if ((await readLease(leasePath))?.ownerToken === ownerToken) {
-    await rm(leasePath, { force: true });
-  }
-}
-
-async function publishWithoutOverwrite(source: string, target: string): Promise<void> {
+async function releaseLease(
+  leasePath: string,
+  lease: AcquiredMarketplaceBackupLease,
+): Promise<void> {
+  const releasePath = `${leasePath}.release-${lease.ownerToken}`;
   try {
-    await link(source, target);
+    await rename(leasePath, releasePath);
+    const moved = await readLease(releasePath);
+    if (moved?.ownerToken !== lease.ownerToken) {
+      try { await link(releasePath, leasePath); } catch (cause) {
+        if (!isAlreadyExists(cause)) throw cause;
+      }
+    }
+    await rm(releasePath, { force: true });
   } catch (cause) {
-    if (isAlreadyExists(cause)) throw new Error('Marketplace backup artifact was published by another owner');
-    throw cause;
+    if (!isNoEntry(cause)) throw cause;
+  } finally {
+    await rm(lease.ownerPath, { force: true });
   }
 }
 

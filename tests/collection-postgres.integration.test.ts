@@ -27,8 +27,7 @@ test('PostgreSQL collections atomically preserve order, revisions, placeholders,
   try {
     await client.query(`CREATE SCHEMA ${schema}`);
     await client.query(`SET search_path TO ${schema}`);
-    for (let index = 1; index <= 7; index += 1) {
-      const name = [
+    for (const name of [
         '0001_published_presets.sql',
         '0002_authentication.sql',
         '0003_member_profiles.sql',
@@ -36,8 +35,9 @@ test('PostgreSQL collections atomically preserve order, revisions, placeholders,
         '0005_preset_revision_management.sql',
         '0006_preset_remix_provenance.sql',
         '0007_preset_collections.sql',
-        '0012_account_lifecycle.sql',
-      ][index - 1];
+        '0015_marketplace_text_search.sql',
+        '0016_marketplace_normalized_search.sql',
+      ]) {
       await client.query(await readFile(
         new URL(`../server/marketplace/migrations/${name}`, import.meta.url),
         'utf8',
@@ -69,6 +69,9 @@ test('PostgreSQL collections atomically preserve order, revisions, placeholders,
       visibility: 'unlisted',
       now: new Date('2026-08-29T10:00:00.000Z'),
     });
+    assert.equal((await client.query<{ search_text: string | null }>(
+      `SELECT search_text FROM marketplace_preset_collections WHERE id = $1`, [created.id],
+    )).rows[0].search_text, 'live set pinned tones');
     const updated = await repository.update({
       collectionId: created.id,
       creatorId: ownPreset.creator.id,

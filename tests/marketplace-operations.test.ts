@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -101,20 +101,43 @@ test('health endpoint probes only first-party marketplace storage and never cach
   });
   assert.equal((await unhealthy.fetch(new Request('https://pedalboard.test/tone3000/health'))).status, 404);
 
-  let query = '';
+  const queries: Array<string | { text: string; query_timeout: number }> = [];
+  const releases: boolean[] = [];
   await probeMarketplaceStorage({
-    async query(config: { text: string; query_timeout: number }) {
-      query = config.text;
-      assert.equal(config.query_timeout, 50);
-      return { rows: [], rowCount: 0 };
+    async connect() {
+      return {
+        async query(config: string | { text: string; query_timeout: number }) {
+          queries.push(config);
+          return { rows: [], rowCount: 0 };
+        },
+        release(destroy = false) { releases.push(destroy); },
+      };
     },
   }, 50);
-  assert.match(query, /marketplace_published_presets/);
-  assert.match(query, /marketplace_published_preset_revisions/);
+  assert.equal(queries[0], 'BEGIN READ ONLY');
+  assert.match(String(queries[1]), /set_config/);
+  const probe = queries[2] as { text: string; query_timeout: number };
+  assert.equal(probe.query_timeout, 50);
+  assert.match(probe.text, /marketplace_published_presets/);
+  assert.match(probe.text, /marketplace_published_preset_revisions/);
+  assert.deepEqual(releases, [false]);
   await assert.rejects(
-    () => probeMarketplaceStorage({ async query() { return new Promise(() => undefined); } }, 1),
-    /timed out/,
+    () => probeMarketplaceStorage({
+      async connect() {
+        return {
+          async query(config: string | { text: string }) {
+            if (typeof config !== 'string' && config.text.includes('marketplace_published_presets')) {
+              throw new Error('canceling statement due to statement timeout');
+            }
+            return { rows: [], rowCount: 0 };
+          },
+          release(destroy = false) { releases.push(destroy); },
+        };
+      },
+    }, 1),
+    /statement timeout/,
   );
+  assert.equal(releases.at(-1), true);
 });
 
 test('all rebuildable projections commit together and roll back on an injected failure', async () => {
@@ -214,6 +237,8 @@ test('backup and restore commands keep credentials out of argv and restore atomi
   assert.match(backup, /runDailyMarketplaceBackup/);
   assert.doesNotMatch(backup, /--no-sync/);
   assert.match(restore, /--single-transaction/);
+  assert.match(restore, /--dbname=\$\{restoreEnvironment\.PGDATABASE\}/);
+  assert.match(restore, /MARKETPLACE_EXPECTED_DATABASE_URL/);
   assert.match(restore, /assertCompleteMarketplaceBackup/);
   assert.match(restore, /assertMarketplaceBackupFactsMatch/);
 
@@ -236,6 +261,7 @@ test('daily backup uses one UTC artifact, rejects overlap, and retries cleanly a
   const paths = marketplaceBackupArtifactPaths(directory, now, 1234);
   assert.equal(paths.dayKey, '2026-08-29');
   assert.equal(paths.archivePath.endsWith('/marketplace-2026-08-29.dump'), true);
+  assert.equal(paths.bundlePath.endsWith('/marketplace-2026-08-29.backup'), true);
   let release: () => void = () => undefined;
   let markStarted: () => void = () => undefined;
   const started = new Promise<void>((resolve) => { markStarted = resolve; });
@@ -280,6 +306,7 @@ test('daily backup uses one UTC artifact, rejects overlap, and retries cleanly a
 
     const corruptDay = new Date('2026-08-31T00:01:00.000Z');
     const corruptPaths = marketplaceBackupArtifactPaths(directory, corruptDay, 1234);
+    await mkdir(corruptPaths.bundlePath, { recursive: true });
     await writeFile(corruptPaths.archivePath, 'partial old archive');
     await writeFile(corruptPaths.manifestPath, testBackupManifest(
       corruptPaths.archivePath, corruptDay, 'different archive',

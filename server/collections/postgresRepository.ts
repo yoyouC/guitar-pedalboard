@@ -18,6 +18,7 @@ import {
 import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
 import { canIncludePresetRevision } from './referencePolicy.ts';
 import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
+import { normalizeSearchText } from '../search/text.ts';
 
 interface CollectionRow extends QueryResultRow {
   id: string;
@@ -328,9 +329,10 @@ export function createPostgresPresetCollectionManagementRepository(
         await requireTags(client, input.tagIds);
         await client.query(
           `INSERT INTO marketplace_preset_collections
-             (id, creator_id, title, description, visibility, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $6)`,
-          [input.id, input.creator.id, input.title, input.description, input.visibility, input.now],
+             (id, creator_id, title, description, visibility, search_text, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+          [input.id, input.creator.id, input.title, input.description, input.visibility,
+            normalizeSearchText(`${input.title} ${input.description}`), input.now],
         );
         await replaceTags(client, input.id, input.tagIds);
         await client.query('COMMIT');
@@ -358,7 +360,8 @@ export function createPostgresPresetCollectionManagementRepository(
            SET title = $3,
                description = $4,
                visibility = $5,
-               updated_at = GREATEST($6::timestamptz, updated_at + interval '1 millisecond')
+               search_text = $6,
+               updated_at = GREATEST($7::timestamptz, updated_at + interval '1 millisecond')
            WHERE id = $1 AND creator_id = $2`,
           [
             input.collectionId,
@@ -366,6 +369,7 @@ export function createPostgresPresetCollectionManagementRepository(
             input.title,
             input.description,
             input.visibility,
+            normalizeSearchText(`${input.title} ${input.description}`),
             input.now,
           ],
         );

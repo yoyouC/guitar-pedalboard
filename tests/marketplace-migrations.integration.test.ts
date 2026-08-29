@@ -187,6 +187,12 @@ test('0016 upgrades legacy trigram indexes to application-normalized projections
     assert.equal(indexes.rows.every((row) => (
       row.indexdef.includes('search_text') && row.indexdef.includes('gin_trgm_ops')
     )), true);
+    await assert.doesNotReject(async () => {
+      await client.query(await readFile(
+        new URL('../server/marketplace/migrations/0016_marketplace_normalized_search.sql', import.meta.url),
+        'utf8',
+      ));
+    });
   } finally {
     await client.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await client.end();
