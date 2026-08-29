@@ -418,7 +418,14 @@ export default function App() {
         >
           合集 Demo
         </button>
-        <MemberPanel onNavigate={navigate} />
+        <MemberPanel
+          onNavigate={navigate}
+          emailVerificationUrl={
+            pathname === '/login' || pathname.startsWith('/login?')
+              ? `${window.location.pathname}${window.location.search}`
+              : null
+          }
+        />
       </header>
 
       <PublishedPresetRoute

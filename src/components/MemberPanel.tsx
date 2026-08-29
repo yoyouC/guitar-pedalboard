@@ -11,17 +11,24 @@ import {
   beginGoogleAuth,
   fetchCurrentMember,
   MemberClientError,
+  requestEmailVerification,
   requestMagicLink,
   signOut,
   updateMemberProfile,
 } from '../members/client.ts';
 import { CreatePresetCollectionForm } from './CreatePresetCollectionForm.tsx';
+import {
+  MARKETPLACE_EMAIL_VERIFICATION_EVENT,
+  parseMarketplaceEmailVerificationRequest,
+  type MarketplaceEmailVerificationRequest,
+} from '../members/emailVerification.ts';
 
 interface MemberPanelProps {
   onNavigate(pathname: string): void;
+  emailVerificationUrl?: string | null;
 }
 
-export function MemberPanel({ onNavigate }: MemberPanelProps) {
+export function MemberPanel({ onNavigate, emailVerificationUrl }: MemberPanelProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [member, setMember] = useState<MemberProfile | null>(null);
@@ -34,6 +41,23 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
   const [creatingCollection, setCreatingCollection] = useState(false);
   const [deletion, setDeletion] = useState<MarketplaceAccountDeletion | null>(null);
   const [confirmingDeletion, setConfirmingDeletion] = useState(false);
+  const [verificationReturnPath, setVerificationReturnPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    const activate = (request: MarketplaceEmailVerificationRequest) => {
+      setVerificationReturnPath(request.returnPath);
+      setOpen(true);
+    };
+    const onVerification = (event: Event) => {
+      activate((event as CustomEvent<MarketplaceEmailVerificationRequest>).detail);
+    };
+    window.addEventListener(MARKETPLACE_EMAIL_VERIFICATION_EVENT, onVerification);
+    const directRequest = emailVerificationUrl
+      ? parseMarketplaceEmailVerificationRequest(emailVerificationUrl)
+      : null;
+    if (directRequest) activate(directRequest);
+    return () => window.removeEventListener(MARKETPLACE_EMAIL_VERIFICATION_EVENT, onVerification);
+  }, [emailVerificationUrl]);
 
   useEffect(() => {
     if (!open) return;
@@ -64,8 +88,15 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
     setLoading(true);
     setMessage('');
     try {
-      await requestMagicLink(email, `${window.location.pathname}${window.location.hash}`);
-      setMessage('登录链接已发送，请检查邮箱。链接 5 分钟内有效。');
+      const callbackURL = verificationReturnPath
+        ?? `${window.location.pathname}${window.location.hash}`;
+      if (verificationReturnPath) await requestEmailVerification(email, callbackURL);
+      else await requestMagicLink(email, callbackURL);
+      setMessage(
+        verificationReturnPath
+          ? '验证链接已发送，请检查邮箱。当前表单会保留在本页。'
+          : '登录链接已发送，请检查邮箱。链接 5 分钟内有效。',
+      );
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : '发送失败');
     } finally {
@@ -183,22 +214,30 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
       {open && (
         <section className="member-panel" aria-label="成员账户">
           <button className="member-panel__close" type="button" onClick={() => setOpen(false)}>×</button>
-          <h2>{member ? '创作者资料' : '登录 Guitar Pedalboard'}</h2>
+          <h2>{verificationReturnPath ? '验证邮箱' : member ? '创作者资料' : '登录 Guitar Pedalboard'}</h2>
           {loading && <p>处理中…</p>}
-          {anonymous && !loading && (
+          {(anonymous || verificationReturnPath) && !loading && (
             <>
               <form onSubmit={sendMagicLink}>
                 <label>
                   邮箱
                   <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
                 </label>
-                <button type="submit">发送魔法链接</button>
+                <button type="submit">
+                  {verificationReturnPath ? '发送邮箱验证链接' : '发送魔法链接'}
+                </button>
               </form>
-              <button type="button" onClick={() => void google('sign-in')}>使用 Google 登录</button>
-              <small>本站不保存密码；相同邮箱不会自动合并身份。</small>
+              {!verificationReturnPath && (
+                <button type="button" onClick={() => void google('sign-in')}>使用 Google 登录</button>
+              )}
+              <small>
+                {verificationReturnPath
+                  ? '验证完成后返回原操作；发布、修订或举报内容不会因打开验证入口而清空。'
+                  : '本站不保存密码；相同邮箱不会自动合并身份。'}
+              </small>
             </>
           )}
-          {member && !loading && (
+          {member && !verificationReturnPath && !loading && (
             <>
               {deletion ? (
                 <div className="member-panel__deletion">

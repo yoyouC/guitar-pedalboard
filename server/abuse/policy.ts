@@ -1,5 +1,8 @@
 import type { MarketplaceWriteOperation, MarketplaceWritePolicies, TokenBucketPolicy } from './writeLimiter.ts';
 
+const MAX_BUCKET_VALUE = 1_000_000;
+const MAX_FULL_REFILL_MINUTES = 30 * 24 * 60;
+
 export const DEFAULT_MARKETPLACE_WRITE_POLICIES: Record<MarketplaceWriteOperation, {
   member: TokenBucketPolicy;
   network: TokenBucketPolicy;
@@ -34,8 +37,10 @@ function bucket(value: unknown): TokenBucketPolicy | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
   return typeof item.refillPerMinute === 'number' && Number.isFinite(item.refillPerMinute)
-    && item.refillPerMinute > 0 && typeof item.burst === 'number'
-    && Number.isInteger(item.burst) && item.burst > 0
+    && item.refillPerMinute > 0 && item.refillPerMinute <= MAX_BUCKET_VALUE
+    && typeof item.burst === 'number' && Number.isSafeInteger(item.burst)
+    && item.burst > 0 && item.burst <= MAX_BUCKET_VALUE
+    && item.burst / item.refillPerMinute <= MAX_FULL_REFILL_MINUTES
     ? { refillPerMinute: item.refillPerMinute, burst: item.burst }
     : null;
 }

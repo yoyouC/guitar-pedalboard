@@ -20,6 +20,10 @@ export function unverifiedEmailWriteDenied(
   returnPath: string,
 ): Response | null {
   if (identity.emailVerified !== false) return null;
+  return emailVerificationRequired(returnPath);
+}
+
+export function emailVerificationRequired(returnPath: string): Response {
   const verificationUrl = `/login?verify=email&return=${encodeURIComponent(returnPath)}`;
   return Response.json({
     error: {

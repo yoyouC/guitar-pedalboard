@@ -88,6 +88,59 @@ test('magic link signs in without exposing a password endpoint', async () => {
   assert.equal((await password.json()).code, 'EMAIL_PASSWORD_DISABLED');
 });
 
+test('email verification is bound to the current session identity', async () => {
+  const database = {
+    marketplace_auth_users: [] as Array<Record<string, unknown>>,
+    marketplace_auth_sessions: [] as Array<Record<string, unknown>>,
+    marketplace_auth_accounts: [] as Array<Record<string, unknown>>,
+    marketplace_auth_verifications: [] as Array<Record<string, unknown>>,
+  };
+  const deliveries: Array<{ email: string; url: string }> = [];
+  const auth = createPlatformAuth({
+    baseURL,
+    secret,
+    database: memoryAdapter(database),
+    sendMagicLink: async ({ email, url }) => { deliveries.push({ email, url }); },
+  });
+
+  await auth.handler(new Request(`${baseURL}/api/auth/sign-in/magic-link`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: baseURL },
+    body: JSON.stringify({ email: 'ada@example.test', callbackURL: '/' }),
+  }));
+  const signIn = await auth.handler(new Request(deliveries[0].url, {
+    headers: { origin: baseURL },
+    redirect: 'manual',
+  }));
+  const cookie = cookies(signIn);
+  database.marketplace_auth_users[0].emailVerified = false;
+
+  const mismatch = await auth.handler(new Request(`${baseURL}/api/auth/send-verification-email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+    body: JSON.stringify({ email: 'grace@example.test', callbackURL: '/marketplace' }),
+  }));
+  assert.equal(mismatch.status, 400);
+  assert.equal(deliveries.length, 1);
+
+  const request = await auth.handler(new Request(`${baseURL}/api/auth/send-verification-email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+    body: JSON.stringify({ email: 'ada@example.test', callbackURL: '/marketplace' }),
+  }));
+  assert.equal(request.status, 200);
+  assert.equal(deliveries.length, 2);
+  assert.equal(deliveries[1].email, 'ada@example.test');
+  assert.match(deliveries[1].url, /\/api\/auth\/verify-email\?token=/);
+
+  const verification = await auth.handler(new Request(deliveries[1].url, {
+    headers: { cookie, origin: baseURL },
+    redirect: 'manual',
+  }));
+  assert.equal(verification.status, 302);
+  assert.equal(database.marketplace_auth_users[0].emailVerified, true);
+});
+
 test('account linking policy requires an authenticated explicit Google link', async () => {
   const options = createPlatformAuthOptions({
     baseURL,

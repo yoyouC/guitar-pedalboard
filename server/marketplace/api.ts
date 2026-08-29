@@ -366,8 +366,18 @@ export function createMarketplaceApi({
               return parsed ? Response.json({ preset: parsed }) : marketplaceUnavailable();
             }
             if (restoreMatch) {
+              const verificationDenied = unverifiedEmailWriteDenied(
+                identity,
+                `/marketplace/tones/${encodeURIComponent(presetId)}/manage`,
+              );
+              if (verificationDenied) return verificationDenied;
               const update = validateRevisionRestore(await jsonBody(request));
               if (!update) return invalidUpdate();
+              const limited = await marketplaceWriteLimitDenied({
+                limiter: publication.writeLimiter, operation: 'revision', memberId: member.id,
+                request, now,
+              });
+              if (limited) return limited;
               const updated = await publication.repository.restoreRevision({
                 presetId,
                 creatorId: member.id,

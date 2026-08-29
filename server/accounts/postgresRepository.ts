@@ -1,5 +1,6 @@
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import type { MarketplaceAccountExport } from '../../shared/account.ts';
+import { deleteMarketplaceWriteBucketsForMember } from '../abuse/postgresWriteLimiter.ts';
 import { rebuildMarketplaceLikeCountsInTransaction } from '../likes/postgresRepository.ts';
 import { MARKETPLACE_LIKE_WRITE_LOCK } from '../likes/postgresLock.ts';
 import {
@@ -436,6 +437,7 @@ export function createPostgresMarketplaceAccountRepository(
             `SELECT set_config('marketplace.account_purge_member_id', $1, true)`,
             [memberId],
           );
+          await deleteMarketplaceWriteBucketsForMember(client, memberId);
 
           await client.query(`DELETE FROM marketplace_preset_likes WHERE member_id = $1`, [memberId]);
           await client.query(`DELETE FROM marketplace_collection_likes WHERE member_id = $1`, [memberId]);

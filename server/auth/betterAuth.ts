@@ -1,5 +1,5 @@
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
-import { magicLink, type MagicLinkOptions } from 'better-auth/plugins';
+import { magicLink, type MagicLinkOptions } from 'better-auth/plugins/magic-link';
 
 export type MagicLinkSender = MagicLinkOptions['sendMagicLink'];
 
@@ -43,6 +43,12 @@ export function createPlatformAuthOptions({
       },
     },
     verification: { modelName: 'marketplace_auth_verifications' },
+    emailVerification: {
+      expiresIn: 5 * 60,
+      sendVerificationEmail: async ({ user, url, token }) => {
+        await sendMagicLink({ email: user.email, url, token });
+      },
+    },
     plugins: [
       magicLink({
         sendMagicLink,

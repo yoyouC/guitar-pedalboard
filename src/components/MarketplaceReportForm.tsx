@@ -4,6 +4,7 @@ import type {
   MarketplaceModerationTargetKind,
 } from '../../shared/marketplace';
 import { marketplaceClient, MarketplaceClientError } from '../marketplace/client';
+import { requestMarketplaceEmailVerification } from '../members/emailVerification';
 
 const REASONS: Array<{ value: MarketplaceModerationReportReason; label: string }> = [
   { value: 'copyright', label: '侵权' },
@@ -80,7 +81,9 @@ export function MarketplaceReportForm({ kind, targetId, onNavigate }: {
       )}
       {message && <small role="status">{message}</small>}
       {verificationUrl && (
-        <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>
+        <button type="button" onClick={() => {
+          if (!requestMarketplaceEmailVerification(verificationUrl)) onNavigate(verificationUrl);
+        }}>验证邮箱</button>
       )}
     </aside>
   );

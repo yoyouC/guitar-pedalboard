@@ -2,6 +2,13 @@ import type { MarketplaceWriteLimiter, MarketplaceWritePolicies, TokenBucketPoli
 
 interface Bucket { tokens: number; updatedAt: number }
 
+function idleTtlMs(policy: { member: TokenBucketPolicy; network: TokenBucketPolicy }): number {
+  return Math.ceil(Math.max(
+    policy.member.burst / policy.member.refillPerMinute,
+    policy.network.burst / policy.network.refillPerMinute,
+  ) * 60_000);
+}
+
 export function createMemoryMarketplaceWriteLimiter(
   policies: MarketplaceWritePolicies,
 ): MarketplaceWriteLimiter {
@@ -21,6 +28,11 @@ export function createMemoryMarketplaceWriteLimiter(
       const policy = policies[input.operation];
       if (!policy) return { allowed: true };
       const now = input.now.getTime();
+      const operationPrefix = `${input.operation}:`;
+      const expiresBefore = now - idleTtlMs(policy);
+      for (const [key, bucket] of buckets) {
+        if (key.startsWith(operationPrefix) && bucket.updatedAt <= expiresBefore) buckets.delete(key);
+      }
       const candidates = [
         { key: `${input.operation}:member:${input.memberId}`, policy: policy.member },
         { key: `${input.operation}:network:${input.networkSource}`, policy: policy.network },
@@ -37,6 +49,12 @@ export function createMemoryMarketplaceWriteLimiter(
         tokens: item.bucket.tokens - 1, updatedAt: now,
       }));
       return { allowed: true };
+    },
+    async purgeMember(memberId) {
+      const suffix = `:member:${memberId}`;
+      for (const key of buckets.keys()) {
+        if (key.endsWith(suffix)) buckets.delete(key);
+      }
     },
   };
 }

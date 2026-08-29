@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { Client, Pool } from 'pg';
+import {
+  createPostgresMarketplaceWriteLimiter,
+  marketplaceWriteSubjectHash,
+} from '../server/abuse/postgresWriteLimiter.ts';
+import { DEFAULT_MARKETPLACE_WRITE_POLICIES } from '../server/abuse/policy.ts';
 import { createMarketplaceAccountApi } from '../server/accounts/api.ts';
 import { createPostgresMarketplaceAccountRepository } from '../server/accounts/postgresRepository.ts';
 import { createPlatformAuth } from '../server/auth/betterAuth.ts';
@@ -34,7 +39,7 @@ const migrations = [
   '0006_preset_remix_provenance.sql', '0007_preset_collections.sql',
   '0008_preset_search_indexes.sql', '0009_marketplace_likes.sql',
   '0010_marketplace_trending.sql', '0011_marketplace_moderation.sql',
-  '0012_account_lifecycle.sql',
+  '0012_account_lifecycle.sql', '0013_marketplace_write_limits.sql',
 ];
 
 test('PostgreSQL account export, recovery, purge, and tombstones preserve only required facts', {
@@ -244,6 +249,9 @@ test('PostgreSQL account export, recovery, purge, and tombstones preserve only r
       }),
     );
     const members = createPostgresMemberRepository(poolLike);
+    const writeLimiter = createPostgresMarketplaceWriteLimiter(
+      poolLike, DEFAULT_MARKETPLACE_WRITE_POLICIES,
+    );
     const publicPresets = createPostgresPublishedPresetRepository(client);
     const publication = createPostgresPublishedPresetPublicationRepository(poolLike);
     const presetApi = createMarketplaceApi({
@@ -257,6 +265,7 @@ test('PostgreSQL account export, recovery, purge, and tombstones preserve only r
         createRevisionId: () => 'revision-must-not-be-created',
         createMemberId: () => 'member-must-not-be-created',
         createHandleSuffix: () => 'blocked1',
+        writeLimiter,
       },
     });
     const collectionApi = createPresetCollectionApi({
@@ -270,6 +279,7 @@ test('PostgreSQL account export, recovery, purge, and tombstones preserve only r
       now: () => currentTime,
       createMemberId: () => 'member-must-not-be-created',
       createHandleSuffix: () => 'blocked1',
+      writeLimiter,
     });
     let moderationActionSequence = 0;
     const moderationApi = createMarketplaceModerationApi({
@@ -300,6 +310,14 @@ test('PostgreSQL account export, recovery, purge, and tombstones preserve only r
     const getCollection = (id: string) => collectionApi.fetch(new Request(
       `https://pedalboard.test/api/marketplace/collections/${id}`,
     ));
+
+    const initialLimitedWrite = await likesApi.fetch(new Request(
+      'https://pedalboard.test/api/marketplace/likes/presets/preset-remix', {
+        method: 'PUT',
+        headers: { cookie: ownerCookie, 'x-forwarded-for': '203.0.113.77' },
+      },
+    ));
+    assert.equal(initialLimitedWrite.status, 200);
 
     const exportResponse = await accountRequest('GET', '/api/marketplace/me/export');
     assert.equal(exportResponse.status, 200);
@@ -438,6 +456,12 @@ test('PostgreSQL account export, recovery, purge, and tombstones preserve only r
       { headers: { authorization: 'Bearer cron-secret' } },
     ));
     assert.deepEqual(await purged.json(), { purgedMemberIds: [ownerId] });
+    const retainedMemberBuckets = await client.query(
+      `SELECT 1 FROM marketplace_write_rate_buckets
+       WHERE scope = 'member' AND subject_hash = $1`,
+      [await marketplaceWriteSubjectHash(ownerId)],
+    );
+    assert.equal(retainedMemberBuckets.rowCount, 0);
     const exportAfterPurge = await accountRequest('GET', '/api/marketplace/me/export');
     assert.equal(exportAfterPurge.status, 401);
     assert.equal(await verifyMagicLink(lateMagicLink), null);

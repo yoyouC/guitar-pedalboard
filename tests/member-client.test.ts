@@ -5,6 +5,7 @@ import {
   fetchCurrentMember,
   fetchPublicCreatorById,
   fetchPublicCreatorWorksById,
+  requestEmailVerification,
   requestMagicLink,
   updateMemberProfile,
 } from '../src/members/client.ts';
@@ -85,4 +86,21 @@ test('magic link and profile updates use stable same-origin endpoints', async ()
   });
   assert.equal(calls[1].input, '/api/marketplace/me/profile');
   assert.equal(calls[1].init?.method, 'PATCH');
+});
+
+test('email verification uses the current-session verification endpoint', async () => {
+  const calls: Array<{ input: string; init?: RequestInit }> = [];
+  const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ input: String(input), init });
+    return Response.json({ status: true });
+  };
+
+  await requestEmailVerification('ada@example.test', '/marketplace/presets/preset-1', fetch);
+
+  assert.equal(calls[0].input, '/api/auth/send-verification-email');
+  assert.equal(calls[0].init?.method, 'POST');
+  assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
+    email: 'ada@example.test',
+    callbackURL: '/marketplace/presets/preset-1',
+  });
 });

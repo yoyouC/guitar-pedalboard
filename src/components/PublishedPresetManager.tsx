@@ -10,6 +10,7 @@ import { RIG_PRESET_VERSION } from '../state/presetCodec';
 import { rigToPresetState } from '../state/rigStore';
 import { rigStore } from '../state/useRig';
 import { MarketplaceClientError, marketplaceClient } from '../marketplace/client';
+import { requestMarketplaceEmailVerification } from '../members/emailVerification';
 import {
   loadPublishedPresetManagerData,
   runPublishedPresetManagerMutation,
@@ -191,7 +192,9 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
 
       {message && <p className="preset-manager__message" role="status">{message}</p>}
       {verificationUrl && (
-        <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>
+        <button type="button" onClick={() => {
+          if (!requestMarketplaceEmailVerification(verificationUrl)) onNavigate(verificationUrl);
+        }}>验证邮箱</button>
       )}
     </section>
   );

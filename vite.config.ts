@@ -322,6 +322,7 @@ function serveMarketplaceApi(): Plugin {
               )?.email ?? '')
             : ''
           await likes.purgeAccount(memberId)
+          await writeLimiter.purgeMember?.(memberId)
           await publications.purgeAccount(memberId, now)
           await collections.purgeAccount(memberId, now)
           if (member?.authUserId) {

@@ -11,6 +11,7 @@ export interface MarketplaceWriteLimiter {
     networkSource: string;
     now: Date;
   }): Promise<{ allowed: boolean; retryAt?: Date }>;
+  purgeMember?(memberId: string): Promise<void>;
 }
 
 export function marketplaceNetworkSource(request: Request): string {
@@ -32,7 +33,16 @@ export async function marketplaceWriteLimitDenied(input: {
     networkSource: marketplaceNetworkSource(input.request), now: input.now,
   });
   if (result.allowed) return null;
-  const retryAt = result.retryAt ?? new Date(input.now.getTime() + 60_000);
+  const defaultRetryAtMs = input.now.getTime() + 60_000;
+  const candidateRetryAtMs = result.retryAt?.getTime() ?? defaultRetryAtMs;
+  const maxRetryAtMs = input.now.getTime() + 30 * 24 * 60 * 60_000;
+  const retryAt = new Date(
+    Number.isFinite(candidateRetryAtMs)
+      && candidateRetryAtMs > input.now.getTime()
+      && candidateRetryAtMs <= maxRetryAtMs
+      ? candidateRetryAtMs
+      : defaultRetryAtMs,
+  );
   const retryAfter = Math.max(1, Math.ceil((retryAt.getTime() - input.now.getTime()) / 1000));
   return Response.json({
     error: {

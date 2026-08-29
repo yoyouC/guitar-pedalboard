@@ -25,6 +25,15 @@ test('write-limit policy supports private per-operation overrides and rejects in
     parseMarketplaceWritePolicies({ MARKETPLACE_WRITE_LIMIT_POLICY: '{"like":{"member":{}}}' }),
     DEFAULT_MARKETPLACE_WRITE_POLICIES,
   );
+  assert.deepEqual(
+    parseMarketplaceWritePolicies({ MARKETPLACE_WRITE_LIMIT_POLICY: JSON.stringify({
+      publish: {
+        member: { refillPerMinute: 5e-324, burst: 1 },
+        network: { refillPerMinute: 1, burst: 1 },
+      },
+    }) }),
+    DEFAULT_MARKETPLACE_WRITE_POLICIES,
+  );
 });
 
 test('dual token buckets isolate operations and require both member and network capacity', async () => {
@@ -50,6 +59,28 @@ test('dual token buckets isolate operations and require both member and network 
   assert.equal((await consume('publish', 'member-c', '198.51.100.1')).allowed, false);
 });
 
+test('memory limiter forgets a purged member without resetting unrelated network limits', async () => {
+  const limiter = createMemoryMarketplaceWriteLimiter({
+    publish: {
+      member: { refillPerMinute: 1, burst: 1 },
+      network: { refillPerMinute: 1, burst: 1 },
+    },
+  });
+  const now = new Date('2026-08-29T10:00:00.000Z');
+  assert.deepEqual(await limiter.consume({
+    operation: 'publish', memberId: 'member-a', networkSource: '198.51.100.1', now,
+  }), { allowed: true });
+
+  await limiter.purgeMember?.('member-a');
+
+  assert.deepEqual(await limiter.consume({
+    operation: 'publish', memberId: 'member-a', networkSource: '198.51.100.2', now,
+  }), { allowed: true });
+  assert.equal((await limiter.consume({
+    operation: 'publish', memberId: 'member-b', networkSource: '198.51.100.1', now,
+  })).allowed, false);
+});
+
 test('limit response exposes a stable retry contract and reads the first forwarded address', async () => {
   const limiter = createMemoryMarketplaceWriteLimiter({
     report: {
@@ -70,4 +101,17 @@ test('limit response exposes a stable retry contract and reads the first forward
     code: 'write_rate_limited', message: 'Community write rate limit reached',
     operation: 'report', retryAt: '2026-08-29T10:01:00.000Z',
   } });
+});
+
+test('limit response keeps its 429 contract when an adapter returns an invalid retry time', async () => {
+  const request = new Request('https://pedalboard.test/api/marketplace/reports');
+  const now = new Date('2026-08-29T10:00:00.000Z');
+  const denied = await marketplaceWriteLimitDenied({
+    limiter: { async consume() { return { allowed: false, retryAt: new Date(Number.NaN) }; } },
+    operation: 'report', memberId: 'member-a', request, now,
+  });
+  assert.ok(denied);
+  assert.equal(denied.status, 429);
+  assert.equal(denied.headers.get('retry-after'), '60');
+  assert.equal((await denied.json()).error.retryAt, '2026-08-29T10:01:00.000Z');
 });

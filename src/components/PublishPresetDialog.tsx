@@ -11,6 +11,7 @@ import { marketplaceClient, MarketplaceClientError } from '../marketplace/client
 import { fetchCurrentMember } from '../members/client.ts';
 import { publishRigFromLocalSource } from '../marketplace/publishRig.ts';
 import { analyzePublishableRig } from '../../shared/publishableRig.ts';
+import { requestMarketplaceEmailVerification } from '../members/emailVerification.ts';
 
 interface PublishPresetDialogProps {
   rig: RigPresetState;
@@ -165,7 +166,9 @@ export function PublishPresetDialog({
           </dl>
           {message && <p className="publish-dialog__error" role="alert">{message}</p>}
           {verificationUrl && (
-            <button type="button" onClick={() => { onClose(); onNavigate(verificationUrl); }}>
+            <button type="button" onClick={() => {
+              if (!requestMarketplaceEmailVerification(verificationUrl)) onNavigate(verificationUrl);
+            }}>
               验证邮箱
             </button>
           )}
