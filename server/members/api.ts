@@ -14,6 +14,8 @@ const ME_PATH = '/api/marketplace/me';
 const PROFILE_PATH = '/api/marketplace/me/profile';
 const CREATOR_PATH = /^\/api\/marketplace\/creators\/([^/]+)$/;
 const CREATOR_WORKS_PATH = /^\/api\/marketplace\/creators\/([^/]+)\/presets$/;
+const CREATOR_ID_PATH = /^\/api\/marketplace\/creators\/id\/([^/]+)$/;
+const CREATOR_ID_WORKS_PATH = /^\/api\/marketplace\/creators\/id\/([^/]+)\/presets$/;
 const HANDLE_PATTERN = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 
 export interface MemberApiDependencies {
@@ -50,14 +52,16 @@ function profile(member: MemberRecord): MemberProfile {
   };
 }
 
-function creator(member: MemberRecord): PublicCreatorProfile {
+function creator(member: MemberRecord, stableId = false): PublicCreatorProfile {
   return {
     id: member.id,
     handle: member.handle,
     displayName: member.displayName,
     bio: member.bio,
     avatarUrl: member.avatarUrl,
-    publicWorksUrl: `/api/marketplace/creators/${encodeURIComponent(member.handle)}/presets`,
+    publicWorksUrl: stableId
+      ? `/api/marketplace/creators/id/${encodeURIComponent(member.id)}/presets`
+      : `/api/marketplace/creators/${encodeURIComponent(member.handle)}/presets`,
   };
 }
 
@@ -150,6 +154,23 @@ export function createMemberApi(dependencies: MemberApiDependencies): MemberApi 
           }
           throw cause;
         }
+      }
+
+      const creatorIdMatch = request.method === 'GET' ? CREATOR_ID_PATH.exec(url.pathname) : null;
+      if (creatorIdMatch) {
+        const member = await dependencies.members.findById(decodeURIComponent(creatorIdMatch[1]));
+        if (!member) return error(404, 'creator_not_found', 'Creator not found');
+        return Response.json({ creator: creator(member, true) });
+      }
+
+      const creatorIdWorksMatch = request.method === 'GET'
+        ? CREATOR_ID_WORKS_PATH.exec(url.pathname)
+        : null;
+      if (creatorIdWorksMatch) {
+        const member = await dependencies.members.findById(decodeURIComponent(creatorIdWorksMatch[1]));
+        if (!member) return error(404, 'creator_not_found', 'Creator not found');
+        if (!dependencies.publicWorks) return error(503, 'member_service_unavailable', 'Member service is unavailable');
+        return Response.json({ presets: await dependencies.publicWorks.listByCreatorId(member.id) });
       }
 
       const creatorMatch = request.method === 'GET' ? CREATOR_PATH.exec(url.pathname) : null;

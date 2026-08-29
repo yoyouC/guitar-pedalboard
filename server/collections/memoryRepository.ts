@@ -21,6 +21,7 @@ export function createMemoryPresetCollectionRepository(
   presets: PresetCollectionReferenceSource,
   tags: readonly MarketplaceTag[],
 ): PresetCollectionRepository & PresetCollectionManagementRepository & {
+  listForDiscovery(): Promise<PresetCollection[]>;
   setModerationVisibility(
     collectionId: string,
     visibility: PresetCollection['visibility'],
@@ -122,6 +123,10 @@ export function createMemoryPresetCollectionRepository(
   }
 
   return {
+    async listForDiscovery() {
+      return Promise.all([...collectionsById.values()].map(project));
+    },
+
     async listAvailableTags() {
       return [...tagsById.values()].map((tag) => ({ ...tag }));
     },

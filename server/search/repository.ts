@@ -1,4 +1,7 @@
 import type {
+  MarketplaceSearchPage,
+  PresetCollectionSearchItem,
+  PublicCreatorSearchItem,
   PublishedPresetSearchPage,
   RigDerivedAttributes,
   RigResourceDependencyKey,
@@ -20,4 +23,19 @@ export interface PublishedPresetSearchInput {
 
 export interface PublishedPresetSearchRepository {
   searchPublicPresets(input: PublishedPresetSearchInput): Promise<PublishedPresetSearchPage>;
+}
+
+export interface MarketplaceDiscoverySearchInput {
+  text: string;
+  limit: number;
+  cursor: string | null;
+}
+
+export interface MarketplaceDiscoveryRepository {
+  searchPublicCollections(
+    input: MarketplaceDiscoverySearchInput,
+  ): Promise<MarketplaceSearchPage<PresetCollectionSearchItem>>;
+  searchCreators(
+    input: MarketplaceDiscoverySearchInput,
+  ): Promise<MarketplaceSearchPage<PublicCreatorSearchItem>>;
 }

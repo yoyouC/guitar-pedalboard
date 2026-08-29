@@ -14,7 +14,8 @@ import { createMemoryPublicCreatorWorks } from './server/members/works.ts'
 import { createPresetCollectionApi } from './server/collections/api.ts'
 import { createMemoryPresetCollectionRepository } from './server/collections/memoryRepository.ts'
 import type { MarketplaceTag, PresetCollection } from './shared/marketplace.ts'
-import { createPublishedPresetSearchApi } from './server/search/api.ts'
+import { createMarketplaceSearchApi } from './server/search/api.ts'
+import { createMemoryMarketplaceDiscoveryRepository } from './server/search/memoryRepository.ts'
 import { createMarketplaceLikesApi } from './server/likes/api.ts'
 import { createMemoryMarketplaceLikeRepository } from './server/likes/memoryRepository.ts'
 import { DEFAULT_MARKETPLACE_TRENDING_POLICY } from './server/trending/policy.ts'
@@ -142,7 +143,13 @@ function serveMarketplaceApi(): Plugin {
       createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
     },
   })
-  const searchApi = createPublishedPresetSearchApi({ presets: publications })
+  const searchApi = createMarketplaceSearchApi({
+    presets: publications,
+    discovery: createMemoryMarketplaceDiscoveryRepository({
+      collections: () => collections.listForDiscovery(),
+      members: () => members.listForDiscovery(),
+    }),
+  })
   const bannedMemberIds = new Set<string>()
   const likes = createMemoryMarketplaceLikeRepository({
     presets: [demoPublishedPreset],
@@ -252,7 +259,7 @@ function serveMarketplaceApi(): Plugin {
               ? await memberApi.fetch(request)
               : req.url.startsWith('/api/marketplace/collections')
                 ? await collectionApi.fetch(request)
-              : req.url.startsWith('/api/marketplace/search/presets')
+              : req.url.startsWith('/api/marketplace/search/')
                 ? await searchApi.fetch(request)
               : await presetApi.fetch(request)
           res.statusCode = response.status

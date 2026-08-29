@@ -138,6 +138,19 @@ test('handle is unique, rate-limited for 90 days, and old handles redirect forev
   const changedAgain = await api.fetch(profilePatch({ handle: 'ada-rigs' }));
   assert.equal(changedAgain.status, 200);
 
+  const stableId = await api.fetch(
+    new Request('https://pedalboard.test/api/marketplace/creators/id/member-ada'),
+  );
+  assert.equal(stableId.status, 200);
+  assert.deepEqual((await stableId.json()).creator, {
+    id: 'member-ada',
+    handle: 'ada-rigs',
+    displayName: 'Ada Lovelace',
+    bio: '',
+    avatarUrl: 'https://images.example.test/ada.png',
+    publicWorksUrl: '/api/marketplace/creators/id/member-ada/presets',
+  });
+
   const reclaimed = await api.fetch(profilePatch({
     handle: 'player-4f82a1',
     expectedUpdatedAt: currentTime.toISOString(),

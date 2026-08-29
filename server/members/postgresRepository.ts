@@ -69,6 +69,14 @@ LEFT JOIN marketplace_member_auth_identities AS identity ON identity.member_id =
 
 export function createPostgresMemberRepository(pool: Pool): MemberRepository {
   return {
+    async findById(memberId) {
+      const result = await pool.query<MemberRow>(
+        `${MEMBER_SELECT} WHERE member.id = $1 LIMIT 1`,
+        [memberId],
+      );
+      return result.rows[0] ? record(result.rows[0]) : null;
+    },
+
     async findOrCreateForIdentity(input: CreateMemberInput) {
       const client = await pool.connect();
       try {

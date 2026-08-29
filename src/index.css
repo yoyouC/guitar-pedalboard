@@ -3482,6 +3482,12 @@ body.midi-learn-mode input:disabled {
 }
 
 .marketplace-search__form { display: grid; gap: 12px; margin-top: 16px; }
+.marketplace-search__tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.marketplace-search__tabs button[aria-pressed='true'] {
+  border-color: #8dc7ff;
+  color: #8dc7ff;
+  background: rgba(74, 144, 226, 0.14);
+}
 .marketplace-search__form > label { display: grid; gap: 6px; }
 .marketplace-search__form input:not([type='checkbox']) {
   width: 100%;
