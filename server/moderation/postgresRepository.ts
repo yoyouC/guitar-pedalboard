@@ -386,7 +386,16 @@ export function createPostgresMarketplaceModerationRepository(
         created_at: Date | string;
       } & QueryResultRow>(
         `SELECT id, actor_auth_user_id, action, subject_kind, subject_id, reason, created_at
-         FROM marketplace_moderation_actions ORDER BY action_order DESC`,
+         FROM (
+           SELECT id, actor_auth_user_id, action, subject_kind, subject_id, reason,
+                  created_at, action_order
+           FROM marketplace_moderation_actions
+           UNION ALL
+           SELECT id, actor_auth_user_id, action, 'tag' AS subject_kind,
+                  tag_id AS subject_id, reason, created_at, NULL::bigint AS action_order
+           FROM marketplace_tag_administration_audit
+         ) AS governance_audit
+         ORDER BY created_at DESC, action_order DESC NULLS LAST, id DESC`,
       );
       return result.rows.map((row) => ({
         id: row.id,

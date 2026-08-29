@@ -22,6 +22,8 @@ import { DEFAULT_MARKETPLACE_TRENDING_POLICY } from './server/trending/policy.ts
 import { createMemoryMarketplaceTrendingRepository } from './server/trending/memoryRepository.ts'
 import { createMarketplaceModerationApi } from './server/moderation/api.ts'
 import { createMemoryMarketplaceModerationRepository } from './server/moderation/memoryRepository.ts'
+import { createMarketplaceTagAdministrationApi } from './server/tags/api.ts'
+import { createMemoryMarketplaceTagAdministrationRepository } from './server/tags/memoryRepository.ts'
 
 // 本地评估模型(models-local/,git-ignored,许可不允许公开分发):
 // 仅开发期经此中间件提供;/models-local/** 不进入 dist,也不会被部署。
@@ -226,6 +228,26 @@ function serveMarketplaceApi(): Plugin {
     createMemberId: () => crypto.randomUUID(),
     createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
   })
+  const tagAdministrationApi = createMarketplaceTagAdministrationApi({
+    repository: createMemoryMarketplaceTagAdministrationRepository({
+      tags: marketplaceTags.map((tag) => ({
+        ...tag, status: 'active' as const, mergedIntoId: null,
+      })),
+      presetTagIds: new Map([
+        [demoPublishedPreset.id, demoPublishedPreset.tags.map((tag) => tag.id)],
+        [demoUnlistedPreset.id, demoUnlistedPreset.tags.map((tag) => tag.id)],
+      ]),
+      collectionTagIds: new Map([
+        [demoCollection.id, demoCollection.tags.map((tag) => tag.id)],
+      ]),
+    }),
+    sessions,
+    adminAuthUserIds: new Set(
+      (process.env.VITE_DEV_ADMIN_AUTH_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
+    ),
+    now: () => new Date(),
+    createAuditId: () => crypto.randomUUID(),
+  })
   return {
     name: 'serve-marketplace-api',
     configureServer(server) {
@@ -257,6 +279,8 @@ function serveMarketplaceApi(): Plugin {
           })
           const response = req.url.startsWith('/api/auth/')
             ? await auth.handler(request)
+            : req.url.startsWith('/api/marketplace/admin/tags')
+              ? await tagAdministrationApi.fetch(request)
             : req.url.startsWith('/api/marketplace/reports')
               || req.url.startsWith('/api/marketplace/infringement-notices')
               || req.url.startsWith('/api/marketplace/me/moderation')
