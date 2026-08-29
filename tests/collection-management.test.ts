@@ -6,7 +6,11 @@ import { createMemoryPresetCollectionRepository } from '../server/collections/me
 import { createMemoryPublishedPresetRepository } from '../server/marketplace/memoryRepository.ts';
 import { demoPublishedPreset } from '../server/marketplace/demoPreset.ts';
 import { createMemoryMemberRepository } from '../server/members/memoryRepository.ts';
-import type { CanonicalPublishedPreset, MarketplaceTag } from '../shared/marketplace.ts';
+import type {
+  CanonicalPublishedPreset,
+  MarketplaceTag,
+  PresetCollection,
+} from '../shared/marketplace.ts';
 
 const now = new Date('2026-08-29T10:00:00.000Z');
 const tags: MarketplaceTag[] = [
@@ -103,9 +107,79 @@ test('authenticated member creates one owned collection with controlled tags', a
   ]);
   assert.deepEqual(body.collection.items, []);
 
+  const mine = await api.fetch(new Request(
+    'https://pedalboard.test/api/marketplace/me/collections',
+  ));
+  assert.equal(mine.status, 200);
+  assert.deepEqual((await mine.json()).collections.map((item: { id: string }) => item.id), [
+    'collection-ada-live',
+  ]);
+
   const anonymous = createFixture(null);
   const rejected = await createCollection(anonymous.api);
   assert.equal(rejected.status, 401);
+});
+
+test('a new collection cannot bypass the Unlisted-first publication journey', async () => {
+  const { api } = createFixture();
+  const response = await api.fetch(jsonRequest('/api/marketplace/collections', 'POST', {
+    title: 'Premature Public Set',
+    description: '',
+    tagIds: ['genre-rock'],
+    visibility: 'public',
+  }));
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.equal(body.error.code, 'invalid_collection');
+  assert.match(body.error.fields.visibility, /Unlisted/);
+});
+
+test('My Collections includes every owner-visible state but excludes hidden and other creators', async () => {
+  const base: PresetCollection = {
+    id: 'collection-base',
+    title: 'Base',
+    description: '',
+    visibility: 'public',
+    creator: { id: 'member-ada', handle: 'ada', displayName: 'Ada' },
+    tags: [tags[0]],
+    items: [],
+    createdAt: '2026-08-29T08:00:00.000Z',
+    updatedAt: '2026-08-29T08:00:00.000Z',
+  };
+  const presets = createMemoryPublishedPresetRepository([], tags);
+  const repository = createMemoryPresetCollectionRepository([
+    base,
+    { ...base, id: 'collection-unlisted', visibility: 'unlisted', updatedAt: '2026-08-29T09:00:00.000Z' },
+    { ...base, id: 'collection-withdrawn', visibility: 'withdrawn', updatedAt: '2026-08-29T10:00:00.000Z' },
+    { ...base, id: 'collection-hidden', visibility: 'hidden' },
+    { ...base, id: 'collection-other', creator: { id: 'other', handle: 'other', displayName: 'Other' } },
+  ], presets, tags);
+
+  const mine = await repository.listManagedByCreator('member-ada');
+  assert.deepEqual(mine.map(({ id, visibility }) => [id, visibility]), [
+    ['collection-withdrawn', 'withdrawn'],
+    ['collection-unlisted', 'unlisted'],
+    ['collection-base', 'public'],
+  ]);
+});
+
+test('a collection needs a currently Public Tone before becoming Public', async () => {
+  const { api } = createFixture();
+  const created = (await (await createCollection(api)).json()).collection;
+  const response = await api.fetch(jsonRequest(
+    '/api/marketplace/collections/collection-ada-live',
+    'PATCH',
+    {
+      title: created.title,
+      description: created.description,
+      tagIds: created.tags.map((tag: MarketplaceTag) => tag.id),
+      visibility: 'public',
+      items: [],
+      expectedUpdatedAt: created.updatedAt,
+    },
+  ));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, 'invalid_collection_reference');
 });
 
 test('creating a collection requires explicit public attribution setup', async () => {

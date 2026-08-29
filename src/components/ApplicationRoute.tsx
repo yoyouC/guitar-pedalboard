@@ -8,6 +8,7 @@ import { SettingsPage } from './SettingsPage.tsx';
 import { PublishPage } from './PublishPage.tsx';
 import { MyLibraryPage } from './MyLibraryPage.tsx';
 import { ToneManagePage } from './ToneManagePage.tsx';
+import { CollectionManagePage } from './CollectionManagePage.tsx';
 import type { AppPreferences } from '../app/preferences.ts';
 import type { AudioDiagnosticsSnapshot } from '../audio/audioDiagnostics.ts';
 import type { MidiState } from '../midi/useMidi.ts';
@@ -47,7 +48,9 @@ export function ApplicationRoute(props: ApplicationRouteProps) {
       return <PublishPage onNavigate={onNavigate} />;
     case 'tone-manage':
       return <ToneManagePage pathname={pathname} onNavigate={onNavigate} />;
-    case 'library': return <MyLibraryPage onNavigate={onNavigate} />;
+    case 'collection-manage':
+      return <CollectionManagePage pathname={pathname} onNavigate={onNavigate} />;
+    case 'library': return <MyLibraryPage search={search} onNavigate={onNavigate} />;
     case 'not-found':
       return (
         <section className="app-route-placeholder" role="alert">

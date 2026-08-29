@@ -30,13 +30,18 @@ export default {
       requestUrl.pathname = `/api/marketplace/collections/${encodeURIComponent(id)}/manage`;
     } else if (route === 'collections') {
       requestUrl.pathname = '/api/marketplace/collections';
+    } else if (route === 'my-collections') {
+      requestUrl.pathname = '/api/marketplace/me/collections';
     } else return new Response(null, { status: 404 });
     requestUrl.search = '';
 
     if (!marketplacePool) return unavailable();
     try {
       const reads = createPostgresPresetCollectionRepository(marketplacePool);
-      const isPrivate = request.method === 'POST' || request.method === 'PATCH' || route === 'manage';
+      const isPrivate = request.method === 'POST'
+        || request.method === 'PATCH'
+        || route === 'manage'
+        || route === 'my-collections';
       if (isPrivate) {
         const baseURL = authenticationBaseURL();
         if (!hasCanonicalOrigin(request, baseURL)) {

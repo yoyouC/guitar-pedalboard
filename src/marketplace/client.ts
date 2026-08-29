@@ -83,6 +83,7 @@ export interface MarketplaceClient {
     request: UpdatePublishedPresetVisibilityRequest,
   ): Promise<PublishedPreset>;
   getPresetCollection(id: string): Promise<PresetCollection>;
+  listManagedPresetCollections(): Promise<PresetCollection[]>;
   getManagedPresetCollection(id: string): Promise<PresetCollection>;
   createPresetCollection(request: CreatePresetCollectionRequest): Promise<PresetCollection>;
   updatePresetCollection(
@@ -465,6 +466,25 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
       const collection = parsePresetCollection(body.collection, id, true);
       if (!collection) throw new MarketplaceClientError('invalid_response', '合集管理响应无效。');
       return collection;
+    },
+
+    async listManagedPresetCollections() {
+      let response: Response;
+      try {
+        response = await fetchResponse('/api/marketplace/me/collections');
+      } catch {
+        throw new MarketplaceClientError('network', '无法连接 My Collections。');
+      }
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { collections?: unknown };
+      if (!Array.isArray(body.collections)) {
+        throw new MarketplaceClientError('invalid_response', 'My Collections 响应无效。');
+      }
+      const collections = body.collections.map((value) => parsePresetCollection(value, undefined, true));
+      if (collections.some((collection) => !collection)) {
+        throw new MarketplaceClientError('invalid_response', 'My Collections 响应无效。');
+      }
+      return collections as PresetCollection[];
     },
 
     createPresetCollection(request) {

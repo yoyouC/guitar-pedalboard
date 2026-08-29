@@ -15,6 +15,7 @@ export type AppRoute =
   | { kind: 'login'; section: 'account' }
   | { kind: 'library'; section: 'account' }
   | { kind: 'tone-manage'; section: 'account' }
+  | { kind: 'collection-manage'; section: 'account' }
   | { kind: 'settings'; section: 'account' }
   | { kind: 'publish'; section: 'account' }
   | { kind: 'not-found'; section: 'unknown' };
@@ -51,6 +52,7 @@ export function resolveAppRoute(pathname: string): AppRoute {
   if (exactPath(pathname, '/login')) return { kind: 'login', section: 'account' };
   if (exactPath(pathname, '/library')) return { kind: 'library', section: 'account' };
   if (/^\/library\/tones\/[^/]+\/?$/.test(pathname)) return { kind: 'tone-manage', section: 'account' };
+  if (/^\/library\/collections\/[^/]+\/?$/.test(pathname)) return { kind: 'collection-manage', section: 'account' };
   if (exactPath(pathname, '/settings')) return { kind: 'settings', section: 'account' };
   if (exactPath(pathname, '/publish')) return { kind: 'publish', section: 'account' };
   return { kind: 'not-found', section: 'unknown' };

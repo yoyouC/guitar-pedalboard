@@ -85,6 +85,10 @@
       "destination": "/api/marketplace-preset?route=preset&id=:id"
     },
     {
+      "source": "/api/marketplace/me/collections",
+      "destination": "/api/marketplace-collection?route=my-collections"
+    },
+    {
       "source": "/api/marketplace/collections",
       "destination": "/api/marketplace-collection?route=collections"
     },

@@ -242,6 +242,7 @@ async function validateReferences(
   currentVisibility: PresetCollectionVisibility,
 ): Promise<void> {
   const existing = await existingReferenceKeys(client, input.collectionId);
+  let hasPublicItem = false;
   for (const item of input.items) {
     const result = await client.query<ReferenceRow>(
       `SELECT preset.id AS preset_id, revision.id AS revision_id,
@@ -255,6 +256,7 @@ async function validateReferences(
     );
     const reference = result.rows[0];
     if (!reference) throw new PresetCollectionReferenceError();
+    if (reference.visibility === 'public') hasPublicItem = true;
     const allowed = canIncludePresetRevision({
       targetVisibility: input.visibility,
       currentVisibility,
@@ -264,6 +266,13 @@ async function validateReferences(
       alreadyIncluded: existing.has(`${item.presetId}\u0000${item.revisionId}`),
     });
     if (!allowed) throw new PresetCollectionReferenceError();
+  }
+  if (
+    input.visibility === 'public'
+    && currentVisibility !== 'public'
+    && !hasPublicItem
+  ) {
+    throw new PresetCollectionReferenceError();
   }
 }
 
@@ -302,6 +311,20 @@ export function createPostgresPresetCollectionManagementRepository(
   return {
     async listAvailableTags() {
       return activeTags(pool);
+    },
+
+    async listManagedByCreator(creatorId) {
+      const result = await pool.query<{ id: string } & QueryResultRow>(
+        `SELECT id
+         FROM marketplace_preset_collections
+         WHERE creator_id = $1 AND visibility <> 'hidden'
+         ORDER BY updated_at DESC, id ASC`,
+        [creatorId],
+      );
+      const collections = await Promise.all(
+        result.rows.map((row) => findCollection(pool, row.id, creatorId)),
+      );
+      return collections.filter((collection): collection is PresetCollection => collection !== null);
     },
 
     async findVisibleById(id) {

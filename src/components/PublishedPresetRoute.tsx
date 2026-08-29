@@ -10,6 +10,8 @@ import { isPublishedPresetRevisionCompatible } from '../../shared/marketplaceVal
 import { MarketplaceClientError, marketplaceClient } from '../marketplace/client';
 import { publishedPresetRouteFromPath, tonePath, toneRevisionPath } from '../marketplace/route';
 import { toneSession } from '../marketplace/toneSession';
+import { collectionQueue } from '../marketplace/collectionQueueSession';
+import { AddToCollectionDialog } from './AddToCollectionDialog';
 import { PublishedPresetManager } from './PublishedPresetManager';
 
 interface DisplayedPreset {
@@ -89,6 +91,7 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
   const [loadState, setLoadState] = useState<LoadState>({ status: 'idle' });
   const [actionMessage, setActionMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showCollectionDialog, setShowCollectionDialog] = useState(false);
 
   useEffect(() => {
     if (!presetId) return;
@@ -172,7 +175,10 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
       currentRevision: displayed.revision,
     });
     setBusy(false);
-    if (result.ok) onNavigate('/');
+    if (result.ok) {
+      collectionQueue.clear();
+      onNavigate('/');
+    }
     else setActionMessage(result.message ?? '应用失败。');
   };
 
@@ -273,10 +279,15 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
             <p className="marketplace-detail__warning">此音色依赖 TONE3000；外部资源不可用时会明确提示，不会替换原始修订。</p>
           )}
 
-          {loadState.displayed.visibility !== 'withdrawn' && loadState.displayed.compatible && (
+          {loadState.displayed.visibility !== 'withdrawn' && (
             <div className="marketplace-detail__actions">
-              <button type="button" disabled={busy} onClick={() => void apply(loadState.displayed)}>
-                {busy ? '处理中…' : 'Use in Pedalboard'}
+              {loadState.displayed.compatible && (
+                <button type="button" disabled={busy} onClick={() => void apply(loadState.displayed)}>
+                  {busy ? '处理中…' : 'Use in Pedalboard'}
+                </button>
+              )}
+              <button type="button" disabled={busy} onClick={() => setShowCollectionDialog(true)}>
+                Add to Collection
               </button>
               {actionMessage && <span>{actionMessage}</span>}
             </div>
@@ -290,6 +301,19 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
                 displayed: currentDisplay(preset),
                 managedPreset: preset,
               })}
+              onNavigate={onNavigate}
+            />
+          )}
+          {showCollectionDialog && (
+            <AddToCollectionDialog
+              tone={{
+                presetId: loadState.displayed.id,
+                revisionId: loadState.displayed.revision.id,
+                title: loadState.displayed.title,
+                creator: loadState.displayed.creator,
+                visibility: loadState.displayed.visibility,
+              }}
+              onClose={() => setShowCollectionDialog(false)}
               onNavigate={onNavigate}
             />
           )}

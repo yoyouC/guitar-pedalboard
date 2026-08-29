@@ -12,7 +12,6 @@ export function CreatePresetCollectionForm({ onCreated, onCancel }: CreatePreset
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tagIds, setTagIds] = useState<string[]>([]);
-  const [visibility, setVisibility] = useState<'public' | 'unlisted'>('public');
   const [tags, setTags] = useState<MarketplaceTag[]>([]);
   const [errors, setErrors] = useState<PublicationErrors>({});
   const [message, setMessage] = useState('');
@@ -41,7 +40,7 @@ export function CreatePresetCollectionForm({ onCreated, onCancel }: CreatePreset
         title,
         description,
         tagIds,
-        visibility,
+        visibility: 'unlisted',
       });
       onCreated(`/marketplace/collections/${encodeURIComponent(collection.id)}`);
     } catch (cause) {
@@ -82,15 +81,7 @@ export function CreatePresetCollectionForm({ onCreated, onCancel }: CreatePreset
         </div>
         {errors.tagIds && <small className="preset-manager__error">{errors.tagIds}</small>}
       </fieldset>
-      <label>
-        可见性
-        <select value={visibility} onChange={(event) => setVisibility(
-          event.target.value as 'public' | 'unlisted'
-        )}>
-          <option value="public">Public</option>
-          <option value="unlisted">Unlisted</option>
-        </select>
-      </label>
+      <p>新合集将以 Unlisted 创建；加入至少一个当前可用 Tone 后，才能显式切换为 Public。</p>
       <div className="preset-manager__buttons">
         <button type="submit" disabled={busy}>{busy ? '创建中…' : '创建空合集'}</button>
         <button type="button" disabled={busy} onClick={onCancel}>取消</button>

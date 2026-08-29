@@ -101,9 +101,11 @@ export function createMemoryPresetCollectionRepository(
     items: readonly { presetId: string; revisionId: string }[],
   ): Promise<void> {
     const existing = new Set(stored.items.map((item) => `${item.presetId}\u0000${item.revisionId}`));
+    let hasPublicItem = false;
     for (const item of items) {
       const reference = await presets.findRevisionReference(item.presetId, item.revisionId);
       if (!reference) throw new PresetCollectionReferenceError();
+      if (reference.visibility === 'public') hasPublicItem = true;
       const allowed = canIncludePresetRevision({
         targetVisibility: visibility,
         currentVisibility: stored.visibility,
@@ -114,11 +116,25 @@ export function createMemoryPresetCollectionRepository(
       });
       if (!allowed) throw new PresetCollectionReferenceError();
     }
+    if (
+      visibility === 'public'
+      && stored.visibility !== 'public'
+      && !hasPublicItem
+    ) throw new PresetCollectionReferenceError();
   }
 
   return {
     async listAvailableTags() {
       return [...tagsById.values()].map((tag) => ({ ...tag }));
+    },
+
+    async listManagedByCreator(creatorId) {
+      const owned = [...collectionsById.values()]
+        .filter((collection) => (
+          collection.creator.id === creatorId && collection.visibility !== 'hidden'
+        ))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+      return Promise.all(owned.map(project));
     },
 
     async create(input) {

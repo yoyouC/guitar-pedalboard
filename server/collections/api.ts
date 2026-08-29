@@ -22,6 +22,7 @@ export interface PresetCollectionApi {
 const COLLECTION_PATH = /^\/api\/marketplace\/collections\/([^/]+)$/;
 const COLLECTION_MANAGE_PATH = /^\/api\/marketplace\/collections\/([^/]+)\/manage$/;
 const COLLECTIONS_PATH = '/api/marketplace/collections';
+const MY_COLLECTIONS_PATH = '/api/marketplace/me/collections';
 
 interface CollectionManagementDependencies {
   repository: PresetCollectionManagementRepository;
@@ -49,6 +50,7 @@ export function createPresetCollectionApi(input: {
         input.management
         && (
           (request.method === 'POST' && url.pathname === COLLECTIONS_PATH)
+          || (request.method === 'GET' && url.pathname === MY_COLLECTIONS_PATH)
           || managementMatch
         )
       ) {
@@ -67,6 +69,10 @@ export function createPresetCollectionApi(input: {
             handle: `player-${input.management.createHandleSuffix()}`,
             now,
           });
+          if (request.method === 'GET' && url.pathname === MY_COLLECTIONS_PATH) {
+            const collections = await input.management.repository.listManagedByCreator(member.id);
+            return Response.json({ collections });
+          }
           if (request.method === 'POST') {
             if (!isReadyForPublicAttribution(member, CURRENT_MEMBER_TERMS_VERSION)) {
               return Response.json({
@@ -83,6 +89,9 @@ export function createPresetCollectionApi(input: {
               new Set(tags.map((tag) => tag.id)),
             );
             if (!validation.value) return invalidCollection(validation.errors);
+            if (validation.value.visibility !== 'unlisted') {
+              return invalidCollection({ visibility: '新合集必须先以 Unlisted 创建' });
+            }
             const collection = await input.management.repository.create({
               id: input.management.createCollectionId(),
               creator: {

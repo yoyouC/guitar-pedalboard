@@ -299,16 +299,22 @@ test('official client reads, creates, manages, and updates fixed-revision collec
   const calls: Array<{ input: string; init?: RequestInit }> = [];
   const client = createMarketplaceClient(async (input, init) => {
     calls.push({ input: String(input), init });
-    return Response.json({ collection }, { status: init?.method === 'POST' ? 201 : 200 });
+    return Response.json(
+      String(input) === '/api/marketplace/me/collections'
+        ? { collections: [collection] }
+        : { collection },
+      { status: init?.method === 'POST' ? 201 : 200 },
+    );
   });
 
   assert.deepEqual(await client.getPresetCollection(collection.id), collection);
   assert.deepEqual(await client.getManagedPresetCollection(collection.id), collection);
+  assert.deepEqual(await client.listManagedPresetCollections(), [collection]);
   await client.createPresetCollection({
     title: collection.title,
     description: collection.description,
     tagIds: collection.tags.map((tag) => tag.id),
-    visibility: 'public',
+    visibility: 'unlisted',
   });
   await client.updatePresetCollection(collection.id, {
     title: collection.title,
@@ -322,6 +328,7 @@ test('official client reads, creates, manages, and updates fixed-revision collec
   assert.deepEqual(calls.map(({ input, init }) => [input, init?.method]), [
     [`/api/marketplace/collections/${collection.id}`, undefined],
     [`/api/marketplace/collections/${collection.id}/manage`, undefined],
+    ['/api/marketplace/me/collections', undefined],
     ['/api/marketplace/collections', 'POST'],
     [`/api/marketplace/collections/${collection.id}`, 'PATCH'],
   ]);

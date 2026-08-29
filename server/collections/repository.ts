@@ -50,6 +50,7 @@ export interface UpdatePresetCollectionInput {
 
 export interface PresetCollectionManagementRepository extends PresetCollectionRepository {
   listAvailableTags(): Promise<import('../../shared/marketplace.ts').MarketplaceTag[]>;
+  listManagedByCreator(creatorId: string): Promise<PresetCollection[]>;
   create(input: CreatePresetCollectionInput): Promise<PresetCollection>;
   findManagedById(collectionId: string, creatorId: string): Promise<PresetCollection>;
   update(input: UpdatePresetCollectionInput): Promise<PresetCollection>;
