@@ -312,6 +312,84 @@ test('schema, metadata, tag, and local-resource failures leave no partial public
   }
 });
 
+test('publishing another creator revision creates a Remix with permanent source attribution', async () => {
+  const repository = createMemoryPublishedPresetRepository([publishedPreset], controlledTags);
+  const { api } = publicationApi(repository);
+
+  const response = await api.fetch(publishRequest({
+    source: {
+      presetId: publishedPreset.id,
+      revisionId: publishedPreset.currentRevision.id,
+    },
+  }));
+  const body = await response.json();
+
+  assert.equal(response.status, 201);
+  assert.deepEqual(body.preset.source, {
+    presetId: publishedPreset.id,
+    revisionId: publishedPreset.currentRevision.id,
+    creator: publishedPreset.creator,
+    availability: 'available',
+    title: publishedPreset.title,
+  });
+
+  await repository.updateVisibility({
+    presetId: publishedPreset.id,
+    creatorId: publishedPreset.creator.id,
+    visibility: 'withdrawn',
+    expectedUpdatedAt: new Date(publishedPreset.updatedAt),
+    now: new Date('2026-08-29T11:00:00.000Z'),
+  });
+  const detail = await api.fetch(new Request(
+    'https://pedalboard.test/api/marketplace/presets/preset-ada-crunch',
+  ));
+  const detailBody = await detail.json();
+  assert.equal(detail.status, 200);
+  assert.deepEqual(detailBody.preset.source, {
+    presetId: publishedPreset.id,
+    revisionId: publishedPreset.currentRevision.id,
+    creator: publishedPreset.creator,
+    availability: 'unavailable',
+    title: null,
+  });
+});
+
+test('publication rejects forged, mismatched, and self-owned Remix sources atomically', async () => {
+  const secondSource: CanonicalPublishedPreset = {
+    ...publishedPreset,
+    id: 'preset-second-source',
+    currentRevision: {
+      ...publishedPreset.currentRevision,
+      id: 'revision-second-source-1',
+    },
+  };
+  const ownSource: CanonicalPublishedPreset = {
+    ...publishedPreset,
+    id: 'preset-owned-source',
+    creator: { id: 'member-ada', handle: 'ada', displayName: 'Ada' },
+  };
+  const cases = [
+    { presetId: 'missing-preset', revisionId: 'missing-revision' },
+    { presetId: publishedPreset.id, revisionId: secondSource.currentRevision.id },
+    { presetId: ownSource.id, revisionId: ownSource.currentRevision.id },
+  ];
+
+  for (const source of cases) {
+    const repository = createMemoryPublishedPresetRepository(
+      [publishedPreset, secondSource, ownSource],
+      controlledTags,
+    );
+    const { api } = publicationApi(repository);
+    const response = await api.fetch(publishRequest({ source }));
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error.code, 'invalid_publication');
+    assert.equal(typeof body.error.fields.source, 'string');
+    assert.equal(await repository.count(), 3);
+  }
+});
+
 test('Rig edits append immutable revisions while fixed revision URLs keep the original sound', async () => {
   const { api, ownedPreset } = managementApi();
   const nextRig = {

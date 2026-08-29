@@ -3,7 +3,7 @@ import { rigToShareState } from '../state/rigStore';
 import { rigToPresetState } from '../state/rigStore';
 import { writeShareToLocation } from '../state/share';
 import { rigStore, useRig } from '../state/useRig';
-import type { RigPresetState } from '../state/presetCodec';
+import type { RigPresetState, RigProvenance } from '../state/presetCodec';
 import { PublishPresetDialog } from './PublishPresetDialog';
 
 interface PresetBarProps {
@@ -13,6 +13,7 @@ interface PresetBarProps {
 /** 完整 Rig 预设:localStorage 持久化、JSON 导入导出、URL 分享与显式广场发布。 */
 export function PresetBar({ onNavigate }: PresetBarProps) {
   const presets = useRig((s) => s.presets);
+  const provenance = useRig((s) => s.provenance);
   const importRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState('');
@@ -22,6 +23,8 @@ export function PresetBar({ onNavigate }: PresetBarProps) {
     rig: RigPresetState;
     sourceLabel: string;
     initialTitle: string;
+    provenance: RigProvenance | null;
+    presetName?: string;
   } | null>(null);
 
   const handleLoad = async (presetName: string) => {
@@ -144,6 +147,7 @@ export function PresetBar({ onNavigate }: PresetBarProps) {
         rig: rigToPresetState(rigStore.getState()),
         sourceLabel: '当前完整 Rig',
         initialTitle: '',
+        provenance,
       })}>发布当前 Rig</button>
       <button disabled={!selected} onClick={() => {
         const preset = presets.find((candidate) => candidate.name === selected);
@@ -151,13 +155,26 @@ export function PresetBar({ onNavigate }: PresetBarProps) {
           rig: preset.rig,
           sourceLabel: `本地 Preset · ${preset.name}`,
           initialTitle: preset.name,
+          provenance: preset.provenance ?? null,
+          presetName: preset.name,
         });
       }}>发布所选 Preset</button>
+      <button onClick={() => void rigStore.startFromFactoryRig()}>从出厂 Rig 开始</button>
+      <button onClick={() => void rigStore.startFromBlankRig()}>从空白 Rig 开始</button>
       {publication && (
         <PublishPresetDialog
-          {...publication}
+          rig={publication.rig}
+          sourceLabel={publication.sourceLabel}
+          initialTitle={publication.initialTitle}
+          provenance={publication.provenance}
           onClose={() => setPublication(null)}
-          onPublished={(pathname) => {
+          onPublished={(pathname, preset) => {
+            rigStore.recordPublishedProvenance({
+              presetId: preset.id,
+              revisionId: preset.currentRevision.id,
+              creatorId: preset.creator.id,
+              presetUpdatedAt: preset.updatedAt,
+            }, publication.presetName);
             setPublication(null);
             onNavigate(pathname);
           }}

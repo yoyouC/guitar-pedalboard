@@ -1,26 +1,31 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import type { MarketplaceTag } from '../../shared/marketplace.ts';
-import type { RigPresetState } from '../state/presetCodec.ts';
+import type { MarketplaceTag, PublishedPreset } from '../../shared/marketplace.ts';
+import type { RigPresetState, RigProvenance } from '../state/presetCodec.ts';
 import { RIG_PRESET_VERSION } from '../state/presetCodec.ts';
 import {
   validatePublicationFields,
   validatePublishPresetRequest,
 } from '../../shared/marketplacePublication.ts';
 import { marketplaceClient, MarketplaceClientError } from '../marketplace/client.ts';
+import { fetchCurrentMember } from '../members/client.ts';
+import { publishRigFromLocalSource } from '../marketplace/publishRig.ts';
+import { analyzePublishableRig } from '../../shared/publishableRig.ts';
 
 interface PublishPresetDialogProps {
   rig: RigPresetState;
   sourceLabel: string;
   initialTitle: string;
+  provenance: RigProvenance | null;
   onClose(): void;
-  onPublished(pathname: string): void;
+  onPublished(pathname: string, preset: PublishedPreset): void;
 }
 
 export function PublishPresetDialog({
   rig,
   sourceLabel,
   initialTitle,
+  provenance,
   onClose,
   onPublished,
 }: PublishPresetDialogProps) {
@@ -30,6 +35,7 @@ export function PublishPresetDialog({
   const [tags, setTags] = useState<MarketplaceTag[]>([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [currentMemberId, setCurrentMemberId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -42,6 +48,22 @@ export function PublishPresetDialog({
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    void fetchCurrentMember().then(
+      (member) => { if (active) setCurrentMemberId(member.id); },
+      (cause: unknown) => {
+        if (active) setMessage(cause instanceof Error ? cause.message : '请先登录');
+      },
+    );
+    return () => { active = false; };
+  }, []);
+
+  const appendsOwnWork = Boolean(
+    provenance && currentMemberId && provenance.creatorId === currentMemberId,
+  );
+  const soundAnalysis = useMemo(() => analyzePublishableRig(rig), [rig]);
+
   const errors = useMemo(() => validatePublicationFields({ title, description, tagIds }), [
     title,
     description,
@@ -53,7 +75,10 @@ export function PublishPresetDialog({
     tagIds,
     schemaVersion: RIG_PRESET_VERSION,
     rig,
-  }, new Set(tags.map((tag) => tag.id))), [title, description, tagIds, rig, tags]);
+    ...(provenance ? {
+      source: { presetId: provenance.presetId, revisionId: provenance.revisionId },
+    } : {}),
+  }, new Set(tags.map((tag) => tag.id))), [title, description, tagIds, rig, tags, provenance]);
 
   const toggleTag = (tagId: string) => {
     setTagIds((current) => current.includes(tagId)
@@ -63,12 +88,28 @@ export function PublishPresetDialog({
 
   const publish = async (event: FormEvent) => {
     event.preventDefault();
-    if (!preview.value) return;
+    if (
+      !currentMemberId
+      || !soundAnalysis
+      || (!appendsOwnWork && !preview.value)
+    ) return;
     setBusy(true);
     setMessage('');
     try {
-      const preset = await marketplaceClient.publishPreset(preview.value.request);
-      onPublished(`/marketplace/presets/${encodeURIComponent(preset.id)}`);
+      const request = preview.value?.request ?? {
+        title: '',
+        description: '',
+        tagIds: [],
+        schemaVersion: RIG_PRESET_VERSION,
+        rig,
+      };
+      const { preset } = await publishRigFromLocalSource({
+        client: marketplaceClient,
+        currentMemberId,
+        request,
+        provenance,
+      });
+      onPublished(`/marketplace/presets/${encodeURIComponent(preset.id)}`, preset);
     } catch (cause) {
       if (cause instanceof MarketplaceClientError && cause.fields) {
         setMessage(Object.values(cause.fields).join('；'));
@@ -88,6 +129,10 @@ export function PublishPresetDialog({
           <button type="button" onClick={onClose} aria-label="关闭发布预览">×</button>
         </div>
         <form onSubmit={publish}>
+          {appendsOwnWork && (
+            <p>这份 Rig 来自你的作品；确认后会追加一个不可变的新修订。</p>
+          )}
+          {!appendsOwnWork && <>
           <label>标题<input required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           {errors.title && <small className="publish-dialog__error">{errors.title}</small>}
           <label>介绍<textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
@@ -104,16 +149,19 @@ export function PublishPresetDialog({
             </div>
           </fieldset>
           {errors.tagIds && <small className="publish-dialog__error">{errors.tagIds}</small>}
+          </>}
           <dl className="publish-dialog__preview">
             <div><dt>Pedals</dt><dd>{rig.chain.map((item) => item.effectId).join('、') || 'None'}</dd></div>
             <div><dt>Amp</dt><dd>{rig.amp.modelKey}</dd></div>
             <div><dt>Cab</dt><dd>{rig.cab.id}</dd></div>
-            <div><dt>资源</dt><dd>{preview.value?.resourceDependencies.map((item) => item.kind === 'builtin' ? '内置' : `TONE3000 ${item.toneId}`).join('、') ?? errors.rig ?? '等待校验'}</dd></div>
+            <div><dt>资源</dt><dd>{soundAnalysis?.resourceDependencies.map((item) => item.kind === 'builtin' ? '内置' : `TONE3000 ${item.toneId}`).join('、') ?? errors.rig ?? 'Rig 无法无损发布或包含本机资源'}</dd></div>
           </dl>
           {message && <p className="publish-dialog__error" role="alert">{message}</p>}
           <div className="publish-dialog__actions">
             <button type="button" onClick={onClose}>取消</button>
-            <button type="submit" disabled={busy || !preview.value}>{busy ? '发布中…' : '确认发布'}</button>
+            <button type="submit" disabled={busy || !currentMemberId || !soundAnalysis || (!appendsOwnWork && !preview.value)}>
+              {busy ? '发布中…' : appendsOwnWork ? '追加新修订' : '确认发布'}
+            </button>
           </div>
         </form>
       </section>

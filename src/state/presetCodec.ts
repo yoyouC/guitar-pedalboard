@@ -83,10 +83,20 @@ export interface RigPresetState {
   };
 }
 
+/** 本地 Rig 从固定广场修订加载而来的来源；它不属于声音 payload。 */
+export interface RigProvenance {
+  presetId: string;
+  revisionId: string;
+  creatorId: string;
+  /** 应用时作品的并发令牌；编辑自己的作品时用于安全追加修订。 */
+  presetUpdatedAt: string;
+}
+
 export interface RigPreset {
   version: typeof RIG_PRESET_VERSION;
   name: string;
   rig: RigPresetState;
+  provenance?: RigProvenance;
 }
 
 export interface RestoredRigPresetState extends Omit<RigPresetState, 'chain'> {
@@ -500,6 +510,28 @@ function migratePreviousPreset(
   };
 }
 
+function normalizeRigProvenance(value: unknown): RigProvenance | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, [
+    'presetId',
+    'revisionId',
+    'creatorId',
+    'presetUpdatedAt',
+  ])) return null;
+  if (
+    typeof value.presetId !== 'string' || !value.presetId
+    || typeof value.revisionId !== 'string' || !value.revisionId
+    || typeof value.creatorId !== 'string' || !value.creatorId
+    || typeof value.presetUpdatedAt !== 'string'
+    || !Number.isFinite(Date.parse(value.presetUpdatedAt))
+  ) return null;
+  return {
+    presetId: value.presetId,
+    revisionId: value.revisionId,
+    creatorId: value.creatorId,
+    presetUpdatedAt: value.presetUpdatedAt,
+  };
+}
+
 export function normalizeRigPreset(
   value: unknown,
   catalog: RigPresetCatalog,
@@ -511,10 +543,12 @@ export function normalizeRigPreset(
   if (typeof value.name !== 'string' || !value.name.trim() || !isRecord(value.rig)) {
     return null;
   }
+  const provenance = normalizeRigProvenance(value.provenance);
   return {
     version: RIG_PRESET_VERSION,
     name: value.name.trim(),
     rig: normalizeRig(value.rig, catalog),
+    ...(provenance ? { provenance } : {}),
   };
 }
 
@@ -522,9 +556,10 @@ export function createRigPreset(
   name: string,
   rig: RigPresetState,
   catalog: RigPresetCatalog,
+  provenance?: RigProvenance | null,
 ): RigPreset {
   const preset = normalizeRigPreset(
-    { version: RIG_PRESET_VERSION, name, rig },
+    { version: RIG_PRESET_VERSION, name, rig, ...(provenance ? { provenance } : {}) },
     catalog,
   );
   if (!preset) throw new Error('预设名称不能为空');

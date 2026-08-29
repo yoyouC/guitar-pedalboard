@@ -46,7 +46,14 @@ import {
   type PreAmpEqState,
 } from '../audio/preAmpEq';
 import type { ShareState } from './share';
-import type { RigPreset, RigPresetState, Snapshot, SnapshotAmp, SnapshotCab } from './presetCodec';
+import type {
+  RigPreset,
+  RigPresetState,
+  RigProvenance,
+  Snapshot,
+  SnapshotAmp,
+  SnapshotCab,
+} from './presetCodec';
 import {
   createChainItem,
   currentRigToPreset,
@@ -127,6 +134,8 @@ export interface RigStoreState {
   /** 激活快照槽;-1 = 无 */
   activeSlot: number;
   presets: RigPreset[];
+  /** 当前 Rig 的广场来源；普通编辑与快照不会清除。 */
+  provenance: RigProvenance | null;
   /** 图谱重建后自增,供依赖引擎侧节点引用(电平表/背景)的组件重读 */
   graphVersion: number;
 }
@@ -214,9 +223,12 @@ export interface RigStore {
   setGlobalBypass(bypass: boolean): void;
 
   /** 整 rig 恢复:预设/快照/分享三条路径的统一入口 */
-  applyRig(rig: ApplyRigState): void;
+  applyRig(rig: ApplyRigState, provenance?: RigProvenance | null): void;
   /** 外部恢复入口：先经过已注册的 IR prepare 事务，再调用 applyRig 提交。 */
-  restoreRig(rig: ApplyRigState): Promise<LoadPresetResult>;
+  restoreRig(rig: ApplyRigState, provenance?: RigProvenance | null): Promise<LoadPresetResult>;
+  /** 明确从出厂或空白 Rig 开始；这两个入口是清除来源的唯一普通用户动作。 */
+  startFromFactoryRig(): Promise<LoadPresetResult>;
+  startFromBlankRig(): Promise<LoadPresetResult>;
 
   // 快照
   captureSnapshot(slot: number): void;
@@ -231,6 +243,8 @@ export interface RigStore {
   deletePreset(name: string): void;
   importPresets(json: string): number;
   exportPresets(): string;
+  /** 发布成功后让当前 Rig 或指定本地 Preset 指向新作品/修订。 */
+  recordPublishedProvenance(provenance: RigProvenance, presetName?: string): void;
 }
 
 function defaultChain(): ChainItem[] {
@@ -544,8 +558,12 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     snapshots: loadSnapshots(),
     activeSlot: -1,
     presets: loadPresets(),
+    provenance: null,
     graphVersion: 0,
   };
+
+  const factoryRig = rigToApplyState(state);
+  const blankRig: ApplyRigState = { ...factoryRig, chain: [] };
 
   const listeners = new Set<() => void>();
   const tone3000PedalGenerations = new Map<string, number>();
@@ -958,7 +976,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
     // ---------- 整 rig 恢复 ----------
 
-    applyRig(rig) {
+    applyRig(rig, provenance = state.provenance) {
       let { namVersion } = state;
       // 型号机制分支:解析模型源并换代;legacy 分支(旧快照):不动型号簿记与模型选择
       const ampRef = rig.amp;
@@ -997,6 +1015,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         inputGain: rig.globals.inputGain,
         masterVolume: rig.globals.masterVolume,
         globalBypass: rig.globals.bypass,
+        provenance,
         namVersion,
       };
       engine.applyRig(currentAudioProjection());
@@ -1004,8 +1023,16 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       emit();
     },
 
-    restoreRig(rig) {
-      return runRestoreTransaction(rig, () => store.applyRig(rig));
+    restoreRig(rig, provenance = state.provenance) {
+      return runRestoreTransaction(rig, () => store.applyRig(rig, provenance));
+    },
+
+    startFromFactoryRig() {
+      return store.restoreRig(factoryRig, null);
+    },
+
+    startFromBlankRig() {
+      return store.restoreRig(blankRig, null);
     },
 
     // ---------- 快照 ----------
@@ -1048,7 +1075,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     // ---------- 预设 ----------
 
     savePreset(name) {
-      const preset = currentRigToPreset(name, rigToPresetState(state));
+      const preset = currentRigToPreset(name, rigToPresetState(state), state.provenance);
       const presets = [...state.presets.filter((p) => p.name !== name), preset];
       savePresets(presets);
       state = { ...state, presets };
@@ -1071,7 +1098,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         });
       }
       const nextRig = rigFromPreset(preset);
-      return store.restoreRig(nextRig);
+      return store.restoreRig(nextRig, preset.provenance ?? null);
     },
 
     deletePreset(name) {
@@ -1095,6 +1122,20 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
 
     exportPresets() {
       return exportPresetsJson(state.presets);
+    },
+
+    recordPublishedProvenance(provenance, presetName) {
+      if (!presetName) {
+        state = { ...state, provenance };
+        emit();
+        return;
+      }
+      const presets = state.presets.map((preset) => (
+        preset.name === presetName ? { ...preset, provenance } : preset
+      ));
+      savePresets(presets);
+      state = { ...state, presets };
+      emit();
     },
   };
 

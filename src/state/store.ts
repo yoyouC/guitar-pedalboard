@@ -7,6 +7,7 @@ import {
   normalizeSnapshot,
   restoreRigPreset,
   type RigPreset,
+  type RigProvenance,
   type RigPresetState,
   type RestoredRigPresetState,
   type Snapshot,
@@ -68,8 +69,12 @@ export function savePresets(presets: RigPreset[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
 }
 
-export function currentRigToPreset(name: string, rig: RigPresetState): RigPreset {
-  return createRigPreset(name, rig, RIG_PRESET_CATALOG);
+export function currentRigToPreset(
+  name: string,
+  rig: RigPresetState,
+  provenance?: RigProvenance | null,
+): RigPreset {
+  return createRigPreset(name, rig, RIG_PRESET_CATALOG, provenance);
 }
 
 export function presetToRig(preset: RigPreset): RestoredRigPresetState {

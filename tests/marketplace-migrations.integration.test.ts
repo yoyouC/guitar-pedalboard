@@ -5,7 +5,7 @@ import { Client } from 'pg';
 
 const connectionString = process.env.MARKETPLACE_TEST_DATABASE_URL;
 
-test('0005 backfills an existing immutable revision and restores its trigger', {
+test('0005 backfills immutable revisions and 0006 pins Remix source pairs', {
   skip: connectionString ? false : 'Set MARKETPLACE_TEST_DATABASE_URL for PostgreSQL migration integration',
 }, async () => {
   const client = new Client({ connectionString });
@@ -64,6 +64,85 @@ test('0005 backfills an existing immutable revision and restores its trigger', {
          SET rig = '{"mutated":true}' WHERE id = 'revision-test'`,
       ),
       /append-only/,
+    );
+
+    await client.query(await readFile(
+      new URL('../server/marketplace/migrations/0006_preset_remix_provenance.sql', import.meta.url),
+      'utf8',
+    ));
+    await client.query(
+      `INSERT INTO marketplace_members (id, handle, display_name)
+       VALUES ('member-remix', 'migration-remix', 'Migration Remix')`,
+    );
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO marketplace_published_presets
+         (id, creator_id, title, visibility, current_revision_id,
+          source_preset_id, source_revision_id)
+       VALUES ('preset-remix', 'member-remix', 'Pinned Remix', 'public',
+               'revision-remix', 'preset-test', 'revision-test')`,
+    );
+    await client.query(
+      `INSERT INTO marketplace_published_preset_revisions
+         (id, preset_id, schema_version, resource_dependencies, derived_attributes, rig)
+       SELECT 'revision-remix', 'preset-remix', schema_version,
+              resource_dependencies, derived_attributes, rig
+       FROM marketplace_published_preset_revisions
+       WHERE id = 'revision-test'`,
+    );
+    await client.query('COMMIT');
+    await client.query(
+      `UPDATE marketplace_published_presets SET visibility = 'withdrawn'
+       WHERE id = 'preset-test'`,
+    );
+    const remix = await client.query<{
+      source_preset_id: string;
+      source_revision_id: string;
+      source_visibility: string;
+    }>(
+      `SELECT remix.source_preset_id, remix.source_revision_id,
+              source.visibility AS source_visibility
+       FROM marketplace_published_presets AS remix
+       JOIN marketplace_published_presets AS source ON source.id = remix.source_preset_id
+       WHERE remix.id = 'preset-remix'`,
+    );
+    assert.deepEqual(remix.rows[0], {
+      source_preset_id: 'preset-test',
+      source_revision_id: 'revision-test',
+      source_visibility: 'withdrawn',
+    });
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO marketplace_published_presets
+         (id, creator_id, title, visibility, current_revision_id)
+       VALUES ('preset-second-source', 'member-test', 'Second Source', 'public',
+               'revision-second-source')`,
+    );
+    await client.query(
+      `INSERT INTO marketplace_published_preset_revisions
+         (id, preset_id, schema_version, resource_dependencies, derived_attributes, rig)
+       SELECT 'revision-second-source', 'preset-second-source', schema_version,
+              resource_dependencies, derived_attributes, rig
+       FROM marketplace_published_preset_revisions
+       WHERE id = 'revision-test'`,
+    );
+    await client.query('COMMIT');
+    await assert.rejects(
+      () => client.query(
+        `UPDATE marketplace_published_presets
+         SET source_preset_id = 'preset-second-source',
+             source_revision_id = 'revision-second-source'
+         WHERE id = 'preset-remix'`,
+      ),
+      /Remix provenance is immutable/,
+    );
+    await assert.rejects(
+      () => client.query(
+        `UPDATE marketplace_published_presets
+         SET source_preset_id = NULL, source_revision_id = NULL
+         WHERE id = 'preset-remix'`,
+      ),
+      /Remix provenance is immutable/,
     );
   } finally {
     await client.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);

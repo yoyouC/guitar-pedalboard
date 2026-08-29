@@ -8,6 +8,7 @@ import type {
   PublishedPresetVisibility,
   RigDerivedAttributes,
   RigResourceDependency,
+  PublishedPresetSourceReference,
 } from '../../shared/marketplace.ts';
 import {
   RIG_PRESET_VERSION,
@@ -33,6 +34,7 @@ export interface CreatePublishedPresetInput {
   rig: RigPresetState;
   resourceDependencies: RigResourceDependency[];
   derivedAttributes: RigDerivedAttributes;
+  source?: PublishedPresetSourceReference;
   now: Date;
 }
 
@@ -41,6 +43,8 @@ export class UnavailableTagError extends Error {}
 export class PublishedPresetAccessError extends Error {}
 
 export class PublishedPresetRevisionNotFoundError extends Error {}
+
+export class PublishedPresetSourceError extends Error {}
 
 export class PublishedPresetConflictError extends Error {
   readonly current: PublishedPresetConcurrencyState;

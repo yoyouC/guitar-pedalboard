@@ -23,6 +23,8 @@ interface DisplayedPreset {
   revision: PublishedPresetRevision;
   derivedAttributes: RigDerivedAttributes;
   currentRevisionId: string;
+  updatedAt: string;
+  source: PublishedPreset['source'];
   fixedRevision: boolean;
   compatible: boolean;
 }
@@ -44,6 +46,8 @@ function currentDisplay(preset: PublishedPreset): DisplayedPreset {
     revision: preset.currentRevision,
     derivedAttributes: preset.derivedAttributes,
     currentRevisionId: preset.currentRevision.id,
+    updatedAt: preset.updatedAt,
+    source: preset.source,
     fixedRevision: false,
     compatible: isPublishedPresetRevisionCompatible(preset.currentRevision),
   };
@@ -60,6 +64,8 @@ function revisionDisplay(preset: PublishedPresetRevisionView): DisplayedPreset {
     revision: preset.revision,
     derivedAttributes: preset.revision.derivedAttributes,
     currentRevisionId: preset.currentRevisionId,
+    updatedAt: preset.updatedAt,
+    source: preset.source,
     fixedRevision: true,
     compatible: isPublishedPresetRevisionCompatible(preset.revision),
   };
@@ -160,7 +166,10 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
   const apply = async (displayed: DisplayedPreset) => {
     setBusy(true);
     const result = await rigSession.apply({
+      id: displayed.id,
       title: displayed.title,
+      creator: displayed.creator,
+      updatedAt: displayed.updatedAt,
       currentRevision: displayed.revision,
     });
     setBusy(false);
@@ -198,6 +207,21 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
             <p className="marketplace-detail__byline">
               @{loadState.displayed.creator.handle} · revision {loadState.displayed.revision.id}
             </p>
+            {loadState.displayed.source && (
+              <p className="marketplace-detail__byline">
+                Remix 来源：
+                {loadState.displayed.source.availability === 'available' ? (
+                  <button type="button" onClick={() => onNavigate(
+                    `/marketplace/presets/${encodeURIComponent(loadState.displayed.source!.presetId)}`
+                    + `/revisions/${encodeURIComponent(loadState.displayed.source!.revisionId)}`
+                  )}>
+                    {loadState.displayed.source.title}
+                  </button>
+                ) : '原作已不可用'}
+                {' '}· @{loadState.displayed.source.creator.handle}
+                {' '}· revision {loadState.displayed.source.revisionId}
+              </p>
+            )}
             <p className="marketplace-detail__tags">
               {loadState.displayed.tags.map((tag) => tag.nameZh).join(' · ')}
             </p>

@@ -260,7 +260,12 @@ test('preset export envelope imports again and drops unknown modules', () => {
     },
     cab: { id: 'open1x12', enabled: true, values: {} },
     globals: { inputGain: 1, masterVolume: 0.5, bypass: false },
-  }, catalog);
+  }, catalog, {
+    presetId: 'preset-source',
+    revisionId: 'revision-source-3',
+    creatorId: 'member-source',
+    presetUpdatedAt: '2026-08-29T00:00:00.000Z',
+  });
   const exported = exportRigPresetsJson([preset]);
   const payload = JSON.parse(exported) as {
     format: string;
@@ -268,7 +273,9 @@ test('preset export envelope imports again and drops unknown modules', () => {
   };
   assert.equal(payload.format, 'guitar-pedalboard-presets');
   assert.equal(payload.presets.length, 1);
-  assert.equal(importRigPresetsJson(exported, catalog)[0].name, 'Portable');
+  const imported = importRigPresetsJson(exported, catalog)[0];
+  assert.equal(imported.name, 'Portable');
+  assert.deepEqual(imported.provenance, preset.provenance);
 
   const withUnknownEffect = JSON.parse(exported) as {
     presets: Array<{ rig: { chain: unknown[] } }>;

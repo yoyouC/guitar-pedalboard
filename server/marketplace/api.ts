@@ -4,6 +4,7 @@ import {
   PublishedPresetAccessError,
   PublishedPresetConflictError,
   PublishedPresetRevisionNotFoundError,
+  PublishedPresetSourceError,
   UnavailableTagError,
 } from './repository.ts';
 import {
@@ -168,6 +169,18 @@ export function createMarketplaceApi({
                   code: 'invalid_publication',
                   message: 'Published preset is invalid',
                   fields: { tagIds: '包含不可用标签' },
+                },
+              },
+              { status: 400 },
+            );
+          }
+          if (cause instanceof PublishedPresetSourceError) {
+            return Response.json(
+              {
+                error: {
+                  code: 'invalid_publication',
+                  message: 'Published preset is invalid',
+                  fields: { source: '来源作品或修订无效' },
                 },
               },
               { status: 400 },

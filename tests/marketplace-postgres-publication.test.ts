@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Pool } from 'pg';
 import { createPostgresPublishedPresetPublicationRepository } from '../server/marketplace/postgresRepository.ts';
-import { PublishedPresetConflictError } from '../server/marketplace/repository.ts';
+import {
+  PublishedPresetConflictError,
+  PublishedPresetSourceError,
+} from '../server/marketplace/repository.ts';
 import { demoPublishedPreset } from '../server/marketplace/demoPreset.ts';
 
 test('PostgreSQL publication rolls back when the derived search projection fails', async () => {
@@ -46,6 +49,88 @@ test('PostgreSQL publication rolls back when the derived search projection fails
 
   assert.equal(statements.some((statement) => statement === 'COMMIT'), false);
   assert.equal(statements.at(-1), 'ROLLBACK');
+});
+
+test('PostgreSQL locks and persists only a real foreign Remix source pair', async () => {
+  const statements: Array<{ text: string; values?: readonly unknown[] }> = [];
+  const client = {
+    async query(text: string, values?: readonly unknown[]) {
+      statements.push({ text, values });
+      if (text.includes('SELECT id, dimension')) {
+        return { rows: [{ id: 'tone-crunch', dimension: 'tone', name_zh: 'Crunch', name_en: 'Crunch' }] };
+      }
+      if (text.includes('source_revision.id AS source_revision_id')) {
+        return { rows: [{
+          source_preset_id: demoPublishedPreset.id,
+          source_revision_id: demoPublishedPreset.currentRevision.id,
+          source_title: demoPublishedPreset.title,
+          source_visibility: 'public',
+          source_creator_id: demoPublishedPreset.creator.id,
+          source_creator_handle: demoPublishedPreset.creator.handle,
+          source_creator_display_name: demoPublishedPreset.creator.displayName,
+        }] };
+      }
+      return { rows: [] };
+    },
+    release() {},
+  };
+  const pool = { async connect() { return client; } } as unknown as Pool;
+  const repository = createPostgresPublishedPresetPublicationRepository(pool);
+
+  const created = await repository.create({
+    id: 'preset-ada-remix',
+    revisionId: 'revision-ada-remix-1',
+    creator: { id: 'member-ada', handle: 'ada', displayName: 'Ada' },
+    title: 'Ada Remix',
+    description: '',
+    tagIds: ['tone-crunch'],
+    schemaVersion: 5,
+    rig: demoPublishedPreset.currentRevision.rig,
+    resourceDependencies: [{ kind: 'builtin' }],
+    derivedAttributes: demoPublishedPreset.derivedAttributes,
+    source: {
+      presetId: demoPublishedPreset.id,
+      revisionId: demoPublishedPreset.currentRevision.id,
+    },
+    now: new Date('2026-08-29T10:00:00.000Z'),
+  });
+
+  assert.equal(created.source?.presetId, demoPublishedPreset.id);
+  const insert = statements.find((statement) => statement.text.includes(
+    'INSERT INTO marketplace_published_presets',
+  ));
+  assert.deepEqual(insert?.values?.slice(5, 7), [
+    demoPublishedPreset.id,
+    demoPublishedPreset.currentRevision.id,
+  ]);
+  assert.equal(statements.at(-1)?.text.trim(), 'COMMIT');
+
+  const forgedClient = {
+    async query(text: string) {
+      if (text.includes('SELECT id, dimension')) {
+        return { rows: [{ id: 'tone-crunch', dimension: 'tone', name_zh: 'Crunch', name_en: 'Crunch' }] };
+      }
+      return { rows: [] };
+    },
+    release() {},
+  };
+  const forgedRepository = createPostgresPublishedPresetPublicationRepository({
+    async connect() { return forgedClient; },
+  } as unknown as Pool);
+  await assert.rejects(() => forgedRepository.create({
+    id: 'preset-forged',
+    revisionId: 'revision-forged-1',
+    creator: { id: 'member-ada', handle: 'ada', displayName: 'Ada' },
+    title: 'Forged',
+    description: '',
+    tagIds: ['tone-crunch'],
+    schemaVersion: 5,
+    rig: demoPublishedPreset.currentRevision.rig,
+    resourceDependencies: [{ kind: 'builtin' }],
+    derivedAttributes: demoPublishedPreset.derivedAttributes,
+    source: { presetId: 'missing', revisionId: 'missing' },
+    now: new Date('2026-08-29T10:00:00.000Z'),
+  }), PublishedPresetSourceError);
 });
 
 test('PostgreSQL revision append rolls back the immutable row when projection replacement fails', async () => {

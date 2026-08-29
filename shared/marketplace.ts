@@ -18,6 +18,17 @@ export interface MarketplaceTag {
   nameEn: string;
 }
 
+export interface PublishedPresetSourceReference {
+  presetId: string;
+  revisionId: string;
+}
+
+export interface PublishedPresetSource extends PublishedPresetSourceReference {
+  creator: MarketplaceMemberSummary;
+  availability: 'available' | 'unavailable';
+  title: string | null;
+}
+
 export type RigResourceDependency =
   | { kind: 'builtin' }
   | { kind: 'tone3000'; toneId: string; modelId?: string };
@@ -63,6 +74,7 @@ export interface PublishedPreset<Revision extends PublishedPresetRevision = Publ
   tags: MarketplaceTag[];
   derivedAttributes: RigDerivedAttributes;
   currentRevision: Revision;
+  source?: PublishedPresetSource;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,6 +90,7 @@ export interface PublishedPresetRevisionView {
   tags: MarketplaceTag[];
   revision: PublishedPresetRevision;
   currentRevisionId: string;
+  source?: PublishedPresetSource;
   createdAt: string;
   updatedAt: string;
 }
@@ -100,6 +113,7 @@ export interface PublishPresetRequest {
   tagIds: string[];
   schemaVersion: number;
   rig: RigPresetState;
+  source?: PublishedPresetSourceReference;
 }
 
 export interface UpdatePublishedPresetMetadataRequest {

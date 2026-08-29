@@ -6,6 +6,7 @@ import type {
   PublishedPresetRevision,
   PublishedPresetRevisionSummary,
   PublishedPresetRevisionView,
+  PublishedPresetSource,
   PublishedPresetVisibility,
   RigDerivedAttributes,
   RigResourceDependency,
@@ -26,6 +27,7 @@ import {
   PublishedPresetAccessError,
   PublishedPresetConflictError,
   PublishedPresetRevisionNotFoundError,
+  PublishedPresetSourceError,
   UnavailableTagError,
 } from './repository.ts';
 import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.ts';
@@ -34,7 +36,17 @@ export interface PostgresQueryable {
   query<R extends QueryResultRow>(text: string, values?: readonly unknown[]): Promise<QueryResult<R>>;
 }
 
-interface PublishedPresetRow extends QueryResultRow {
+interface PublishedPresetSourceRowFields {
+  source_preset_id: string | null;
+  source_revision_id: string | null;
+  source_title: string | null;
+  source_visibility: PublishedPresetVisibility | null;
+  source_creator_id: string | null;
+  source_creator_handle: string | null;
+  source_creator_display_name: string | null;
+}
+
+interface PublishedPresetRow extends QueryResultRow, PublishedPresetSourceRowFields {
   preset_id: string;
   title: string;
   description: string;
@@ -89,6 +101,7 @@ function revisionFromStorage(row: {
 }
 
 function publishedPresetFromRow(row: PublishedPresetRow): PublishedPreset {
+  const source = sourceFromRow(row);
   return {
     id: row.preset_id,
     title: row.title,
@@ -108,12 +121,35 @@ function publishedPresetFromRow(row: PublishedPresetRow): PublishedPreset {
       resourceKinds: row.resource_kinds,
     },
     currentRevision: revisionFromStorage(row),
+    ...(source ? { source } : {}),
     createdAt: isoTimestamp(row.created_at),
     updatedAt: isoTimestamp(row.updated_at),
   };
 }
 
-interface PublishedPresetRevisionViewRow extends QueryResultRow {
+function sourceFromRow(row: PublishedPresetSourceRowFields): PublishedPresetSource | null {
+  if (!row.source_preset_id) return null;
+  if (
+    !row.source_revision_id
+    || !row.source_creator_id
+    || row.source_creator_handle === null
+    || row.source_creator_display_name === null
+  ) throw new PublishedPresetSourceError();
+  const available = row.source_visibility === 'public' || row.source_visibility === 'unlisted';
+  return {
+    presetId: row.source_preset_id,
+    revisionId: row.source_revision_id,
+    creator: {
+      id: row.source_creator_id,
+      handle: row.source_creator_handle,
+      displayName: row.source_creator_display_name,
+    },
+    availability: available ? 'available' : 'unavailable',
+    title: available ? row.source_title : null,
+  };
+}
+
+interface PublishedPresetRevisionViewRow extends QueryResultRow, PublishedPresetSourceRowFields {
   preset_id: string;
   title: string;
   description: string;
@@ -134,6 +170,7 @@ interface PublishedPresetRevisionViewRow extends QueryResultRow {
 }
 
 function revisionViewFromRow(row: PublishedPresetRevisionViewRow): PublishedPresetRevisionView {
+  const source = sourceFromRow(row);
   return {
     id: row.preset_id,
     title: row.title,
@@ -147,6 +184,7 @@ function revisionViewFromRow(row: PublishedPresetRevisionViewRow): PublishedPres
     tags: row.tags,
     revision: revisionFromStorage(row),
     currentRevisionId: row.current_revision_id,
+    ...(source ? { source } : {}),
     createdAt: isoTimestamp(row.created_at),
     updatedAt: isoTimestamp(row.updated_at),
   };
@@ -169,6 +207,13 @@ async function findPresetById(
        creator.id AS creator_id,
        creator.handle AS creator_handle,
        creator.display_name AS creator_display_name,
+       preset.source_preset_id,
+       preset.source_revision_id,
+       source_preset.title AS source_title,
+       source_preset.visibility AS source_visibility,
+       source_creator.id AS source_creator_id,
+       source_creator.handle AS source_creator_handle,
+       source_creator.display_name AS source_creator_display_name,
        COALESCE((
          SELECT jsonb_agg(jsonb_build_object(
            'id', tag.id,
@@ -195,6 +240,10 @@ async function findPresetById(
        preset.updated_at
      FROM marketplace_published_presets AS preset
      JOIN marketplace_members AS creator ON creator.id = preset.creator_id
+     LEFT JOIN marketplace_published_presets AS source_preset
+       ON source_preset.id = preset.source_preset_id
+     LEFT JOIN marketplace_members AS source_creator
+       ON source_creator.id = source_preset.creator_id
      JOIN marketplace_published_preset_revisions AS revision
        ON revision.id = preset.current_revision_id
      JOIN marketplace_published_preset_search_projection AS projection
@@ -224,6 +273,13 @@ export function createPostgresPublishedPresetRepository(
            creator.id AS creator_id,
            creator.handle AS creator_handle,
            creator.display_name AS creator_display_name,
+           preset.source_preset_id,
+           preset.source_revision_id,
+           source_preset.title AS source_title,
+           source_preset.visibility AS source_visibility,
+           source_creator.id AS source_creator_id,
+           source_creator.handle AS source_creator_handle,
+           source_creator.display_name AS source_creator_display_name,
            COALESCE((
              SELECT jsonb_agg(jsonb_build_object(
                'id', tag.id,
@@ -246,6 +302,10 @@ export function createPostgresPublishedPresetRepository(
            preset.updated_at
          FROM marketplace_published_presets AS preset
          JOIN marketplace_members AS creator ON creator.id = preset.creator_id
+         LEFT JOIN marketplace_published_presets AS source_preset
+           ON source_preset.id = preset.source_preset_id
+         LEFT JOIN marketplace_members AS source_creator
+           ON source_creator.id = source_preset.creator_id
          JOIN marketplace_published_preset_revisions AS revision
            ON revision.preset_id = preset.id AND revision.id = $2
          WHERE preset.id = $1 AND preset.visibility IN ('public', 'unlisted')
@@ -262,6 +322,16 @@ interface TagRow extends QueryResultRow {
   dimension: string;
   name_zh: string;
   name_en: string;
+}
+
+interface RemixSourceRow extends QueryResultRow {
+  source_preset_id: string;
+  source_revision_id: string;
+  source_title: string;
+  source_visibility: 'public' | 'unlisted';
+  source_creator_id: string;
+  source_creator_handle: string;
+  source_creator_display_name: string;
 }
 
 function tagFromRow(row: TagRow): MarketplaceTag {
@@ -372,17 +442,56 @@ export function createPostgresPublishedPresetPublicationRepository(
         );
         if (selected.rows.length !== input.tagIds.length) throw new UnavailableTagError();
 
+        let source: PublishedPresetSource | null = null;
+        if (input.source) {
+          const sourceResult = await client.query<RemixSourceRow>(
+            `SELECT
+               source_preset.id AS source_preset_id,
+               source_revision.id AS source_revision_id,
+               source_preset.title AS source_title,
+               source_preset.visibility AS source_visibility,
+               source_creator.id AS source_creator_id,
+               source_creator.handle AS source_creator_handle,
+               source_creator.display_name AS source_creator_display_name
+             FROM marketplace_published_presets AS source_preset
+             JOIN marketplace_published_preset_revisions AS source_revision
+               ON source_revision.preset_id = source_preset.id AND source_revision.id = $2
+             JOIN marketplace_members AS source_creator
+               ON source_creator.id = source_preset.creator_id
+             WHERE source_preset.id = $1
+               AND source_preset.creator_id <> $3
+               AND source_preset.visibility IN ('public', 'unlisted')
+             FOR SHARE OF source_preset, source_revision`,
+            [input.source.presetId, input.source.revisionId, input.creator.id],
+          );
+          const row = sourceResult.rows[0];
+          if (!row) throw new PublishedPresetSourceError();
+          source = {
+            presetId: row.source_preset_id,
+            revisionId: row.source_revision_id,
+            creator: {
+              id: row.source_creator_id,
+              handle: row.source_creator_handle,
+              displayName: row.source_creator_display_name,
+            },
+            availability: 'available',
+            title: row.source_title,
+          };
+        }
+
         await client.query(
           `INSERT INTO marketplace_published_presets
              (id, creator_id, title, description, visibility, current_revision_id,
-              created_at, updated_at)
-           VALUES ($1, $2, $3, $4, 'public', $5, $6, $6)`,
+              source_preset_id, source_revision_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, 'public', $5, $6, $7, $8, $8)`,
           [
             input.id,
             input.creator.id,
             input.title,
             input.description,
             input.revisionId,
+            input.source?.presetId ?? null,
+            input.source?.revisionId ?? null,
             input.now,
           ],
         );
@@ -439,6 +548,7 @@ export function createPostgresPublishedPresetPublicationRepository(
             rig: input.rig,
             createdAt,
           },
+          ...(source ? { source } : {}),
           createdAt,
           updatedAt: createdAt,
         };

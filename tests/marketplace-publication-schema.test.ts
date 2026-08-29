@@ -38,3 +38,21 @@ test('revision management migration indexes immutable history without weakening 
   assert.equal(disableTrigger < backfill && backfill < enableTrigger, true);
   assert.doesNotMatch(management, /DROP TRIGGER|ON DELETE CASCADE/);
 });
+
+test('Remix provenance migration keeps a fixed source work and revision without cascades', async () => {
+  const sql = await readFile(
+    new URL('../server/marketplace/migrations/0006_preset_remix_provenance.sql', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(sql, /source_preset_id text/);
+  assert.match(sql, /source_revision_id text/);
+  assert.match(sql, /FOREIGN KEY \(source_preset_id, source_revision_id\)/);
+  assert.match(sql, /REFERENCES marketplace_published_preset_revisions\(preset_id, id\)/);
+  assert.match(sql, /marketplace_remix_source_pair_check/);
+  assert.match(sql, /marketplace_reject_remix_source_mutation/);
+  assert.match(sql, /BEFORE UPDATE OF source_preset_id, source_revision_id/);
+  assert.doesNotMatch(sql, /ON DELETE CASCADE/);
+  assert.match(sql, /^BEGIN;/m);
+  assert.match(sql, /COMMIT;\s*$/);
+});

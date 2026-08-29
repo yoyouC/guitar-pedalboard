@@ -14,6 +14,7 @@ import {
   PublishedPresetAccessError,
   PublishedPresetConflictError,
   PublishedPresetRevisionNotFoundError,
+  PublishedPresetSourceError,
   UnavailableTagError,
 } from './repository.ts';
 import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.ts';
@@ -34,6 +35,26 @@ export function createMemoryPublishedPresetRepository(
   );
 
   const clone = <T>(value: T): T => structuredClone(value);
+
+  function hydrateSource(preset: PublishedPreset): PublishedPreset {
+    if (!preset.source) return preset;
+    const sourcePreset = presetsById.get(preset.source.presetId);
+    const sourceRevision = revisionsByPresetId
+      .get(preset.source.presetId)
+      ?.get(preset.source.revisionId);
+    if (!sourcePreset || !sourceRevision) throw new PublishedPresetSourceError();
+    const available = sourcePreset.visibility === 'public' || sourcePreset.visibility === 'unlisted';
+    return {
+      ...preset,
+      source: {
+        presetId: sourcePreset.id,
+        revisionId: sourceRevision.id,
+        creator: sourcePreset.creator,
+        availability: available ? 'available' : 'unavailable',
+        title: available ? sourcePreset.title : null,
+      },
+    };
+  }
 
   function concurrencyState(preset: PublishedPreset): PublishedPresetConcurrencyState {
     return {
@@ -60,7 +81,7 @@ export function createMemoryPublishedPresetRepository(
 
   function setCurrent(preset: PublishedPreset): PublishedPreset {
     presetsById.set(preset.id, preset);
-    return clone(preset);
+    return clone(hydrateSource(preset));
   }
 
   function nextUpdatedAt(preset: PublishedPreset, now: Date): string {
@@ -71,7 +92,7 @@ export function createMemoryPublishedPresetRepository(
     async findVisibleById(id) {
       const preset = presetsById.get(id);
       return preset && (preset.visibility === 'public' || preset.visibility === 'unlisted')
-        ? clone(preset)
+        ? clone(hydrateSource(preset))
         : null;
     },
 
@@ -83,6 +104,7 @@ export function createMemoryPublishedPresetRepository(
         || !revision
         || (preset.visibility !== 'public' && preset.visibility !== 'unlisted')
       ) return null;
+      const source = hydrateSource(preset).source;
       const view: PublishedPresetRevisionView = {
         id: preset.id,
         title: preset.title,
@@ -92,6 +114,7 @@ export function createMemoryPublishedPresetRepository(
         tags: preset.tags,
         revision,
         currentRevisionId: preset.currentRevision.id,
+        ...(source ? { source } : {}),
         createdAt: preset.createdAt,
         updatedAt: preset.updatedAt,
       };
@@ -105,6 +128,25 @@ export function createMemoryPublishedPresetRepository(
     async create(input) {
       const selectedTags = input.tagIds.map((id) => tagsById.get(id));
       if (selectedTags.some((tag) => !tag)) throw new UnavailableTagError();
+      let source;
+      if (input.source) {
+        const sourcePreset = presetsById.get(input.source.presetId);
+        const sourceRevision = revisionsByPresetId
+          .get(input.source.presetId)
+          ?.get(input.source.revisionId);
+        if (
+          !sourcePreset
+          || !sourceRevision
+          || sourcePreset.creator.id === input.creator.id
+          || (sourcePreset.visibility !== 'public' && sourcePreset.visibility !== 'unlisted')
+        ) throw new PublishedPresetSourceError();
+        source = {
+          ...input.source,
+          creator: sourcePreset.creator,
+          availability: 'available' as const,
+          title: sourcePreset.title,
+        };
+      }
       const createdAt = input.now.toISOString();
       const preset: PublishedPreset = {
         id: input.id,
@@ -123,12 +165,13 @@ export function createMemoryPublishedPresetRepository(
           rig: input.rig,
           createdAt,
         },
+        ...(source ? { source } : {}),
         createdAt,
         updatedAt: createdAt,
       };
       presetsById.set(preset.id, preset);
       revisionsByPresetId.set(preset.id, new Map([[preset.currentRevision.id, preset.currentRevision]]));
-      return clone(preset);
+      return clone(hydrateSource(preset));
     },
 
     async listRevisions(presetId, creatorId) {
@@ -143,7 +186,7 @@ export function createMemoryPublishedPresetRepository(
     },
 
     async findManagedById(presetId, creatorId) {
-      return clone(ownedCurrent(presetId, creatorId));
+      return clone(hydrateSource(ownedCurrent(presetId, creatorId)));
     },
 
     async updateMetadata(input) {

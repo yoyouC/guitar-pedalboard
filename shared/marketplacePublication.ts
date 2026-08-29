@@ -7,7 +7,7 @@ import type { RigPresetState } from '../src/state/presetCodec.ts';
 import { RIG_PRESET_VERSION } from '../src/state/presetCodec.ts';
 import { analyzePublishableRig } from './publishableRig.ts';
 
-export type PublicationField = 'title' | 'description' | 'tagIds' | 'rig';
+export type PublicationField = 'title' | 'description' | 'tagIds' | 'rig' | 'source';
 export type PublicationErrors = Partial<Record<PublicationField, string>>;
 
 export interface ValidatedPublication {
@@ -48,7 +48,7 @@ export function validatePublishPresetRequest(
   availableTagIds: ReadonlySet<string>,
 ): { value: ValidatedPublication | null; errors: PublicationErrors } {
   if (!isRecord(value)) return { value: null, errors: { rig: '发布数据无效' } };
-  const allowedKeys = ['title', 'description', 'tagIds', 'schemaVersion', 'rig'];
+  const allowedKeys = ['title', 'description', 'tagIds', 'schemaVersion', 'rig', 'source'];
   if (Object.keys(value).some((key) => !allowedKeys.includes(key))) {
     return { value: null, errors: { rig: '发布数据包含不允许的字段' } };
   }
@@ -58,6 +58,22 @@ export function validatePublishPresetRequest(
     || !Array.isArray(value.tagIds)
     || value.tagIds.some((tagId) => typeof tagId !== 'string')
   ) return { value: null, errors: { rig: '发布数据无效' } };
+
+  let source: PublishPresetRequest['source'];
+  if (value.source !== undefined) {
+    if (
+      !isRecord(value.source)
+      || Object.keys(value.source).some((key) => !['presetId', 'revisionId'].includes(key))
+      || typeof value.source.presetId !== 'string'
+      || !value.source.presetId
+      || typeof value.source.revisionId !== 'string'
+      || !value.source.revisionId
+    ) return { value: null, errors: { source: '来源关系无效' } };
+    source = {
+      presetId: value.source.presetId,
+      revisionId: value.source.revisionId,
+    };
+  }
 
   const errors = validatePublicationFields({
     title: value.title,
@@ -82,6 +98,7 @@ export function validatePublishPresetRequest(
         tagIds: value.tagIds as string[],
         schemaVersion: RIG_PRESET_VERSION,
         rig: value.rig as RigPresetState,
+        ...(source ? { source } : {}),
       },
       resourceDependencies: analysis.resourceDependencies,
       derivedAttributes: analysis.derivedAttributes,

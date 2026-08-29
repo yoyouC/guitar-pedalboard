@@ -64,6 +64,29 @@ function isMarketplaceTag(value: unknown): boolean {
     && typeof value.nameEn === 'string';
 }
 
+function isPublishedPresetSource(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.creator)) return false;
+  return hasOnlyKeys(value, [
+    'presetId',
+    'revisionId',
+    'creator',
+    'availability',
+    'title',
+  ])
+    && typeof value.presetId === 'string'
+    && value.presetId.length > 0
+    && typeof value.revisionId === 'string'
+    && value.revisionId.length > 0
+    && hasOnlyKeys(value.creator, ['id', 'handle', 'displayName'])
+    && typeof value.creator.id === 'string'
+    && typeof value.creator.handle === 'string'
+    && typeof value.creator.displayName === 'string'
+    && (value.availability === 'available' || value.availability === 'unavailable')
+    && (value.availability === 'available'
+      ? typeof value.title === 'string' && value.title.length > 0
+      : value.title === null);
+}
+
 function isDerivedAttributes(value: unknown): value is RigDerivedAttributes {
   return isRecord(value)
     && hasOnlyKeys(value, ['pedalIds', 'ampId', 'ampModelKey', 'cabId', 'resourceKinds'])
@@ -178,6 +201,7 @@ function parsePublishedPreset(
     Array.isArray(attributes.resourceKinds) &&
     attributes.resourceKinds.every((kind) => kind === 'builtin' || kind === 'tone3000') &&
     isValidStoredPublishedPresetRevision(revision)
+    && (value.source === undefined || isPublishedPresetSource(value.source))
   );
   if (!validEnvelope) return null;
   if (!sameJson(revision.derivedAttributes, attributes)) return null;
@@ -228,6 +252,7 @@ export function parsePublishedPresetRevisionView(
     || value.tags.length > 5
     || !value.tags.every(isMarketplaceTag)
     || (expectedRevisionId !== undefined && value.revision.id !== expectedRevisionId)
+    || (value.source !== undefined && !isPublishedPresetSource(value.source))
   ) return null;
   return value as unknown as PublishedPresetRevisionView;
 }

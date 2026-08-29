@@ -55,13 +55,50 @@ test('applying a published preset creates a session undo point without saving lo
   assert.deepEqual(applied, { ok: true });
   assert.equal(session.canUndo(), true);
   assert.equal(store.getState().ampValues.gain, 60);
+  assert.deepEqual(store.getState().provenance, {
+    presetId: demoPublishedPreset.id,
+    revisionId: demoPublishedPreset.currentRevision.id,
+    creatorId: demoPublishedPreset.creator.id,
+    presetUpdatedAt: demoPublishedPreset.updatedAt,
+  });
   assert.deepEqual(store.getState().presets, beforePresets);
   assert.deepEqual(store.getState().snapshots, beforeSnapshots);
 
   const undone = await session.undo();
   assert.deepEqual(undone, { ok: true });
   assert.deepEqual(rigToApplyState(store.getState()), beforeRig);
+  assert.equal(store.getState().provenance, null);
   assert.equal(session.canUndo(), false);
+});
+
+test('published provenance survives editing and local Preset round-trips until an explicit fresh start', async () => {
+  const store = createRigStore(createStubEngine());
+  const session = createPublishedPresetRigSession(store);
+
+  assert.deepEqual(await session.apply(demoPublishedPreset), { ok: true });
+  store.setAmpParam('gain', 72);
+  store.savePreset('Remix Draft');
+  store.savePreset('Remix Draft Copy');
+
+  assert.deepEqual(
+    store.getState().presets.map((preset) => preset.provenance),
+    [store.getState().provenance, store.getState().provenance],
+  );
+
+  assert.deepEqual(await store.startFromFactoryRig(), { ok: true });
+  assert.equal(store.getState().provenance, null);
+  assert.deepEqual(await store.loadPreset('Remix Draft Copy'), { ok: true });
+  assert.equal(store.getState().ampValues.gain, 72);
+  assert.deepEqual(store.getState().provenance, {
+    presetId: demoPublishedPreset.id,
+    revisionId: demoPublishedPreset.currentRevision.id,
+    creatorId: demoPublishedPreset.creator.id,
+    presetUpdatedAt: demoPublishedPreset.updatedAt,
+  });
+
+  assert.deepEqual(await store.startFromBlankRig(), { ok: true });
+  assert.equal(store.getState().chain.length, 0);
+  assert.equal(store.getState().provenance, null);
 });
 
 test('a future Rig schema is rejected without changing the local Rig', async () => {
