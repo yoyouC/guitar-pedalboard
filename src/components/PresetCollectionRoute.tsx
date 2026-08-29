@@ -83,7 +83,7 @@ export function PresetCollectionRoute({ pathname, onClose, onNavigate }: PresetC
       <div className="marketplace-detail__topline"><span className="marketplace-detail__eyebrow">Tone Market · Preset Collection</span><button className="marketplace-detail__close" type="button" onClick={onClose}>返回效果器</button></div>
       {state.status === 'idle' || state.status === 'loading' ? <p>正在读取合集…</p> : state.status === 'error' ? <div className="marketplace-detail__error" role="alert"><strong>未能打开这个合集</strong><p>{state.message}</p><button type="button" onClick={() => setAttempt((current) => current + 1)}>重试</button></div> : <div className="marketplace-detail__content">
         <h2>{state.collection.title}</h2><p>{state.collection.description || '作者没有填写介绍。'}</p><p className="marketplace-detail__byline">@{state.collection.creator.handle}</p><p className="marketplace-detail__tags">{state.collection.tags.map((tag) => tag.nameZh).join(' · ')}</p>
-        {state.collection.visibility !== 'withdrawn' && <MarketplaceLikeButton kind="collection" targetId={state.collection.id} />}
+        {state.collection.visibility !== 'withdrawn' && <MarketplaceLikeButton kind="collection" targetId={state.collection.id} targetCreatorId={state.collection.creator.id} onNavigate={onNavigate} />}
         {(state.collection.visibility === 'public' || state.collection.visibility === 'unlisted') && <MarketplaceReportForm kind="collection" targetId={state.collection.id} onNavigate={onNavigate} />}
         {state.collection.visibility !== 'public' && <p className="marketplace-detail__warning">{state.collection.visibility === 'unlisted' ? 'Unlisted：仅持有直接链接的人可访问。' : '合集已撤回，只有作者可管理。'}</p>}
         <section className="collection-use-panel" aria-label="Collection queue preview">

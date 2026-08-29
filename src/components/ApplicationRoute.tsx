@@ -9,6 +9,7 @@ import { PublishPage } from './PublishPage.tsx';
 import { MyLibraryPage } from './MyLibraryPage.tsx';
 import { ToneManagePage } from './ToneManagePage.tsx';
 import { CollectionManagePage } from './CollectionManagePage.tsx';
+import { MarketplaceRankingPage } from './MarketplaceLikesRoute.tsx';
 import type { AppPreferences } from '../app/preferences.ts';
 import type { AudioDiagnosticsSnapshot } from '../audio/audioDiagnostics.ts';
 import type { MidiState } from '../midi/useMidi.ts';
@@ -34,6 +35,8 @@ export function ApplicationRoute(props: ApplicationRouteProps) {
   switch (route.kind) {
     case 'marketplace-search':
       return <PublishedPresetSearchRoute pathname={pathname} search={search} onClose={close} onNavigate={onNavigate} />;
+    case 'marketplace-ranking':
+      return <MarketplaceRankingPage pathname={pathname} onNavigate={onNavigate} />;
     case 'published-preset':
       return <PublishedPresetRoute pathname={pathname} onClose={close} onNavigate={onNavigate} />;
     case 'preset-collection':

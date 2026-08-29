@@ -14,6 +14,7 @@ import { EFFECT_REGISTRY } from '../audio/effects';
 import { marketplaceClient } from '../marketplace/client';
 import { marketplaceSearchPath, marketplaceSearchRouteState } from '../marketplace/searchRoute';
 import { tonePath } from '../marketplace/route';
+import { MarketplaceLikeButton } from './MarketplaceLikeButton.tsx';
 
 interface PublishedPresetSearchRouteProps {
   pathname: string;
@@ -213,6 +214,12 @@ export function PublishedPresetSearchRoute({
         <button className="marketplace-detail__close" type="button" onClick={onClose}>返回效果器</button>
       </div>
       <h1>找到下一种声音</h1>
+      <nav className="marketplace-search__tabs" aria-label="Tone Market discovery views">
+        <button type="button" aria-pressed>Search</button>
+        <button type="button" onClick={() => onNavigate('/marketplace/popular')}>Popular</button>
+        <button type="button" onClick={() => onNavigate('/marketplace/trending')}>Trending</button>
+        <button type="button" onClick={() => onNavigate('/marketplace/latest')}>Latest</button>
+      </nav>
       <nav className="marketplace-search__tabs" aria-label="发现类型">
         {([
           ['presets', '预设'],
@@ -295,6 +302,7 @@ export function PublishedPresetSearchRoute({
             <small>@{item.creator.handle} · {item.tags.map((tag) => tag.nameZh).join(' · ')}</small>
             <small>{item.derivedAttributes.pedalIds.join('、') || 'No pedals'} → {item.derivedAttributes.ampId} → {item.derivedAttributes.cabId}</small>
             <small>{dependencySummary(item)} · 发布于 {new Date(item.createdAt).toLocaleDateString()}{item.isRemix ? ' · Remix' : ''}</small>
+            <MarketplaceLikeButton kind="preset" targetId={item.id} targetCreatorId={item.creator.id} onNavigate={onNavigate} />
           </article>
         ))}
       </div>}
@@ -304,6 +312,7 @@ export function PublishedPresetSearchRoute({
             <button type="button" onClick={() => onNavigate(item.url)}>{item.title}</button>
             <p>{item.description || '作者没有填写介绍。'}</p>
             <small>@{item.creator.handle} · {item.tags.map((tag) => tag.nameZh).join(' · ')}</small>
+            <MarketplaceLikeButton kind="collection" targetId={item.id} targetCreatorId={item.creator.id} onNavigate={onNavigate} />
           </article>
         ))}
       </div>}

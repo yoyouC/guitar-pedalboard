@@ -3715,7 +3715,7 @@ body.midi-learn-mode input:disabled {
 .publish-page__actions { display: flex; justify-content: space-between; gap: 10px; }
 @media (max-width: 620px) { .publish-page__steps { grid-template-columns: 1fr; } .publish-page__steps li { display: none; } .publish-page__steps li.active { display: block; } }
 .library-page { width: min(1000px, calc(100% - 24px)); margin: 24px auto; }
-.library-page__tabs { display: flex; gap: 8px; margin: 16px 0; }
+.library-page__tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
 .library-page__tabs [aria-current='page'] { border-color: #8dc7ff; color: #fff; }
 .library-page__intro { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .library-page__tones { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 18px; }
@@ -3789,6 +3789,8 @@ body.midi-learn-mode input:disabled {
 .marketplace-ranking-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
 .marketplace-ranking article { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; padding: 11px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
 .marketplace-ranking article small { grid-column: 2; }
+.marketplace-ranking article .marketplace-like { grid-column: 2; }
+.marketplace-ranking-page__explanation { max-width: 760px; color: #aab8c7; }
 
 .publish-dialog__backdrop {
   position: fixed;

@@ -1,5 +1,5 @@
 import {
-  creatorHandleFromPath,
+  creatorRouteFromPath,
   presetCollectionIdFromPath,
   publishedPresetRouteFromPath,
 } from '../marketplace/route.ts';
@@ -9,6 +9,7 @@ export type AppSection = 'pedalboard' | 'marketplace' | 'account' | 'unknown';
 export type AppRoute =
   | { kind: 'pedalboard'; section: 'pedalboard' }
   | { kind: 'marketplace-search'; section: 'marketplace' }
+  | { kind: 'marketplace-ranking'; section: 'marketplace' }
   | { kind: 'published-preset'; section: 'marketplace' }
   | { kind: 'preset-collection'; section: 'marketplace' }
   | { kind: 'creator-profile'; section: 'marketplace' }
@@ -40,17 +41,26 @@ export function resolveAppRoute(pathname: string): AppRoute {
   if (exactPath(pathname, '/marketplace') || exactPath(pathname, '/marketplace/search')) {
     return { kind: 'marketplace-search', section: 'marketplace' };
   }
+  if (
+    exactPath(pathname, '/marketplace/popular')
+    || exactPath(pathname, '/marketplace/trending')
+    || exactPath(pathname, '/marketplace/latest')
+  ) {
+    return { kind: 'marketplace-ranking', section: 'marketplace' };
+  }
   if (publishedPresetRouteFromPath(pathname)) {
     return { kind: 'published-preset', section: 'marketplace' };
   }
   if (presetCollectionIdFromPath(pathname)) {
     return { kind: 'preset-collection', section: 'marketplace' };
   }
-  if (creatorHandleFromPath(pathname)) {
+  if (creatorRouteFromPath(pathname)) {
     return { kind: 'creator-profile', section: 'marketplace' };
   }
   if (exactPath(pathname, '/login')) return { kind: 'login', section: 'account' };
-  if (exactPath(pathname, '/library')) return { kind: 'library', section: 'account' };
+  if (exactPath(pathname, '/library') || exactPath(pathname, '/marketplace/me/likes')) {
+    return { kind: 'library', section: 'account' };
+  }
   if (/^\/library\/tones\/[^/]+\/?$/.test(pathname)) return { kind: 'tone-manage', section: 'account' };
   if (/^\/library\/collections\/[^/]+\/?$/.test(pathname)) return { kind: 'collection-manage', section: 'account' };
   if (exactPath(pathname, '/settings')) return { kind: 'settings', section: 'account' };

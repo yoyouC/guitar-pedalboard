@@ -148,6 +148,7 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
   useMarketplacePageMetadata(loadState.status === 'ready' ? {
     kind: 'preset',
     id: loadState.displayed.id,
+    revisionId: loadState.displayed.fixedRevision ? loadState.displayed.revision.id : null,
     title: loadState.displayed.title,
     description: loadState.displayed.description,
     visibility: loadState.displayed.visibility,
@@ -214,7 +215,7 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
               {loadState.displayed.tags.map((tag) => tag.nameZh).join(' · ')}
             </p>
             {!loadState.displayed.fixedRevision && loadState.displayed.visibility !== 'withdrawn' && (
-              <MarketplaceLikeButton kind="preset" targetId={loadState.displayed.id} />
+              <MarketplaceLikeButton kind="preset" targetId={loadState.displayed.id} targetCreatorId={loadState.displayed.creator.id} onNavigate={onNavigate} />
             )}
             {(loadState.displayed.visibility === 'public'
               || loadState.displayed.visibility === 'unlisted') && (

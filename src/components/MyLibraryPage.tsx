@@ -3,6 +3,7 @@ import type { PresetCollection, PublishedPreset } from '../../shared/marketplace
 import { marketplaceClient } from '../marketplace/client';
 import { useMemberSession } from '../members/useMemberSession';
 import { CreatePresetCollectionForm } from './CreatePresetCollectionForm';
+import { MarketplaceMyLikesPanel } from './MarketplaceLikesRoute.tsx';
 
 interface Props {
   search: string;
@@ -14,7 +15,7 @@ type LoadStatus = 'loading' | 'ready' | 'error';
 export function MyLibraryPage({ search, onNavigate }: Props) {
   const session = useMemberSession();
   const requestedTab = new URLSearchParams(search).get('tab');
-  const tab = requestedTab === 'collections' ? 'collections' : 'tones';
+  const tab = requestedTab === 'collections' || requestedTab === 'tones' ? requestedTab : 'likes';
   const [tones, setTones] = useState<PublishedPreset[]>([]);
   const [collections, setCollections] = useState<PresetCollection[]>([]);
   const [toneStatus, setToneStatus] = useState<LoadStatus>('loading');
@@ -46,12 +47,12 @@ export function MyLibraryPage({ search, onNavigate }: Props) {
     <section className="library-page">
       <span className="marketplace-detail__eyebrow">Private member workspace</span><h1>My Library</h1>
       <nav className="library-page__tabs" aria-label="Library sections">
-        <button type="button" disabled>My Likes · coming next</button>
+        <button type="button" aria-current={tab === 'likes' ? 'page' : undefined} onClick={() => onNavigate('/library?tab=likes')}>My Likes</button>
         <button type="button" aria-current={tab === 'collections' ? 'page' : undefined} onClick={() => onNavigate('/library?tab=collections')}>My Collections</button>
         <button type="button" aria-current={tab === 'tones' ? 'page' : undefined} onClick={() => onNavigate('/library?tab=tones')}>My Tones</button>
       </nav>
 
-      {tab === 'tones' ? <>
+      {tab === 'likes' ? <MarketplaceMyLikesPanel onNavigate={onNavigate} /> : tab === 'tones' ? <>
         <p><strong>My Tones</strong> 包含你拥有的 Public、Unlisted 和 Withdrawn 作品。Local Preset 只属于当前浏览器，不在此同步。</p>
         {toneStatus === 'loading' && <p>正在读取 My Tones…</p>}
         {toneStatus === 'error' && <p role="alert">{toneMessage}</p>}

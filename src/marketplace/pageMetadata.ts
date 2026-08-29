@@ -10,13 +10,14 @@ export interface MarketplacePageMetadata {
 export function marketplacePageMetadata(input: {
   kind: MarketplacePageKind;
   id: string;
+  revisionId?: string | null;
   title: string;
   description: string;
   visibility: 'public' | 'unlisted' | 'withdrawn';
   origin: string;
 }): MarketplacePageMetadata {
   const path = input.kind === 'preset'
-    ? `/marketplace/presets/${encodeURIComponent(input.id)}`
+    ? `/marketplace/tones/${encodeURIComponent(input.id)}${input.revisionId ? `/revisions/${encodeURIComponent(input.revisionId)}` : ''}`
     : input.kind === 'collection'
       ? `/marketplace/collections/${encodeURIComponent(input.id)}`
       : `/creators/id/${encodeURIComponent(input.id)}`;
@@ -33,6 +34,7 @@ export function useMarketplacePageMetadata(
 ): void {
   const kind = input?.kind;
   const id = input?.id;
+  const revisionId = input?.revisionId;
   const title = input?.title;
   const descriptionText = input?.description;
   const visibility = input?.visibility;
@@ -41,6 +43,7 @@ export function useMarketplacePageMetadata(
     const metadata = marketplacePageMetadata({
       kind,
       id,
+      revisionId,
       title,
       description: descriptionText,
       visibility,
@@ -63,7 +66,7 @@ export function useMarketplacePageMetadata(
       robots.restore();
       canonical.restore();
     };
-  }, [descriptionText, id, kind, title, visibility]);
+  }, [descriptionText, id, kind, revisionId, title, visibility]);
 }
 
 function setHeadValue(
