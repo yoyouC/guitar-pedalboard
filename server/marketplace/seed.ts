@@ -39,14 +39,15 @@ export async function seedPublishedPreset(
   );
   await client.query(
     `INSERT INTO marketplace_published_preset_revisions
-       (id, preset_id, schema_version, resource_dependencies, rig, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
+       (id, preset_id, schema_version, resource_dependencies, derived_attributes, rig, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (id) DO NOTHING`,
     [
       revision.id,
       preset.id,
       revision.schemaVersion,
       JSON.stringify(revision.resourceDependencies),
+      JSON.stringify(revision.derivedAttributes),
       JSON.stringify(revision.rig),
       revision.createdAt,
     ],

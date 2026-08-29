@@ -32,6 +32,30 @@
       "destination": "/api/marketplace-preset?route=presets"
     },
     {
+      "source": "/api/marketplace/presets/:id/revisions/:revisionId/restore",
+      "destination": "/api/marketplace-preset?route=revision-restore&id=:id&revisionId=:revisionId"
+    },
+    {
+      "source": "/api/marketplace/presets/:id/revisions/:revisionId",
+      "destination": "/api/marketplace-preset?route=revision&id=:id&revisionId=:revisionId"
+    },
+    {
+      "source": "/api/marketplace/presets/:id/revisions",
+      "destination": "/api/marketplace-preset?route=revisions&id=:id"
+    },
+    {
+      "source": "/api/marketplace/presets/:id/metadata",
+      "destination": "/api/marketplace-preset?route=metadata&id=:id"
+    },
+    {
+      "source": "/api/marketplace/presets/:id/manage",
+      "destination": "/api/marketplace-preset?route=manage&id=:id"
+    },
+    {
+      "source": "/api/marketplace/presets/:id/visibility",
+      "destination": "/api/marketplace-preset?route=visibility&id=:id"
+    },
+    {
       "source": "/api/marketplace/presets/:id",
       "destination": "/api/marketplace-preset?route=preset&id=:id"
     },

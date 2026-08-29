@@ -11,7 +11,9 @@ export type PublicationField = 'title' | 'description' | 'tagIds' | 'rig';
 export type PublicationErrors = Partial<Record<PublicationField, string>>;
 
 export interface ValidatedPublication {
-  request: PublishPresetRequest;
+  request: Omit<PublishPresetRequest, 'schemaVersion'> & {
+    schemaVersion: typeof RIG_PRESET_VERSION;
+  };
   resourceDependencies: RigResourceDependency[];
   derivedAttributes: RigDerivedAttributes;
 }

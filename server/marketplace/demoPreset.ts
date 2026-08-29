@@ -1,8 +1,8 @@
-import type { PublishedPreset } from '../../shared/marketplace.ts';
+import type { CanonicalPublishedPreset } from '../../shared/marketplace.ts';
 
 export const DEMO_PUBLISHED_PRESET_ID = 'preset-demo-crunch';
 
-export const demoPublishedPreset: PublishedPreset = {
+export const demoPublishedPreset: CanonicalPublishedPreset = {
   id: DEMO_PUBLISHED_PRESET_ID,
   title: 'Demo Crunch',
   description: 'A reproducible built-in crunch Rig.',
@@ -26,10 +26,18 @@ export const demoPublishedPreset: PublishedPreset = {
     resourceKinds: ['builtin'],
   },
   currentRevision: {
+    payloadKind: 'canonical-rig',
     id: 'revision-demo-crunch-1',
     schemaVersion: 5,
     createdAt: '2026-08-29T00:00:00.000Z',
     resourceDependencies: [{ kind: 'builtin' }],
+    derivedAttributes: {
+      pedalIds: [],
+      ampId: 'crunch',
+      ampModelKey: 'builtin:crunch',
+      cabId: 'gb4x12',
+      resourceKinds: ['builtin'],
+    },
     rig: {
       chain: [],
       amp: {

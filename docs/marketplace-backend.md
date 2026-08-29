@@ -23,7 +23,7 @@ npm run marketplace:migrate
 npm run marketplace:seed
 ```
 
-迁移脚本按文件名顺序运行全部 SQL，创建成员、认证、handle claim、作品、修订、受控标签和 Rig 筛选投影。数据库约束保证每个作品都有属于自己的当前修订，修订更新和删除由 trigger 拒绝；handle claim 不删除，因此旧 handle 不会被其他成员占用。首发事务一次写入作品、不可变修订、标签关系和从 Rig 派生的筛选投影，任一步失败都会回滚。账号期满清理需要由对应生命周期迁移建立专用受控路径。seed 命令幂等创建 `preset-demo-crunch`。
+迁移脚本按文件名顺序运行全部 SQL，创建成员、认证、handle claim、作品、修订、受控标签和 Rig 筛选投影。数据库约束保证每个作品都有属于自己的当前修订，修订更新和删除由 trigger 拒绝；handle claim 不删除，因此旧 handle 不会被其他成员占用。首发事务一次写入作品、不可变修订、标签关系和从 Rig 派生的筛选投影，任一步失败都会回滚。声音更新同样在一个事务内追加修订、推进当前指针并重建筛选投影；每条修订同时冻结当时的派生器材属性，回退直接复制旧 Rig 与该快照，不依赖当前器材目录，也不移动历史指针。账号期满清理需要由对应生命周期迁移建立专用受控路径。seed 命令幂等创建 `preset-demo-crunch`。
 
 生产认证还需配置：
 
@@ -47,7 +47,15 @@ Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。�
 - `GET /api/marketplace/creators/:handle`
 - `GET /api/marketplace/tags`
 - `POST /api/marketplace/presets`
+- `GET /api/marketplace/presets/:id`（Public / Unlisted 当前修订）
+- `GET /api/marketplace/presets/:id/revisions/:revisionId`（固定修订永久链接）
+- `GET /api/marketplace/presets/:id/manage` 与 `GET /api/marketplace/presets/:id/revisions`（仅作者）
+- `PATCH /api/marketplace/presets/:id/metadata`
+- `POST /api/marketplace/presets/:id/revisions` 与 `POST /api/marketplace/presets/:id/revisions/:revisionId/restore`
+- `PATCH /api/marketplace/presets/:id/visibility`
 
-资料写入携带 `expectedUpdatedAt` 做乐观并发检查。公开创作者响应使用字段白名单，不包含邮箱、认证账户或第三方 token。发布请求只接受标题、纯文本介绍、1–5 个标签、schema 版本和完整 Rig；owner、点赞数与排名全部由服务端拥有。写入前共用 `publishableRig` 边界执行无损 canonical 校验，并自行派生 Pedal、Amp、Cab 与精确 TONE3000 依赖；本机 NAM 和自定义 Cab IR 会被拒绝。
+资料与作品管理写入携带 `expectedUpdatedAt` 做乐观并发检查；冲突返回 `409 preset_update_conflict` 及最新 `updatedAt/currentRevisionId/visibility`，客户端不会静默覆盖。公开创作者响应使用字段白名单，不包含邮箱、认证账户或第三方 token。发布请求只接受标题、纯文本介绍、1–5 个标签、schema 版本和完整 Rig；owner、点赞数与排名全部由服务端拥有。写入前共用 `publishableRig` 边界执行无损 canonical 校验，并自行派生 Pedal、Amp、Cab 与精确 TONE3000 依赖；本机 NAM 和自定义 Cab IR 会被拒绝。
+
+Public 作品进入公开发现；Unlisted 只通过直接链接访问，页面动态设置 `noindex,nofollow`；Withdrawn 对访客与不存在作品使用相同 404，但作者仍可通过管理入口恢复原作品 id。Hidden 不属于作者可写状态。
 
 部署路由先把公开稳定 URL 转给 Vercel Function，再由最后的 SPA rewrite 处理前端页面。数据库未配置或查询失败时 API 返回稳定的 `503 marketplace_unavailable`；不存在和非公开作品统一返回 `404 published_preset_not_found`。

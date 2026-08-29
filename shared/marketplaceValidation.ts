@@ -1,7 +1,20 @@
-import type { PublishedPreset, RigResourceDependency } from './marketplace.ts';
-import { RIG_PRESET_VERSION } from '../src/state/presetCodec.ts';
+import type {
+  CanonicalPublishedPresetRevision,
+  PublishedPreset,
+  PublishedPresetRevision,
+  PublishedPresetRevisionView,
+  PublishedPresetVisibility,
+  RigDerivedAttributes,
+  RigResourceDependency,
+} from './marketplace.ts';
+import {
+  decodeCurrentRigPresetState,
+  RIG_PRESET_VERSION,
+  type RigPresetState,
+} from '../src/state/presetCodec.ts';
 import {
   analyzePublishableRig,
+  deriveRigResourceDependencies,
   sameResourceDependencies,
 } from './publishableRig.ts';
 
@@ -51,24 +64,90 @@ function isMarketplaceTag(value: unknown): boolean {
     && typeof value.nameEn === 'string';
 }
 
-function isLosslessPublishableCurrentRig(
-  value: unknown,
-  dependencies: RigResourceDependency[],
-): boolean {
-  const analysis = analyzePublishableRig(value);
-  return Boolean(analysis && sameResourceDependencies(analysis.resourceDependencies, dependencies));
+function isDerivedAttributes(value: unknown): value is RigDerivedAttributes {
+  return isRecord(value)
+    && hasOnlyKeys(value, ['pedalIds', 'ampId', 'ampModelKey', 'cabId', 'resourceKinds'])
+    && Array.isArray(value.pedalIds)
+    && value.pedalIds.every((id) => typeof id === 'string' && id.length > 0)
+    && typeof value.ampId === 'string'
+    && value.ampId.length > 0
+    && typeof value.ampModelKey === 'string'
+    && value.ampModelKey.length > 0
+    && typeof value.cabId === 'string'
+    && value.cabId.length > 0
+    && Array.isArray(value.resourceKinds)
+    && value.resourceKinds.every((kind) => kind === 'builtin' || kind === 'tone3000');
 }
 
-/** Published Preset 唯一可信入口：API 输出、未来写入与官方客户端共用。 */
-export function parsePublicPublishedPreset(
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(canonicalJsonValue(left)) === JSON.stringify(canonicalJsonValue(right));
+}
+
+function isConsistentStoredCurrentRevision(
+  rig: RigPresetState,
+  dependencies: RigResourceDependency[],
+  attributes: RigDerivedAttributes,
+): boolean {
+  const derivedDependencies = deriveRigResourceDependencies(rig);
+  return rig.amp.modelKey !== 'nam-wasm:custom'
+    && rig.cab.ir.kind === 'builtin'
+    && sameResourceDependencies(derivedDependencies, dependencies)
+    && sameJson(attributes.pedalIds, [...new Set(rig.chain.map((item) => item.effectId))].sort())
+    && attributes.ampModelKey === rig.amp.modelKey
+    && attributes.cabId === rig.cab.id
+    && sameJson(
+      attributes.resourceKinds,
+      [...new Set(derivedDependencies.map((item) => item.kind))].sort(),
+    );
+}
+
+export function isValidStoredPublishedPresetRevision(
   value: unknown,
-  expectedId?: string,
+): value is PublishedPresetRevision {
+  if (!isRecord(value)) return false;
+  const dependencies = value.resourceDependencies;
+  const attributes = value.derivedAttributes;
+  const validEnvelope = (
+    typeof value.id === 'string'
+    && typeof value.schemaVersion === 'number'
+    && (value.payloadKind === 'canonical-rig' || value.payloadKind === 'opaque')
+    && typeof value.createdAt === 'string'
+    && Array.isArray(dependencies)
+    && dependencies.length > 0
+    && dependencies.every(isResourceDependency)
+    && isDerivedAttributes(attributes)
+    && isRecord(value.rig)
+  );
+  if (!validEnvelope) return false;
+  if (value.schemaVersion !== RIG_PRESET_VERSION) return value.payloadKind === 'opaque';
+  if (value.payloadKind !== 'canonical-rig') return false;
+  const rig = decodeCurrentRigPresetState(value.rig);
+  return Boolean(rig && isConsistentStoredCurrentRevision(rig, dependencies, attributes));
+}
+
+export function isPublishedPresetRevisionCompatible(
+  revision: PublishedPresetRevision,
+): revision is CanonicalPublishedPresetRevision {
+  if (revision.payloadKind !== 'canonical-rig' || revision.schemaVersion !== RIG_PRESET_VERSION) {
+    return false;
+  }
+  const analysis = analyzePublishableRig(revision.rig);
+  return Boolean(
+    analysis
+    && sameResourceDependencies(analysis.resourceDependencies, revision.resourceDependencies)
+    && sameJson(analysis.derivedAttributes, revision.derivedAttributes),
+  );
+}
+
+function parsePublishedPreset(
+  value: unknown,
+  expectedId: string | undefined,
+  allowedVisibilities: readonly PublishedPresetVisibility[],
 ): PublishedPreset | null {
   if (!isRecord(value) || !isRecord(value.creator) || !isRecord(value.currentRevision)) {
     return null;
   }
   const revision = value.currentRevision;
-  const dependencies = revision.resourceDependencies;
   const attributes = value.derivedAttributes;
   const validEnvelope = (
     typeof value.id === 'string' &&
@@ -79,7 +158,7 @@ export function parsePublicPublishedPreset(
     textLength(value.title) <= 80 &&
     typeof value.description === 'string' &&
     textLength(value.description) <= 2_000 &&
-    value.visibility === 'public' &&
+    allowedVisibilities.includes(value.visibility as PublishedPresetVisibility) &&
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string' &&
     typeof value.creator.id === 'string' &&
@@ -98,32 +177,57 @@ export function parsePublicPublishedPreset(
     typeof attributes.cabId === 'string' &&
     Array.isArray(attributes.resourceKinds) &&
     attributes.resourceKinds.every((kind) => kind === 'builtin' || kind === 'tone3000') &&
-    typeof revision.id === 'string' &&
-    typeof revision.schemaVersion === 'number' &&
-    typeof revision.createdAt === 'string' &&
-    Array.isArray(dependencies) &&
-    dependencies.length > 0 &&
-    dependencies.every(isResourceDependency) &&
-    isRecord(revision.rig) &&
-    Array.isArray(revision.rig.chain) &&
-    isRecord(revision.rig.amp) &&
-    isRecord(revision.rig.cab) &&
-    isRecord(revision.rig.preAmpEq) &&
-    isRecord(revision.rig.globals)
+    isValidStoredPublishedPresetRevision(revision)
   );
   if (!validEnvelope) return null;
-  if (
-    revision.schemaVersion === RIG_PRESET_VERSION &&
-    !isLosslessPublishableCurrentRig(revision.rig, dependencies)
-  ) {
+  if (!sameJson(revision.derivedAttributes, attributes)) return null;
+  return value as unknown as PublishedPreset;
+}
+
+/** Published Preset 唯一可信入口：API 输出、未来写入与官方客户端共用。 */
+export function parsePublicPublishedPreset(
+  value: unknown,
+  expectedId?: string,
+): PublishedPreset | null {
+  return parsePublishedPreset(value, expectedId, ['public', 'unlisted']);
+}
+
+export function parseManagedPublishedPreset(
+  value: unknown,
+  expectedId?: string,
+): PublishedPreset | null {
+  return parsePublishedPreset(value, expectedId, ['public', 'unlisted', 'withdrawn']);
+}
+
+export function parsePublishedPresetRevisionView(
+  value: unknown,
+  expectedPresetId?: string,
+  expectedRevisionId?: string,
+): PublishedPresetRevisionView | null {
+  if (!isRecord(value) || !isRecord(value.creator) || !isValidStoredPublishedPresetRevision(value.revision)) {
     return null;
   }
-  if (revision.schemaVersion === RIG_PRESET_VERSION) {
-    const analysis = analyzePublishableRig(revision.rig);
-    if (!analysis
-      || !sameResourceDependencies(analysis.resourceDependencies, dependencies)
-      || JSON.stringify(canonicalJsonValue(analysis.derivedAttributes))
-        !== JSON.stringify(canonicalJsonValue(attributes))) return null;
-  }
-  return value as unknown as PublishedPreset;
+  if (
+    typeof value.id !== 'string'
+    || value.id.length < 1
+    || (expectedPresetId !== undefined && value.id !== expectedPresetId)
+    || typeof value.title !== 'string'
+    || textLength(value.title) < 1
+    || textLength(value.title) > 80
+    || typeof value.description !== 'string'
+    || textLength(value.description) > 2_000
+    || (value.visibility !== 'public' && value.visibility !== 'unlisted')
+    || typeof value.currentRevisionId !== 'string'
+    || typeof value.createdAt !== 'string'
+    || typeof value.updatedAt !== 'string'
+    || typeof value.creator.id !== 'string'
+    || typeof value.creator.handle !== 'string'
+    || typeof value.creator.displayName !== 'string'
+    || !Array.isArray(value.tags)
+    || value.tags.length < 1
+    || value.tags.length > 5
+    || !value.tags.every(isMarketplaceTag)
+    || (expectedRevisionId !== undefined && value.revision.id !== expectedRevisionId)
+  ) return null;
+  return value as unknown as PublishedPresetRevisionView;
 }

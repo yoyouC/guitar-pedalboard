@@ -60,6 +60,13 @@ test('official client rejects identity drift and lossy current-schema Rig data',
       ...demoPublishedPreset,
       currentRevision: {
         ...demoPublishedPreset.currentRevision,
+        payloadKind: 'opaque',
+      },
+    },
+    {
+      ...demoPublishedPreset,
+      currentRevision: {
+        ...demoPublishedPreset.currentRevision,
         resourceDependencies: [null],
       },
     },
@@ -89,6 +96,20 @@ test('official client rejects identity drift and lossy current-schema Rig data',
       (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
     );
   }
+});
+
+test('official client preserves a future revision as an explicit opaque payload', async () => {
+  const future = {
+    ...demoPublishedPreset,
+    currentRevision: {
+      ...demoPublishedPreset.currentRevision,
+      payloadKind: 'opaque' as const,
+      schemaVersion: 999,
+      rig: { futureCanonicalPayload: true },
+    },
+  };
+  const client = createMarketplaceClient(async () => Response.json({ preset: future }));
+  assert.deepEqual(await client.getPublishedPreset(demoPublishedPreset.id), future);
 });
 
 test('official client lists controlled tags and publishes only the request contract', async () => {
@@ -150,4 +171,92 @@ test('published metadata counts Unicode characters consistently with server vali
   const client = createMarketplaceClient(async () => Response.json({ preset: unicodePreset }));
 
   assert.equal((await client.getPublishedPreset(unicodePreset.id)).title, unicodePreset.title);
+});
+
+test('official client manages metadata, immutable revisions, rollback, and visibility with concurrency tokens', async () => {
+  const calls: Array<{ input: string; init?: RequestInit }> = [];
+  const revisionView = {
+    id: demoPublishedPreset.id,
+    title: demoPublishedPreset.title,
+    description: demoPublishedPreset.description,
+    visibility: 'public' as const,
+    creator: demoPublishedPreset.creator,
+    tags: demoPublishedPreset.tags,
+    revision: demoPublishedPreset.currentRevision,
+    currentRevisionId: demoPublishedPreset.currentRevision.id,
+    createdAt: demoPublishedPreset.createdAt,
+    updatedAt: demoPublishedPreset.updatedAt,
+  };
+  const client = createMarketplaceClient(async (input, init) => {
+    calls.push({ input: String(input), init });
+    if (String(input).endsWith('/revisions/revision-demo-crunch-1')) {
+      return Response.json({ preset: revisionView });
+    }
+    if (String(input).endsWith('/revisions') && init?.method !== 'POST') {
+      return Response.json({ revisions: [{
+        id: demoPublishedPreset.currentRevision.id,
+        createdAt: demoPublishedPreset.currentRevision.createdAt,
+        isCurrent: true,
+      }] });
+    }
+    return Response.json({ preset: demoPublishedPreset });
+  });
+
+  assert.deepEqual(
+    await client.getPublishedPresetRevision(demoPublishedPreset.id, 'revision-demo-crunch-1'),
+    revisionView,
+  );
+  assert.equal((await client.listPublishedPresetRevisions(demoPublishedPreset.id)).length, 1);
+  await client.updatePublishedPresetMetadata(demoPublishedPreset.id, {
+    title: 'New title',
+    description: '',
+    tagIds: ['tone-crunch'],
+    expectedUpdatedAt: demoPublishedPreset.updatedAt,
+  });
+  await client.appendPublishedPresetRevision(demoPublishedPreset.id, {
+    schemaVersion: 5,
+    rig: demoPublishedPreset.currentRevision.rig,
+    expectedUpdatedAt: demoPublishedPreset.updatedAt,
+  });
+  await client.restorePublishedPresetRevision(
+    demoPublishedPreset.id,
+    demoPublishedPreset.currentRevision.id,
+    { expectedUpdatedAt: demoPublishedPreset.updatedAt },
+  );
+  await client.updatePublishedPresetVisibility(demoPublishedPreset.id, {
+    visibility: 'unlisted',
+    expectedUpdatedAt: demoPublishedPreset.updatedAt,
+  });
+
+  assert.deepEqual(calls.slice(2).map(({ input, init }) => [input, init?.method]), [
+    [`/api/marketplace/presets/${demoPublishedPreset.id}/metadata`, 'PATCH'],
+    [`/api/marketplace/presets/${demoPublishedPreset.id}/revisions`, 'POST'],
+    [`/api/marketplace/presets/${demoPublishedPreset.id}/revisions/${demoPublishedPreset.currentRevision.id}/restore`, 'POST'],
+    [`/api/marketplace/presets/${demoPublishedPreset.id}/visibility`, 'PATCH'],
+  ]);
+});
+
+test('official client exposes recoverable preset concurrency state', async () => {
+  const current = {
+    updatedAt: demoPublishedPreset.updatedAt,
+    currentRevisionId: demoPublishedPreset.currentRevision.id,
+    visibility: 'public',
+  };
+  const client = createMarketplaceClient(async () => Response.json({
+    error: {
+      code: 'preset_update_conflict',
+      message: 'Preset changed since it was loaded',
+      current,
+    },
+  }, { status: 409 }));
+
+  await assert.rejects(
+    () => client.updatePublishedPresetVisibility(demoPublishedPreset.id, {
+      visibility: 'unlisted',
+      expectedUpdatedAt: '2020-01-01T00:00:00.000Z',
+    }),
+    (error) => error instanceof MarketplaceClientError
+      && error.code === 'update_conflict'
+      && error.current?.currentRevisionId === demoPublishedPreset.currentRevision.id,
+  );
 });

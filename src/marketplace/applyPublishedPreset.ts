@@ -1,4 +1,5 @@
-import type { PublishedPreset } from '../../shared/marketplace';
+import type { PublishedPresetRevision } from '../../shared/marketplace';
+import { isPublishedPresetRevisionCompatible } from '../../shared/marketplaceValidation';
 import { RIG_PRESET_VERSION } from '../state/presetCodec';
 import {
   rigFromPreset,
@@ -9,7 +10,7 @@ import {
 } from '../state/rigStore';
 
 export interface PublishedPresetRigSession {
-  apply(preset: PublishedPreset): Promise<LoadPresetResult>;
+  apply(preset: { title: string; currentRevision: PublishedPresetRevision }): Promise<LoadPresetResult>;
   undo(): Promise<LoadPresetResult>;
   canUndo(): boolean;
 }
@@ -19,8 +20,8 @@ export function createPublishedPresetRigSession(store: RigStore): PublishedPrese
 
   return {
     async apply(preset) {
-      if (preset.currentRevision.schemaVersion !== RIG_PRESET_VERSION) {
-        return { ok: false, message: '此音色使用了更新版本，请升级应用后再试。' };
+      if (!isPublishedPresetRevisionCompatible(preset.currentRevision)) {
+        return { ok: false, message: '当前客户端无法忠实应用这个音色，请升级后再试。' };
       }
 
       const previousRig = rigToApplyState(store.getState());

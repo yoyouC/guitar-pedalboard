@@ -18,3 +18,23 @@ test('publication migration owns controlled tags and rebuildable Rig filter proj
   assert.match(sql, /^BEGIN;/m);
   assert.match(sql, /COMMIT;\s*$/);
 });
+
+test('revision management migration indexes immutable history without weakening its trigger', async () => {
+  const [base, management] = await Promise.all([
+    readFile(new URL('../server/marketplace/migrations/0001_published_presets.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../server/marketplace/migrations/0005_preset_revision_management.sql', import.meta.url), 'utf8'),
+  ]);
+
+  assert.match(base, /BEFORE UPDATE OR DELETE ON marketplace_published_preset_revisions/);
+  assert.match(management, /marketplace_preset_revision_history_idx/);
+  assert.match(management, /preset_id, created_at DESC, id DESC/);
+  assert.match(management, /ADD COLUMN IF NOT EXISTS derived_attributes jsonb/);
+  assert.match(management, /revision\.id = preset\.current_revision_id/);
+  assert.match(management, /ALTER COLUMN derived_attributes SET NOT NULL/);
+  const disableTrigger = management.indexOf('DISABLE TRIGGER marketplace_preset_revision_immutable');
+  const backfill = management.indexOf('UPDATE marketplace_published_preset_revisions');
+  const enableTrigger = management.indexOf('ENABLE TRIGGER marketplace_preset_revision_immutable');
+  assert.equal(disableTrigger >= 0, true);
+  assert.equal(disableTrigger < backfill && backfill < enableTrigger, true);
+  assert.doesNotMatch(management, /DROP TRIGGER|ON DELETE CASCADE/);
+});

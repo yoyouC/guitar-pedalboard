@@ -3,9 +3,11 @@ import test from 'node:test';
 import {
   RIG_PRESET_VERSION,
   createRigPreset,
+  decodeCurrentRigPresetState,
   exportRigPresetsJson,
   importRigPresetsJson,
   normalizeRigPreset,
+  normalizeRig,
   normalizeSnapshot,
   restoreRigPreset,
   type RigPresetCatalog,
@@ -60,6 +62,23 @@ const catalog: RigPresetCatalog = {
     masterVolume: 0.5,
   },
 };
+
+test('canonical structural decoder preserves retired and local ids without accepting shape drift', () => {
+  const retired = normalizeRig({}, catalog);
+  retired.chain = [{
+    effectId: 'retired-pedal',
+    enabled: true,
+    values: { retiredControl: 42 },
+    post: false,
+  }];
+
+  assert.deepEqual(decodeCurrentRigPresetState(retired), retired);
+  assert.equal(decodeCurrentRigPresetState({ ...retired, futureRigField: true }), null);
+  assert.notEqual(decodeCurrentRigPresetState({
+    ...retired,
+    amp: { ...retired.amp, modelKey: 'nam-wasm:custom', customName: 'local.nam' },
+  }), null);
+});
 
 test('full rig preset round-trips and clamps every parameter domain', () => {
   const preset = createRigPreset('  Stage A  ', {

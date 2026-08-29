@@ -24,8 +24,21 @@ export default {
     const requestUrl = new URL(request.url);
     const route = requestUrl.searchParams.get('route');
     const id = requestUrl.searchParams.get('id');
+    const revisionId = requestUrl.searchParams.get('revisionId');
     if (route === 'preset' && id) {
       requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}`;
+    } else if (route === 'revision' && id && revisionId) {
+      requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}`;
+    } else if (route === 'revision-restore' && id && revisionId) {
+      requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/restore`;
+    } else if (route === 'revisions' && id) {
+      requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/revisions`;
+    } else if (route === 'metadata' && id) {
+      requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/metadata`;
+    } else if (route === 'manage' && id) {
+      requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/manage`;
+    } else if (route === 'visibility' && id) {
+      requestUrl.pathname = `/api/marketplace/presets/${encodeURIComponent(id)}/visibility`;
     } else if (route === 'presets') {
       requestUrl.pathname = '/api/marketplace/presets';
     } else if (route === 'tags') {
@@ -38,7 +51,11 @@ export default {
     try {
       const reads = createPostgresPublishedPresetRepository(marketplacePool);
       const publications = createPostgresPublishedPresetPublicationRepository(marketplacePool);
-      if (request.method === 'POST') {
+      const isPrivateRoute = request.method === 'POST'
+        || request.method === 'PATCH'
+        || route === 'revisions'
+        || route === 'manage';
+      if (isPrivateRoute) {
         const baseURL = authenticationBaseURL();
         if (!hasCanonicalOrigin(request, baseURL)) {
           return Response.json(

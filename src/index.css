@@ -3414,6 +3414,40 @@ body.midi-learn-mode input:disabled {
 .marketplace-detail__actions span { color: #8fd3a8; font-size: 13px; }
 .marketplace-detail__tags { color: #d4a95f; font-size: 13px; }
 
+.preset-manager {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid rgba(141, 199, 255, 0.26);
+  border-radius: 10px;
+  background: rgba(8, 12, 17, 0.5);
+}
+.preset-manager h3,
+.preset-manager h4 { margin: 0; }
+.preset-manager form,
+.preset-manager form > label,
+.preset-manager__section { display: grid; gap: 9px; }
+.preset-manager input:not([type='checkbox']),
+.preset-manager textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+}
+.preset-manager textarea { min-height: 82px; resize: vertical; }
+.preset-manager fieldset { border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 7px; }
+.preset-manager__tags { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.preset-manager__buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.preset-manager__history { display: grid; gap: 6px; margin: 0; padding-left: 22px; }
+.preset-manager__history li { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.preset-manager__history span { flex: 1 1 240px; overflow-wrap: anywhere; font-size: 12px; }
+.preset-manager__error { color: #f39a91; }
+.preset-manager__message { color: #8fd3a8; }
+
 .publish-dialog__backdrop {
   position: fixed;
   inset: 0;

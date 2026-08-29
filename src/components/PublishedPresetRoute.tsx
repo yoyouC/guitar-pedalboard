@@ -1,15 +1,69 @@
 import { useEffect, useRef, useState } from 'react';
-import type { PublishedPreset, RigResourceDependency } from '../../shared/marketplace';
+import type {
+  PublishedPreset,
+  PublishedPresetRevision,
+  PublishedPresetRevisionView,
+  RigDerivedAttributes,
+  RigResourceDependency,
+} from '../../shared/marketplace';
+import { isPublishedPresetRevisionCompatible } from '../../shared/marketplaceValidation';
 import { createPublishedPresetRigSession } from '../marketplace/applyPublishedPreset';
 import { marketplaceClient } from '../marketplace/client';
-import { publishedPresetIdFromPath } from '../marketplace/route';
+import { publishedPresetRouteFromPath } from '../marketplace/route';
 import { rigStore } from '../state/useRig';
+import { PublishedPresetManager } from './PublishedPresetManager';
+
+interface DisplayedPreset {
+  id: string;
+  title: string;
+  description: string;
+  visibility: 'public' | 'unlisted' | 'withdrawn';
+  creator: PublishedPreset['creator'];
+  tags: PublishedPreset['tags'];
+  revision: PublishedPresetRevision;
+  derivedAttributes: RigDerivedAttributes;
+  currentRevisionId: string;
+  fixedRevision: boolean;
+  compatible: boolean;
+}
 
 type LoadState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'ready'; preset: PublishedPreset }
+  | { status: 'ready'; displayed: DisplayedPreset; managedPreset: PublishedPreset | null }
   | { status: 'error'; message: string };
+
+function currentDisplay(preset: PublishedPreset): DisplayedPreset {
+  return {
+    id: preset.id,
+    title: preset.title,
+    description: preset.description,
+    visibility: preset.visibility === 'hidden' ? 'withdrawn' : preset.visibility,
+    creator: preset.creator,
+    tags: preset.tags,
+    revision: preset.currentRevision,
+    derivedAttributes: preset.derivedAttributes,
+    currentRevisionId: preset.currentRevision.id,
+    fixedRevision: false,
+    compatible: isPublishedPresetRevisionCompatible(preset.currentRevision),
+  };
+}
+
+function revisionDisplay(preset: PublishedPresetRevisionView): DisplayedPreset {
+  return {
+    id: preset.id,
+    title: preset.title,
+    description: preset.description,
+    visibility: preset.visibility,
+    creator: preset.creator,
+    tags: preset.tags,
+    revision: preset.revision,
+    derivedAttributes: preset.revision.derivedAttributes,
+    currentRevisionId: preset.currentRevisionId,
+    fixedRevision: true,
+    compatible: isPublishedPresetRevisionCompatible(preset.revision),
+  };
+}
 
 function dependencyLabel(dependency: RigResourceDependency): string {
   if (dependency.kind === 'builtin') return '仅内置资源';
@@ -19,10 +73,13 @@ function dependencyLabel(dependency: RigResourceDependency): string {
 export interface PublishedPresetRouteProps {
   pathname: string;
   onClose(): void;
+  onNavigate(pathname: string): void;
 }
 
-export function PublishedPresetRoute({ pathname, onClose }: PublishedPresetRouteProps) {
-  const presetId = publishedPresetIdFromPath(pathname);
+export function PublishedPresetRoute({ pathname, onClose, onNavigate }: PublishedPresetRouteProps) {
+  const route = publishedPresetRouteFromPath(pathname);
+  const presetId = route?.presetId ?? null;
+  const revisionId = route?.revisionId ?? null;
   const [attempt, setAttempt] = useState(0);
   const [loadState, setLoadState] = useState<LoadState>({ status: 'idle' });
   const [actionMessage, setActionMessage] = useState('');
@@ -36,9 +93,34 @@ export function PublishedPresetRoute({ pathname, onClose }: PublishedPresetRoute
     let active = true;
     setLoadState({ status: 'loading' });
     setActionMessage('');
-    marketplaceClient.getPublishedPreset(presetId).then(
-      (preset) => {
-        if (active) setLoadState({ status: 'ready', preset });
+
+    const load = async () => {
+      if (revisionId) {
+        const revision = await marketplaceClient.getPublishedPresetRevision(
+          presetId,
+          revisionId,
+        );
+        return { displayed: revisionDisplay(revision), managedPreset: null };
+      }
+
+      const [visibleResult, managedResult] = await Promise.allSettled([
+        marketplaceClient.getPublishedPreset(presetId),
+        marketplaceClient.getManagedPublishedPreset(presetId),
+      ]);
+      const managedPreset = managedResult.status === 'fulfilled' ? managedResult.value : null;
+      if (visibleResult.status === 'fulfilled') {
+        return {
+          displayed: currentDisplay(managedPreset ?? visibleResult.value),
+          managedPreset,
+        };
+      }
+      if (managedPreset) return { displayed: currentDisplay(managedPreset), managedPreset };
+      throw visibleResult.reason;
+    };
+
+    void load().then(
+      (ready) => {
+        if (active) setLoadState({ status: 'ready', ...ready });
       },
       (error: unknown) => {
         if (active) {
@@ -49,25 +131,38 @@ export function PublishedPresetRoute({ pathname, onClose }: PublishedPresetRoute
         }
       },
     );
-    return () => {
-      active = false;
-    };
-  }, [presetId, attempt]);
+    return () => { active = false; };
+  }, [presetId, revisionId, attempt]);
 
   useEffect(() => {
     if (!presetId || loadState.status !== 'ready') return;
     const previousTitle = document.title;
-    document.title = `${loadState.preset.title} · Guitar Pedalboard`;
+    document.title = `${loadState.displayed.title} · Guitar Pedalboard`;
+    let robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    const previousRobots = robots?.content ?? null;
+    if (loadState.displayed.visibility !== 'public') {
+      if (!robots) {
+        robots = document.createElement('meta');
+        robots.name = 'robots';
+        document.head.append(robots);
+      }
+      robots.content = 'noindex,nofollow';
+    }
     return () => {
       document.title = previousTitle;
+      if (previousRobots === null) robots?.remove();
+      else if (robots) robots.content = previousRobots;
     };
   }, [loadState, presetId]);
 
-  if (!presetId) return null;
+  if (!route) return null;
 
-  const apply = async (preset: PublishedPreset) => {
+  const apply = async (displayed: DisplayedPreset) => {
     setBusy(true);
-    const result = await rigSession.apply(preset);
+    const result = await rigSession.apply({
+      title: displayed.title,
+      currentRevision: displayed.revision,
+    });
     setBusy(false);
     setActionMessage(result.ok ? '已应用到当前 Rig。你可以在本次会话中撤销。' : (result.message ?? '应用失败。'));
   };
@@ -98,36 +193,72 @@ export function PublishedPresetRoute({ pathname, onClose }: PublishedPresetRoute
       ) : (
         <div className="marketplace-detail__content">
           <div>
-            <h2>{loadState.preset.title}</h2>
-            <p>{loadState.preset.description || '作者没有填写介绍。'}</p>
+            <h2>{loadState.displayed.title}</h2>
+            <p>{loadState.displayed.description || '作者没有填写介绍。'}</p>
             <p className="marketplace-detail__byline">
-              @{loadState.preset.creator.handle} · revision {loadState.preset.currentRevision.id}
+              @{loadState.displayed.creator.handle} · revision {loadState.displayed.revision.id}
             </p>
             <p className="marketplace-detail__tags">
-              {loadState.preset.tags.map((tag) => tag.nameZh).join(' · ')}
+              {loadState.displayed.tags.map((tag) => tag.nameZh).join(' · ')}
             </p>
           </div>
 
+          {loadState.displayed.visibility === 'unlisted' && (
+            <p className="marketplace-detail__warning">Unlisted：仅持有直接链接的人可访问，不进入公开发现。</p>
+          )}
+          {loadState.displayed.visibility === 'withdrawn' && (
+            <p className="marketplace-detail__warning">作品已撤回，只有作者可以在此恢复。</p>
+          )}
+          {loadState.displayed.fixedRevision && (
+            <p className="marketplace-detail__warning">
+              这是固定修订永久链接，不会跟随当前声音变化。
+              {loadState.displayed.revision.id !== loadState.displayed.currentRevisionId && (
+                <button type="button" onClick={() => onNavigate(
+                  `/marketplace/presets/${encodeURIComponent(loadState.displayed.id)}`
+                )}>查看当前修订</button>
+              )}
+            </p>
+          )}
+          {!loadState.displayed.compatible && (
+            <p className="marketplace-detail__warning">
+              当前客户端无法忠实应用这个历史声音；原始修订仍被保留，请升级后再试。
+            </p>
+          )}
+
           <dl className="marketplace-rig-summary">
-            <div><dt>Pedals</dt><dd>{loadState.preset.currentRevision.rig.chain.length || 'None'}</dd></div>
-            <div><dt>Amp</dt><dd>{loadState.preset.currentRevision.rig.amp.modelKey}</dd></div>
-            <div><dt>Cab</dt><dd>{loadState.preset.currentRevision.rig.cab.id}</dd></div>
-            <div><dt>Resources</dt><dd>{loadState.preset.currentRevision.resourceDependencies.map(dependencyLabel).join('、')}</dd></div>
+            <div><dt>Pedals</dt><dd>{loadState.displayed.derivedAttributes.pedalIds.join('、') || 'None'}</dd></div>
+            <div><dt>Amp</dt><dd>{loadState.displayed.derivedAttributes.ampModelKey}</dd></div>
+            <div><dt>Cab</dt><dd>{loadState.displayed.derivedAttributes.cabId}</dd></div>
+            <div><dt>Resources</dt><dd>{loadState.displayed.revision.resourceDependencies.map(dependencyLabel).join('、')}</dd></div>
           </dl>
 
-          {loadState.preset.currentRevision.resourceDependencies.some((item) => item.kind === 'tone3000') && (
+          {loadState.displayed.revision.resourceDependencies.some((item) => item.kind === 'tone3000') && (
             <p className="marketplace-detail__warning">此音色依赖 TONE3000；外部资源不可用时会明确提示，不会替换原始修订。</p>
           )}
 
-          <div className="marketplace-detail__actions">
-            <button type="button" disabled={busy} onClick={() => void apply(loadState.preset)}>
-              {busy ? '处理中…' : '应用到当前 Rig'}
-            </button>
-            {rigSession.canUndo() && (
-              <button type="button" disabled={busy} onClick={() => void undo()}>撤销应用</button>
-            )}
-            {actionMessage && <span>{actionMessage}</span>}
-          </div>
+          {loadState.displayed.visibility !== 'withdrawn' && loadState.displayed.compatible && (
+            <div className="marketplace-detail__actions">
+              <button type="button" disabled={busy} onClick={() => void apply(loadState.displayed)}>
+                {busy ? '处理中…' : '应用到当前 Rig'}
+              </button>
+              {rigSession.canUndo() && (
+                <button type="button" disabled={busy} onClick={() => void undo()}>撤销应用</button>
+              )}
+              {actionMessage && <span>{actionMessage}</span>}
+            </div>
+          )}
+
+          {loadState.managedPreset && !loadState.displayed.fixedRevision && (
+            <PublishedPresetManager
+              preset={loadState.managedPreset}
+              onUpdated={(preset) => setLoadState({
+                status: 'ready',
+                displayed: currentDisplay(preset),
+                managedPreset: preset,
+              })}
+              onNavigate={onNavigate}
+            />
+          )}
         </div>
       )}
     </section>

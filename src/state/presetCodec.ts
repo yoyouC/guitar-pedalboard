@@ -135,6 +135,96 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+
+function isFiniteNumberRecord(value: unknown): value is Record<string, number> {
+  return isRecord(value)
+    && Object.values(value).every((item) => typeof item === 'number' && Number.isFinite(item));
+}
+
+function isCurrentPreAmpEqBands(value: unknown): boolean {
+  if (!isFiniteNumberRecord(value)) return false;
+  const keys = PRE_AMP_EQ_BANDS.map((band) => band.key);
+  return hasOnlyKeys(value, keys) && keys.every((key) => key in value);
+}
+
+function isCabIrShape(value: unknown, cabId: string): boolean {
+  if (!isRecord(value)) return false;
+  if (value.kind === 'builtin') {
+    return hasOnlyKeys(value, ['kind', 'id'])
+      && typeof value.id === 'string'
+      && value.id === cabId;
+  }
+  return value.kind === 'custom'
+    && hasOnlyKeys(value, ['kind', 'hash'])
+    && typeof value.hash === 'string'
+    && /^[a-f\d]{64}$/i.test(value.hash)
+    && cabId === 'customIr';
+}
+
+/**
+ * Strictly decodes the current canonical Rig shape without consulting the live
+ * equipment catalog. Historical revisions can therefore retain removed gear,
+ * while schema ownership remains beside RigPresetState and normalizeRig.
+ */
+export function decodeCurrentRigPresetState(value: unknown): RigPresetState | null {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['chain', 'amp', 'cab', 'preAmpEq', 'globals'])) {
+    return null;
+  }
+  if (!Array.isArray(value.chain) || !value.chain.every((item) => (
+    isRecord(item)
+    && hasOnlyKeys(item, ['effectId', 'modelRef', 'modelId', 'enabled', 'values', 'post'])
+    && typeof item.effectId === 'string'
+    && item.effectId.length > 0
+    && (item.modelRef === undefined
+      || (typeof item.modelRef === 'string' && /^tone3000:\d+$/.test(item.modelRef)))
+    && (item.modelId === undefined
+      || (typeof item.modelId === 'string' && /^\d+$/.test(item.modelId)))
+    && typeof item.enabled === 'boolean'
+    && isFiniteNumberRecord(item.values)
+    && typeof item.post === 'boolean'
+  ))) return null;
+
+  const amp = value.amp;
+  const cab = value.cab;
+  const preAmpEq = value.preAmpEq;
+  const globals = value.globals;
+  if (!(isRecord(amp)
+    && hasOnlyKeys(amp, ['categoryId', 'modelKey', 'modelId', 'enabled', 'values', 'customName'])
+    && typeof amp.categoryId === 'string'
+    && amp.categoryId.length > 0
+    && typeof amp.modelKey === 'string'
+    && amp.modelKey.length > 0
+    && (amp.modelId === undefined || (typeof amp.modelId === 'string' && /^\d+$/.test(amp.modelId)))
+    && typeof amp.enabled === 'boolean'
+    && isFiniteNumberRecord(amp.values)
+    && (amp.customName === null || typeof amp.customName === 'string')
+    && isRecord(cab)
+    && hasOnlyKeys(cab, ['id', 'ir', 'enabled', 'values'])
+    && typeof cab.id === 'string'
+    && cab.id.length > 0
+    && isCabIrShape(cab.ir, cab.id)
+    && typeof cab.enabled === 'boolean'
+    && isFiniteNumberRecord(cab.values)
+    && isRecord(preAmpEq)
+    && hasOnlyKeys(preAmpEq, ['enabled', 'bands', 'levelDb'])
+    && typeof preAmpEq.enabled === 'boolean'
+    && isCurrentPreAmpEqBands(preAmpEq.bands)
+    && typeof preAmpEq.levelDb === 'number'
+    && Number.isFinite(preAmpEq.levelDb)
+    && isRecord(globals)
+    && hasOnlyKeys(globals, ['inputGain', 'masterVolume', 'bypass'])
+    && typeof globals.inputGain === 'number'
+    && Number.isFinite(globals.inputGain)
+    && typeof globals.masterVolume === 'number'
+    && Number.isFinite(globals.masterVolume)
+    && typeof globals.bypass === 'boolean')) return null;
+
+  return value as unknown as RigPresetState;
+}
+
 function finiteNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }

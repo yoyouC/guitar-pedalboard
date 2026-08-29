@@ -71,12 +71,49 @@ test('a future Rig schema is rejected without changing the local Rig', async () 
 
   const result = await session.apply({
     ...demoPublishedPreset,
-    currentRevision: { ...demoPublishedPreset.currentRevision, schemaVersion: 999 },
+    currentRevision: {
+      ...demoPublishedPreset.currentRevision,
+      payloadKind: 'opaque',
+      schemaVersion: 999,
+    },
   });
 
   assert.deepEqual(result, {
     ok: false,
-    message: '此音色使用了更新版本，请升级应用后再试。',
+    message: '当前客户端无法忠实应用这个音色，请升级后再试。',
+  });
+  assert.deepEqual(rigToApplyState(store.getState()), before);
+  assert.equal(session.canUndo(), false);
+});
+
+test('a current-schema revision with a retired catalog item stays visible but cannot apply lossily', async () => {
+  const store = createRigStore(createStubEngine());
+  const before = rigToApplyState(store.getState());
+  const session = createPublishedPresetRigSession(store);
+
+  const result = await session.apply({
+    title: 'Retired Pedal',
+    currentRevision: {
+      ...demoPublishedPreset.currentRevision,
+      derivedAttributes: {
+        ...demoPublishedPreset.currentRevision.derivedAttributes,
+        pedalIds: ['retired-pedal'],
+      },
+      rig: {
+        ...demoPublishedPreset.currentRevision.rig,
+        chain: [{
+          effectId: 'retired-pedal',
+          enabled: true,
+          values: { drive: 42 },
+          post: false,
+        }],
+      },
+    },
+  });
+
+  assert.deepEqual(result, {
+    ok: false,
+    message: '当前客户端无法忠实应用这个音色，请升级后再试。',
   });
   assert.deepEqual(rigToApplyState(store.getState()), before);
   assert.equal(session.canUndo(), false);

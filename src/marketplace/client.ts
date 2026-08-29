@@ -1,9 +1,20 @@
 import type {
+  AppendPublishedPresetRevisionRequest,
   MarketplaceTag,
   PublishedPreset,
+  PublishedPresetConcurrencyState,
+  PublishedPresetRevisionSummary,
+  PublishedPresetRevisionView,
   PublishPresetRequest,
+  RestorePublishedPresetRevisionRequest,
+  UpdatePublishedPresetMetadataRequest,
+  UpdatePublishedPresetVisibilityRequest,
 } from '../../shared/marketplace';
-import { parsePublicPublishedPreset } from '../../shared/marketplaceValidation';
+import {
+  parseManagedPublishedPreset,
+  parsePublicPublishedPreset,
+  parsePublishedPresetRevisionView,
+} from '../../shared/marketplaceValidation';
 
 export type MarketplaceClientErrorCode =
   | 'not_found'
@@ -11,21 +22,26 @@ export type MarketplaceClientErrorCode =
   | 'network'
   | 'invalid_response'
   | 'authentication_required'
-  | 'invalid_publication';
+  | 'invalid_publication'
+  | 'invalid_update'
+  | 'update_conflict';
 
 export class MarketplaceClientError extends Error {
   readonly code: MarketplaceClientErrorCode;
   readonly fields?: Record<string, string>;
+  readonly current?: PublishedPresetConcurrencyState;
 
   constructor(
     code: MarketplaceClientErrorCode,
     message: string,
     fields?: Record<string, string>,
+    current?: PublishedPresetConcurrencyState,
   ) {
     super(message);
     this.name = 'MarketplaceClientError';
     this.code = code;
     this.fields = fields;
+    this.current = current;
   }
 }
 
@@ -33,6 +49,26 @@ export interface MarketplaceClient {
   getPublishedPreset(id: string): Promise<PublishedPreset>;
   listAvailableTags(): Promise<MarketplaceTag[]>;
   publishPreset(request: PublishPresetRequest): Promise<PublishedPreset>;
+  getManagedPublishedPreset(id: string): Promise<PublishedPreset>;
+  getPublishedPresetRevision(id: string, revisionId: string): Promise<PublishedPresetRevisionView>;
+  listPublishedPresetRevisions(id: string): Promise<PublishedPresetRevisionSummary[]>;
+  updatePublishedPresetMetadata(
+    id: string,
+    request: UpdatePublishedPresetMetadataRequest,
+  ): Promise<PublishedPreset>;
+  appendPublishedPresetRevision(
+    id: string,
+    request: AppendPublishedPresetRevisionRequest,
+  ): Promise<PublishedPreset>;
+  restorePublishedPresetRevision(
+    id: string,
+    revisionId: string,
+    request: RestorePublishedPresetRevisionRequest,
+  ): Promise<PublishedPreset>;
+  updatePublishedPresetVisibility(
+    id: string,
+    request: UpdatePublishedPresetVisibilityRequest,
+  ): Promise<PublishedPreset>;
 }
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -63,6 +99,24 @@ async function publicationError(response: Response): Promise<MarketplaceClientEr
           fields,
         );
       }
+      if (error.code === 'invalid_preset_update') {
+        return new MarketplaceClientError('invalid_update', '修改内容需要修正。', fields);
+      }
+      if (error.code === 'preset_update_conflict' && isRecord(error.current)) {
+        const current = error.current;
+        if (
+          typeof current.updatedAt === 'string'
+          && typeof current.currentRevisionId === 'string'
+          && ['public', 'unlisted', 'withdrawn', 'hidden'].includes(String(current.visibility))
+        ) {
+          return new MarketplaceClientError(
+            'update_conflict',
+            '作品已在别处更新，请重新载入后再试。',
+            fields,
+            current as unknown as PublishedPresetConcurrencyState,
+          );
+        }
+      }
     }
   } catch {
     // Stable fallback below owns malformed error bodies.
@@ -81,6 +135,40 @@ function parseTag(value: unknown): MarketplaceTag | null {
     || typeof value.nameEn !== 'string'
   ) return null;
   return value as unknown as MarketplaceTag;
+}
+
+function parseRevisionSummary(value: unknown): PublishedPresetRevisionSummary | null {
+  if (!isRecord(value)) return null;
+  if (
+    JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(['createdAt', 'id', 'isCurrent'])
+    || typeof value.id !== 'string'
+    || typeof value.createdAt !== 'string'
+    || typeof value.isCurrent !== 'boolean'
+  ) return null;
+  return value as unknown as PublishedPresetRevisionSummary;
+}
+
+async function managedMutation(
+  fetchResponse: Fetch,
+  path: string,
+  method: 'PATCH' | 'POST',
+  request: unknown,
+): Promise<PublishedPreset> {
+  let response: Response;
+  try {
+    response = await fetchResponse(path, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new MarketplaceClientError('network', '无法连接音色广场；本地 Rig 未受影响。');
+  }
+  if (!response.ok) throw await publicationError(response);
+  const body = await response.json() as { preset?: unknown };
+  const preset = parseManagedPublishedPreset(body.preset);
+  if (!preset) throw new MarketplaceClientError('invalid_response', '作品管理响应无效。');
+  return preset;
 }
 
 export function createMarketplaceClient(fetchResponse: Fetch = fetch): MarketplaceClient {
@@ -156,6 +244,101 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
       const preset = parsePublicPublishedPreset(body.preset);
       if (!preset) throw new MarketplaceClientError('invalid_response', '发布响应格式无效。');
       return preset;
+    },
+
+    async getPublishedPresetRevision(id, revisionId) {
+      let response: Response;
+      try {
+        response = await fetchResponse(
+          `/api/marketplace/presets/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}`,
+        );
+      } catch {
+        throw new MarketplaceClientError('network', '无法连接音色广场；本地效果器仍可正常使用。');
+      }
+      if (response.status === 404) {
+        throw new MarketplaceClientError('not_found', '找不到这个音色修订。');
+      }
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { preset?: unknown };
+      const preset = parsePublishedPresetRevisionView(body.preset, id, revisionId);
+      if (!preset) throw new MarketplaceClientError('invalid_response', '音色修订响应无效。');
+      return preset;
+    },
+
+    async getManagedPublishedPreset(id) {
+      let response: Response;
+      try {
+        response = await fetchResponse(
+          `/api/marketplace/presets/${encodeURIComponent(id)}/manage`,
+        );
+      } catch {
+        throw new MarketplaceClientError('network', '无法连接音色广场。');
+      }
+      if (response.status === 404) {
+        throw new MarketplaceClientError('not_found', '找不到可管理的作品。');
+      }
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { preset?: unknown };
+      const preset = parseManagedPublishedPreset(body.preset, id);
+      if (!preset) throw new MarketplaceClientError('invalid_response', '作品管理响应无效。');
+      return preset;
+    },
+
+    async listPublishedPresetRevisions(id) {
+      let response: Response;
+      try {
+        response = await fetchResponse(
+          `/api/marketplace/presets/${encodeURIComponent(id)}/revisions`,
+        );
+      } catch {
+        throw new MarketplaceClientError('network', '无法连接音色广场。');
+      }
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { revisions?: unknown };
+      if (!Array.isArray(body.revisions)) {
+        throw new MarketplaceClientError('invalid_response', '修订历史响应无效。');
+      }
+      const revisions = body.revisions.map(parseRevisionSummary);
+      if (revisions.some((revision) => !revision)) {
+        throw new MarketplaceClientError('invalid_response', '修订历史响应无效。');
+      }
+      return revisions as PublishedPresetRevisionSummary[];
+    },
+
+    updatePublishedPresetMetadata(id, request) {
+      return managedMutation(
+        fetchResponse,
+        `/api/marketplace/presets/${encodeURIComponent(id)}/metadata`,
+        'PATCH',
+        request,
+      );
+    },
+
+    appendPublishedPresetRevision(id, request) {
+      return managedMutation(
+        fetchResponse,
+        `/api/marketplace/presets/${encodeURIComponent(id)}/revisions`,
+        'POST',
+        request,
+      );
+    },
+
+    restorePublishedPresetRevision(id, revisionId, request) {
+      return managedMutation(
+        fetchResponse,
+        `/api/marketplace/presets/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/restore`,
+        'POST',
+        request,
+      );
+    },
+
+    updatePublishedPresetVisibility(id, request) {
+      return managedMutation(
+        fetchResponse,
+        `/api/marketplace/presets/${encodeURIComponent(id)}/visibility`,
+        'PATCH',
+        request,
+      );
     },
   };
 }

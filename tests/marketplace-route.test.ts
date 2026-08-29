@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { publishedPresetIdFromPath } from '../src/marketplace/route.ts';
+import { publishedPresetIdFromPath, publishedPresetRouteFromPath } from '../src/marketplace/route.ts';
 import { creatorHandleFromPath } from '../src/marketplace/route.ts';
 
 test('published preset detail paths carry stable identity without relying on a slug', () => {
@@ -14,6 +14,17 @@ test('published preset detail paths carry stable identity without relying on a s
   );
   assert.equal(publishedPresetIdFromPath('/marketplace/presets'), null);
   assert.equal(publishedPresetIdFromPath('/'), null);
+});
+
+test('preset revision paths preserve both stable identities', () => {
+  assert.deepEqual(
+    publishedPresetRouteFromPath('/marketplace/presets/preset-a/revisions/revision-1'),
+    { presetId: 'preset-a', revisionId: 'revision-1' },
+  );
+  assert.deepEqual(
+    publishedPresetRouteFromPath('/marketplace/presets/preset%20a/revisions/revision%201/'),
+    { presetId: 'preset a', revisionId: 'revision 1' },
+  );
 });
 
 test('creator profile paths resolve a stable handle', () => {

@@ -388,7 +388,11 @@ export default function App() {
         <MemberPanel onNavigate={navigate} />
       </header>
 
-      <PublishedPresetRoute pathname={pathname} onClose={() => navigate('/')} />
+      <PublishedPresetRoute
+        pathname={pathname}
+        onClose={() => navigate('/')}
+        onNavigate={navigate}
+      />
       <CreatorProfileRoute pathname={pathname} onClose={() => navigate('/')} onNavigate={navigate} />
 
       <TopBar

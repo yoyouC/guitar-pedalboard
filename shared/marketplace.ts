@@ -1,4 +1,7 @@
-import type { RigPresetState } from '../src/state/presetCodec.ts';
+import {
+  RIG_PRESET_VERSION,
+  type RigPresetState,
+} from '../src/state/presetCodec.ts';
 
 export type PublishedPresetVisibility = 'public' | 'unlisted' | 'withdrawn' | 'hidden';
 
@@ -27,15 +30,31 @@ export interface RigDerivedAttributes {
   resourceKinds: Array<RigResourceDependency['kind']>;
 }
 
-export interface PublishedPresetRevision {
+interface PublishedPresetRevisionBase<Rig> {
   id: string;
   schemaVersion: number;
   createdAt: string;
   resourceDependencies: RigResourceDependency[];
-  rig: RigPresetState;
+  derivedAttributes: RigDerivedAttributes;
+  rig: Rig;
 }
 
-export interface PublishedPreset {
+export interface CanonicalPublishedPresetRevision
+  extends PublishedPresetRevisionBase<RigPresetState> {
+  payloadKind: 'canonical-rig';
+  schemaVersion: typeof RIG_PRESET_VERSION;
+}
+
+export interface OpaquePublishedPresetRevision
+  extends PublishedPresetRevisionBase<unknown> {
+  payloadKind: 'opaque';
+}
+
+export type PublishedPresetRevision =
+  | CanonicalPublishedPresetRevision
+  | OpaquePublishedPresetRevision;
+
+export interface PublishedPreset<Revision extends PublishedPresetRevision = PublishedPresetRevision> {
   id: string;
   title: string;
   description: string;
@@ -43,9 +62,36 @@ export interface PublishedPreset {
   creator: MarketplaceMemberSummary;
   tags: MarketplaceTag[];
   derivedAttributes: RigDerivedAttributes;
-  currentRevision: PublishedPresetRevision;
+  currentRevision: Revision;
   createdAt: string;
   updatedAt: string;
+}
+
+export type CanonicalPublishedPreset = PublishedPreset<CanonicalPublishedPresetRevision>;
+
+export interface PublishedPresetRevisionView {
+  id: string;
+  title: string;
+  description: string;
+  visibility: 'public' | 'unlisted';
+  creator: MarketplaceMemberSummary;
+  tags: MarketplaceTag[];
+  revision: PublishedPresetRevision;
+  currentRevisionId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublishedPresetRevisionSummary {
+  id: string;
+  createdAt: string;
+  isCurrent: boolean;
+}
+
+export interface PublishedPresetConcurrencyState {
+  updatedAt: string;
+  currentRevisionId: string;
+  visibility: PublishedPresetVisibility;
 }
 
 export interface PublishPresetRequest {
@@ -54,4 +100,26 @@ export interface PublishPresetRequest {
   tagIds: string[];
   schemaVersion: number;
   rig: RigPresetState;
+}
+
+export interface UpdatePublishedPresetMetadataRequest {
+  title: string;
+  description: string;
+  tagIds: string[];
+  expectedUpdatedAt: string;
+}
+
+export interface AppendPublishedPresetRevisionRequest {
+  schemaVersion: number;
+  rig: RigPresetState;
+  expectedUpdatedAt: string;
+}
+
+export interface RestorePublishedPresetRevisionRequest {
+  expectedUpdatedAt: string;
+}
+
+export interface UpdatePublishedPresetVisibilityRequest {
+  visibility: 'public' | 'unlisted' | 'withdrawn';
+  expectedUpdatedAt: string;
 }
