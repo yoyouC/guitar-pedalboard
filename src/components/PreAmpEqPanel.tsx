@@ -40,7 +40,7 @@ export function PreAmpEqPanel() {
         <div className="preamp-eq-heading">
           <span className="preamp-eq-route" aria-hidden="true">PEDALS →</span>
           <span className="preamp-eq-title">箱头前 EQ</span>
-          <span className="preamp-eq-subtitle">PRE-AMP GRAPHIC EQUALIZER</span>
+          <span className="preamp-eq-subtitle">PRE-AMP EQ · GRAPHIC EQUALIZER</span>
           <span className={`preamp-eq-status ${eq.enabled ? 'is-on' : ''}`}>
             {eq.enabled ? 'ACTIVE' : 'BYPASSED'}
           </span>

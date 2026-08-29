@@ -1,23 +1,5 @@
-/** 箱头前均衡的稳定频段身份；序列化不能依赖数组下标。 */
-export type PreAmpEqBandKey =
-  | 'hz31_25'
-  | 'hz62_5'
-  | 'hz125'
-  | 'hz250'
-  | 'hz500'
-  | 'hz1000'
-  | 'hz2000'
-  | 'hz4000'
-  | 'hz8000'
-  | 'hz16000';
-
-export interface PreAmpEqBandDefinition {
-  key: PreAmpEqBandKey;
-  label: string;
-  frequency: number;
-}
-
-export const PRE_AMP_EQ_BANDS: readonly PreAmpEqBandDefinition[] = [
+/** 唯一的频段目录；稳定序列化身份由该 tuple 派生，不能依赖数组下标。 */
+export const PRE_AMP_EQ_BANDS = [
   { key: 'hz31_25', label: '31.25', frequency: 31.25 },
   { key: 'hz62_5', label: '62.5', frequency: 62.5 },
   { key: 'hz125', label: '125', frequency: 125 },
@@ -30,12 +12,22 @@ export const PRE_AMP_EQ_BANDS: readonly PreAmpEqBandDefinition[] = [
   { key: 'hz16000', label: '16k', frequency: 16000 },
 ] as const;
 
+export type PreAmpEqBandDefinition = (typeof PRE_AMP_EQ_BANDS)[number];
+export type PreAmpEqBandKey = PreAmpEqBandDefinition['key'];
+
 export const PRE_AMP_EQ_MIN_DB = -12;
 export const PRE_AMP_EQ_MAX_DB = 12;
 export const PRE_AMP_EQ_STEP_DB = 0.5;
 export const PRE_AMP_EQ_SMOOTH_SECONDS = 0.02;
 /** Biquad 不引入显式缓冲；相位响应不计作链路 sample latency。 */
 export const PRE_AMP_EQ_LATENCY = { processingSamples: 0, designSamples: 0 } as const;
+
+/** 所有 canonical 写入共享的有限值、范围与 0.5 dB 网格约束。 */
+export function normalizePreAmpEqDb(value: unknown, fallback = 0): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  const clamped = Math.min(PRE_AMP_EQ_MAX_DB, Math.max(PRE_AMP_EQ_MIN_DB, value));
+  return Math.round(clamped / PRE_AMP_EQ_STEP_DB) * PRE_AMP_EQ_STEP_DB;
+}
 
 export type PreAmpEqBands = Record<PreAmpEqBandKey, number>;
 

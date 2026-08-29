@@ -89,7 +89,7 @@ test('full rig preset round-trips and clamps every parameter domain', () => {
         hz125: -8,
         hz250: -6,
         hz500: -4,
-        hz1000: 2,
+        hz1000: 2.24,
         hz2000: 4,
         hz4000: 6,
         hz8000: 10,

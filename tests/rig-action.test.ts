@@ -299,6 +299,7 @@ function setup() {
     engineCalls.push({ method, args });
   };
   const engine: RigEngine = {
+    applyRig: rec('applyRig'),
     setGlobalBypass: rec('setGlobalBypass'),
     setChain: rec('setChain'),
     setAmp: rec('setAmp'),

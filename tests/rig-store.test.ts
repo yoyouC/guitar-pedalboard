@@ -35,6 +35,7 @@ function createStubEngine() {
   };
   const engine: RigEngine = {
     setGlobalBypass: rec('setGlobalBypass'),
+    applyRig: rec('applyRig'),
     setChain: rec('setChain'),
     setAmp: rec('setAmp'),
     setCab: rec('setCab'),
@@ -72,16 +73,10 @@ function installLocalStorage() {
   return stub;
 }
 
-/** 结构性 verb / applyRig 的固定引擎写序列(结构四连 + 全局两连) */
+/** 结构性 verb 仍走固定四连；完整 Rig 恢复走单次批量投影。 */
 const STRUCTURE_SEQUENCE = ['setGlobalBypass', 'setChain', 'setAmp', 'setCab'];
 const CAB_COMMIT_SEQUENCE = [...STRUCTURE_SEQUENCE, 'updateCabParam'];
-const APPLY_SEQUENCE = [
-  ...STRUCTURE_SEQUENCE,
-  'setPreAmpEq',
-  'updateCabParam',
-  'setInputGain',
-  'setMasterVolume',
-];
+const APPLY_SEQUENCE = ['applyRig'];
 
 /** 比较用的链摘要(uid 各路径重新生成,不参与比较) */
 function chainSummary(state: RigStoreState) {
@@ -172,17 +167,19 @@ test('箱头前均衡 verbs 实时投影且 Reset 保持开关、不触发图谱
   const { engine, calls } = createStubEngine();
   const store = createRigStore(engine);
 
-  store.setPreAmpEqBand('hz1000', 6);
-  store.setPreAmpEqLevel(-3);
+  store.setPreAmpEqBand('hz1000', 6.24);
+  store.setPreAmpEqLevel(-3.26);
   store.setPreAmpEqEnabled(true);
   assert.equal(store.getState().preAmpEq.bands.hz1000, 6);
-  assert.equal(store.getState().preAmpEq.levelDb, -3);
+  assert.equal(store.getState().preAmpEq.levelDb, -3.5);
   assert.equal(store.getState().preAmpEq.enabled, true);
   assert.deepEqual(calls.map((call) => call.method), [
     'updatePreAmpEqBand',
     'setPreAmpEqLevel',
     'setPreAmpEqEnabled',
   ]);
+  assert.deepEqual(calls[0].args, ['hz1000', 6]);
+  assert.deepEqual(calls[1].args, [-3.5]);
   assert.equal(store.getState().graphVersion, 0);
 
   calls.length = 0;

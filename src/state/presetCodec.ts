@@ -2,9 +2,8 @@ import type { CabIrRef } from '../audio/cabIrTypes';
 import { isBuiltinCabId } from '../audio/cabIrTypes';
 import {
   PRE_AMP_EQ_BANDS,
-  PRE_AMP_EQ_MAX_DB,
-  PRE_AMP_EQ_MIN_DB,
   createDefaultPreAmpEqState,
+  normalizePreAmpEqDb,
   type PreAmpEqState,
 } from '../audio/preAmpEq';
 
@@ -301,15 +300,10 @@ function normalizePreAmpEq(rawEq: unknown): PreAmpEqState {
   const source = isRecord(rawEq) ? rawEq : {};
   const rawBands = isRecord(source.bands) ? source.bands : {};
   for (const band of PRE_AMP_EQ_BANDS) {
-    fallback.bands[band.key] = clamp(
-      rawBands[band.key],
-      PRE_AMP_EQ_MIN_DB,
-      PRE_AMP_EQ_MAX_DB,
-      0,
-    );
+    fallback.bands[band.key] = normalizePreAmpEqDb(rawBands[band.key]);
   }
   fallback.enabled = typeof source.enabled === 'boolean' ? source.enabled : false;
-  fallback.levelDb = clamp(source.levelDb, PRE_AMP_EQ_MIN_DB, PRE_AMP_EQ_MAX_DB, 0);
+  fallback.levelDb = normalizePreAmpEqDb(source.levelDb);
   return fallback;
 }
 

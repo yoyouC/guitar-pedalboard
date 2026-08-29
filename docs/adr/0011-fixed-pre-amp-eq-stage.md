@@ -21,9 +21,11 @@ Pedal 会让位置语义不稳定，也会出现多个实例；复用 Amp 的 Ba
 - Runtime 的 input/output 身份在 AudioContext 生命周期内稳定。参数与独立 bypass 通过
   `20 ms` Web Audio 参数平滑实时投影；bypass 将十段与 Level 平滑回到单位增益，但仍记住
   且允许编辑目标值。它不调用 `rebuildGraph`。全局 bypass 仍绕过整个 Rig。
+- 完整 Rig 恢复通过单次引擎投影批量提交结构、EQ 与 globals，并只重建一次；同结构恢复
+  也显式回放所有复用实例参数，避免新旧状态混合。
 - `preAmpEq` 成为 Rig、Preset、Snapshot 与 Share 的 canonical 字段。Preset 升 v5、Share
   升 v4；频段以稳定名称保存而非数组下标。旧版本或字段缺失时迁移为“关闭、全平、Level 0”，
-  解析时非有限值回退且所有 dB 值钳制到范围内。
+  解析时非有限值回退，且所有 canonical 写入统一钳制并量化到 `0.5 dB` 网格。
 - 面板固定在效果器板下、箱头面板上。折叠状态只属于本机 UI 偏好并存入 localStorage，
   不属于 Rig；bypass、Reset 与折叠按钮始终留在标题栏。MIDI Learn 可绑定 bypass、各频段与 Level。
 

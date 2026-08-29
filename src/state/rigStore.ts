@@ -17,7 +17,7 @@
  */
 
 import type { audioEngine } from '../audio/AudioEngine';
-import type { ChainSpec, AmpSpec } from '../audio/AudioEngine';
+import type { AudioRigProjection, ChainSpec, AmpSpec } from '../audio/AudioEngine';
 import { getEffectDef } from '../audio/effects';
 import {
   getTone3000PedalDef,
@@ -41,6 +41,7 @@ import {
 } from '../audio/namWasm';
 import {
   createDefaultPreAmpEqState,
+  normalizePreAmpEqDb,
   type PreAmpEqBandKey,
   type PreAmpEqState,
 } from '../audio/preAmpEq';
@@ -64,6 +65,7 @@ import {
 /** rigStore 需要的引擎面(AudioEngine 的子集;测试用 stub 注入) */
 export type RigEngine = Pick<
   typeof audioEngine,
+  | 'applyRig'
   | 'setGlobalBypass'
   | 'setChain'
   | 'setAmp'
@@ -374,7 +376,7 @@ export function rigFromShare(
   };
 }
 
-/** 当前状态 → URL 分享编码的输入(分享只覆盖链条 + 箱头 + 箱体) */
+/** 当前状态 → URL 分享编码的输入(Share = canonical Rig − globals − 本机字段)。 */
 export function rigToShareState(state: RigStoreState): ShareState {
   return {
     chain: state.chain,
@@ -522,42 +524,52 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     );
   };
 
-  /** 结构同步:固定四连写引擎(每个 setter 内部 rebuildGraph,重建时回放 spec 携带的参数值)并自增 graphVersion */
-  const syncStructure = () => {
-    engine.setGlobalBypass(state.globalBypass);
-    engine.setChain(
-      state.chain.map(
-        (item): ChainSpec => ({
-          uid: item.uid,
-          def:
-            item.effectId === TONE3000_PEDAL_EFFECT_ID && item.modelRef
-              ? getTone3000PedalDef(item.modelRef, item.modelId)
-              : getEffectDef(item.effectId),
-          key:
-            item.effectId === TONE3000_PEDAL_EFFECT_ID && item.modelRef
-              ? `${item.modelRef}${item.modelId ? `:model:${item.modelId}` : ''}:runtime:${tone3000PedalGenerations.get(item.uid) ?? 0}`
-              : undefined,
-          enabled: item.enabled,
-          values: item.values,
-          post: item.post,
-        }),
-      ),
-    );
-    engine.setAmp({
+  /** 当前 canonical state → 引擎所需完整投影；普通结构 verb 与恢复事务共用。 */
+  const currentAudioProjection = (): AudioRigProjection => ({
+    globalBypass: state.globalBypass,
+    chain: state.chain.map(
+      (item): ChainSpec => ({
+        uid: item.uid,
+        def:
+          item.effectId === TONE3000_PEDAL_EFFECT_ID && item.modelRef
+            ? getTone3000PedalDef(item.modelRef, item.modelId)
+            : getEffectDef(item.effectId),
+        key:
+          item.effectId === TONE3000_PEDAL_EFFECT_ID && item.modelRef
+            ? `${item.modelRef}${item.modelId ? `:model:${item.modelId}` : ''}:runtime:${tone3000PedalGenerations.get(item.uid) ?? 0}`
+            : undefined,
+        enabled: item.enabled,
+        values: item.values,
+        post: item.post,
+      }),
+    ),
+    amp: {
       // NAM 箱头:def 来自选择感知的 memoized 工厂(同一选择同一实例 → def+key 复用成立)
       def: state.ampId === 'nam-wasm' ? getNamWasmAmpDef(state.namModel) : getAmpDef(state.ampId),
       enabled: state.ampEnabled,
       values: state.ampValues,
       // def+key 相同则重建复用箱头实例(避免 NAM 模型随单块变动重复加载)
       key: `${state.ampId}:${state.namVersion}`,
-    } satisfies AmpSpec);
-    engine.setCab({
+    } satisfies AmpSpec,
+    cab: {
       def: CAB_IR_RUNTIME_DEF,
       enabled: state.cabEnabled,
       values: state.cabValues,
       key: 'cab-ir-runtime:v1',
       irRef: state.cabIrRef,
-    });
+    },
+    preAmpEq: { ...state.preAmpEq, bands: { ...state.preAmpEq.bands } },
+    inputGain: state.inputGain,
+    masterVolume: state.masterVolume,
+  });
+
+  /** 普通结构 verb 保持固定四连写，并自增 graphVersion。 */
+  const syncStructure = () => {
+    const projection = currentAudioProjection();
+    engine.setGlobalBypass(projection.globalBypass);
+    engine.setChain(projection.chain);
+    engine.setAmp(projection.amp);
+    engine.setCab(projection.cab);
     state = { ...state, graphVersion: state.graphVersion + 1 };
   };
 
@@ -842,20 +854,22 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
     },
 
     setPreAmpEqBand(key, gainDb) {
+      const normalized = normalizePreAmpEqDb(gainDb);
       state = {
         ...state,
         preAmpEq: {
           ...state.preAmpEq,
-          bands: { ...state.preAmpEq.bands, [key]: gainDb },
+          bands: { ...state.preAmpEq.bands, [key]: normalized },
         },
       };
-      engine.updatePreAmpEqBand(key, gainDb);
+      engine.updatePreAmpEqBand(key, normalized);
       emit();
     },
 
     setPreAmpEqLevel(levelDb) {
-      state = { ...state, preAmpEq: { ...state.preAmpEq, levelDb } };
-      engine.setPreAmpEqLevel(levelDb);
+      const normalized = normalizePreAmpEqDb(levelDb);
+      state = { ...state, preAmpEq: { ...state.preAmpEq, levelDb: normalized } };
+      engine.setPreAmpEqLevel(normalized);
       emit();
     },
 
@@ -932,11 +946,8 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         globalBypass: rig.globals.bypass,
         namVersion,
       };
-      syncStructure();
-      engine.setPreAmpEq(state.preAmpEq);
-      for (const [key, value] of Object.entries(state.cabValues)) engine.updateCabParam(key, value);
-      engine.setInputGain(state.inputGain);
-      engine.setMasterVolume(state.masterVolume);
+      engine.applyRig(currentAudioProjection());
+      state = { ...state, graphVersion: state.graphVersion + 1 };
       emit();
     },
 

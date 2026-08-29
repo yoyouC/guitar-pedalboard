@@ -89,6 +89,17 @@ export interface CabSpec extends AmpSpec {
   irRef?: CabIrRef;
 }
 
+/** 完整 Rig 的一次性引擎投影；恢复路径用它避免逐 setter 暴露混合状态。 */
+export interface AudioRigProjection {
+  chain: ChainSpec[];
+  amp: AmpSpec | null;
+  cab: CabSpec | null;
+  globalBypass: boolean;
+  preAmpEq: PreAmpEqState;
+  inputGain: number;
+  masterVolume: number;
+}
+
 export type InputSourceType = 'mic' | 'file' | 'test';
 
 interface RuntimeGraphState {
@@ -1175,6 +1186,51 @@ export class AudioEngine {
   }
 
   // ---------- 效果链 ----------
+
+  applyRig(projection: AudioRigProjection): void {
+    this.chain = projection.chain;
+    this.ampSpec = projection.amp;
+    this.cabSpec = projection.cab;
+    this.globalBypass = projection.globalBypass;
+    this.preAmpEqState = {
+      enabled: projection.preAmpEq.enabled,
+      bands: { ...projection.preAmpEq.bands },
+      levelDb: projection.preAmpEq.levelDb,
+    };
+    this.inputGainValue = projection.inputGain;
+    this.masterVolumeValue = projection.masterVolume;
+    if (projection.cab?.irRef && cabIrRefKey(projection.cab.irRef) !== cabIrRefKey(this.cabIrRef)) {
+      this.cabIrRef = projection.cab.irRef;
+      this.cabIrVersion++;
+    }
+
+    const runtime = this.runtime;
+    if (runtime) {
+      runtime.preAmpEq.setState(this.preAmpEqState);
+      runtime.inputGain.gain.setTargetAtTime(projection.inputGain, runtime.ctx.currentTime, 0.02);
+      runtime.masterGain.gain.setTargetAtTime(projection.masterVolume, runtime.ctx.currentTime, 0.02);
+    }
+    this.rebuildGraph();
+
+    // 结构相同的 restore 会得到 empty plan；仍须把完整参数投影到复用实例。
+    if (runtime) {
+      for (const item of projection.chain) {
+        const instance = runtime.graph.instances.get(item.uid)?.inst;
+        if (instance) for (const [key, value] of Object.entries(item.values)) instance.update(key, value);
+      }
+      if (runtime.graph.ampInstance && projection.amp) {
+        for (const [key, value] of Object.entries(projection.amp.values)) {
+          runtime.graph.ampInstance.update(key, value);
+        }
+      }
+      if (runtime.graph.cabInstance && projection.cab) {
+        for (const [key, value] of Object.entries(projection.cab.values)) {
+          runtime.graph.cabInstance.update(key, value);
+        }
+      }
+      this.sampleDiagnostics();
+    }
+  }
 
   setGlobalBypass(bypass: boolean): void {
     this.globalBypass = bypass;
