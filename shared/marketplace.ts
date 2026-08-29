@@ -193,6 +193,42 @@ export type RigResourceDependency =
 
 export type RigResourceDependencyKey = 'builtin' | `tone3000:${string}`;
 
+export type Tone3000DependencyAvailability =
+  | 'available'
+  | 'authorization-required'
+  | 'unavailable'
+  | 'unknown';
+
+export interface Tone3000DependencyFact {
+  dependencyKey: `tone3000:${string}`;
+  availability: Tone3000DependencyAvailability;
+  reason?: 'deleted' | 'private' | 'license-revoked' | 'not-checked';
+}
+
+export type PublishedPresetCompatibilityBlocker =
+  | {
+      kind: 'schema-version';
+      schemaVersion: number;
+      supportedMin: number;
+      supportedMax: number;
+    }
+  | {
+      kind: 'catalog-item';
+      equipmentKind: 'pedal' | 'amp' | 'cab';
+      id: string;
+    }
+  | {
+      kind: 'tone3000';
+      dependencyKey: `tone3000:${string}`;
+      availability: Exclude<Tone3000DependencyAvailability, 'available'>;
+      reason?: Tone3000DependencyFact['reason'];
+    };
+
+export interface PublishedPresetRevisionCompatibility {
+  status: 'compatible' | 'authorization-required' | 'incompatible';
+  blockers: PublishedPresetCompatibilityBlocker[];
+}
+
 export interface RigDerivedAttributes {
   pedalIds: string[];
   ampId: string;

@@ -147,6 +147,10 @@
       "destination": "/api/marketplace-preset?route=revision-restore&id=:id&revisionId=:revisionId"
     },
     {
+      "source": "/api/marketplace/presets/:id/revisions/:revisionId/compatibility",
+      "destination": "/api/marketplace-preset?route=revision-compatibility&id=:id&revisionId=:revisionId"
+    },
+    {
       "source": "/api/marketplace/presets/:id/revisions/:revisionId",
       "destination": "/api/marketplace-preset?route=revision&id=:id&revisionId=:revisionId"
     },

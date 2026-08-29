@@ -1,6 +1,6 @@
 import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRecord, MemberRepository } from '../members/repository.ts';
-import { communityWriteDenied } from '../members/communityWriteApi.ts';
+import { communityWriteDenied, unverifiedEmailWriteDenied } from '../members/communityWriteApi.ts';
 import {
   DuplicateModerationReportError,
   ModerationAppealForbiddenError,
@@ -12,6 +12,7 @@ import {
   type ModerationReportReason,
   type ModerationTargetKind,
 } from './repository.ts';
+import { marketplaceWriteLimitDenied, type MarketplaceWriteLimiter } from '../abuse/writeLimiter.ts';
 
 const REPORTS_PATH = '/api/marketplace/reports';
 const NOTICES_PATH = '/api/marketplace/infringement-notices';
@@ -35,10 +36,15 @@ export function createMarketplaceModerationApi(input: {
   createId(): string;
   createMemberId(): string;
   createHandleSuffix(): string;
+  writeLimiter?: MarketplaceWriteLimiter;
 }): MarketplaceModerationApi {
-  const member = async (request: Request): Promise<MemberRecord> => {
+  const member = async (request: Request, verificationReturnPath?: string): Promise<MemberRecord> => {
     const identity = await input.sessions.verify(request);
     if (!identity) throw new ApiError(401, 'authentication_required', 'Authentication required');
+    if (verificationReturnPath) {
+      const denied = unverifiedEmailWriteDenied(identity, verificationReturnPath);
+      if (denied) throw new ResponseError(denied);
+    }
     const current = await input.members.findOrCreateForIdentity({
       id: input.createMemberId(), identity,
       handle: `player-${input.createHandleSuffix()}`, now: input.now(),
@@ -59,13 +65,19 @@ export function createMarketplaceModerationApi(input: {
       const path = new URL(request.url).pathname;
       try {
         if (request.method === 'POST' && path === REPORTS_PATH) {
-          const current = await member(request);
+          const current = await member(request, '/marketplace');
           const denied = communityWriteDenied(current);
           if (denied) return denied;
           const body = reportBody(await readBody(request));
           if (!body) return invalid('invalid_report', 'Report is invalid');
+          const now = input.now();
+          const limited = await marketplaceWriteLimitDenied({
+            limiter: input.writeLimiter, operation: 'report', memberId: current.id,
+            request, now,
+          });
+          if (limited) return limited;
           await input.repository.submitReport({
-            id: input.createId(), reporterMemberId: current.id, ...body, now: input.now(),
+            id: input.createId(), reporterMemberId: current.id, ...body, now,
           });
           return new Response(null, { status: 201 });
         }
@@ -118,6 +130,7 @@ export function createMarketplaceModerationApi(input: {
         }
         return new Response(null, { status: 404 });
       } catch (cause) {
+        if (cause instanceof ResponseError) return cause.response;
         if (cause instanceof ApiError) return error(cause.status, cause.code, cause.message);
         if (cause instanceof DuplicateModerationReportError) {
           return error(409, 'duplicate_report', 'This target was already reported');
@@ -145,6 +158,15 @@ class ApiError extends Error {
     super(message);
     this.status = status;
     this.code = code;
+  }
+}
+
+class ResponseError extends Error {
+  readonly response: Response;
+
+  constructor(response: Response) {
+    super('Request rejected with a prepared response');
+    this.response = response;
   }
 }
 

@@ -22,6 +22,8 @@ import { DEFAULT_MARKETPLACE_TRENDING_POLICY } from './server/trending/policy.ts
 import { createMemoryMarketplaceTrendingRepository } from './server/trending/memoryRepository.ts'
 import { createMarketplaceModerationApi } from './server/moderation/api.ts'
 import { createMemoryMarketplaceModerationRepository } from './server/moderation/memoryRepository.ts'
+import { createMemoryMarketplaceWriteLimiter } from './server/abuse/memoryWriteLimiter.ts'
+import { DEFAULT_MARKETPLACE_WRITE_POLICIES } from './server/abuse/policy.ts'
 
 // 本地评估模型(models-local/,git-ignored,许可不允许公开分发):
 // 仅开发期经此中间件提供;/models-local/** 不进入 dist,也不会被部署。
@@ -76,7 +78,7 @@ function serveMarketplaceApi(): Plugin {
     publicProfileCompletedAt: demoCreatedAt,
     createdAt: demoCreatedAt,
     updatedAt: demoCreatedAt,
-  }])
+  }], [{ handle: 'guitar-pedalboard-old', memberId: demoPublishedPreset.creator.id }])
   const marketplaceTags: Array<MarketplaceTag & { aliases: string[] }> = [
     { id: 'tone-clean', dimension: 'tone', nameZh: '清音', nameEn: 'Clean', aliases: ['clean tone'] },
     { id: 'tone-crunch', dimension: 'tone', nameZh: 'Crunch', nameEn: 'Crunch', aliases: ['crunch tone', 'overdrive'] },
@@ -86,7 +88,22 @@ function serveMarketplaceApi(): Plugin {
     { id: 'use-live', dimension: 'use', nameZh: '现场', nameEn: 'Live', aliases: ['stage'] },
     { id: 'use-recording', dimension: 'use', nameZh: '录音', nameEn: 'Recording', aliases: ['studio'] },
   ]
-  const publications = createMemoryPublishedPresetRepository([demoPublishedPreset], marketplaceTags)
+  const demoUnlistedPreset = {
+    ...structuredClone(demoPublishedPreset),
+    id: 'preset-demo-unlisted',
+    title: 'Secret Demo Tone',
+    description: 'Direct-link-only development fixture.',
+    visibility: 'unlisted' as const,
+    currentRevision: {
+      ...structuredClone(demoPublishedPreset.currentRevision),
+      id: 'revision-demo-unlisted-1',
+    },
+  }
+  const publications = createMemoryPublishedPresetRepository(
+    [demoPublishedPreset, demoUnlistedPreset],
+    marketplaceTags,
+  )
+  const writeLimiter = createMemoryMarketplaceWriteLimiter(DEFAULT_MARKETPLACE_WRITE_POLICIES)
   const sessions = createBetterAuthSessionVerifier(auth.api)
   const presetApi = createMarketplaceApi({
     publishedPresets: publications,
@@ -100,6 +117,7 @@ function serveMarketplaceApi(): Plugin {
       createRevisionId: () => `revision-${crypto.randomUUID()}`,
       createMemberId: () => crypto.randomUUID(),
       createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+      writeLimiter,
     },
   })
   const memberApi = createMemberApi({
@@ -176,6 +194,7 @@ function serveMarketplaceApi(): Plugin {
     now: () => new Date(),
     createMemberId: () => crypto.randomUUID(),
     createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+    writeLimiter,
   })
   const moderationApi = createMarketplaceModerationApi({
     repository: createMemoryMarketplaceModerationRepository({
@@ -213,6 +232,7 @@ function serveMarketplaceApi(): Plugin {
     createId: () => crypto.randomUUID(),
     createMemberId: () => crypto.randomUUID(),
     createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+    writeLimiter,
   })
   return {
     name: 'serve-marketplace-api',

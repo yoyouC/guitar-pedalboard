@@ -3,7 +3,7 @@ import type {
   MarketplaceModerationReportReason,
   MarketplaceModerationTargetKind,
 } from '../../shared/marketplace';
-import { marketplaceClient } from '../marketplace/client';
+import { marketplaceClient, MarketplaceClientError } from '../marketplace/client';
 
 const REASONS: Array<{ value: MarketplaceModerationReportReason; label: string }> = [
   { value: 'copyright', label: '侵权' },
@@ -22,16 +22,21 @@ export function MarketplaceReportForm({ kind, targetId, onNavigate }: {
   const [details, setDetails] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setMessage('');
+    setVerificationUrl(null);
     try {
       await marketplaceClient.submitReport({ targetKind: kind, targetId, reason, details });
       setDetails('');
       setMessage('举报已提交，管理员会在私有队列中处理。');
     } catch (cause) {
+      if (cause instanceof MarketplaceClientError && cause.verificationUrl) {
+        setVerificationUrl(cause.verificationUrl);
+      }
       setMessage(cause instanceof Error ? cause.message : '举报提交失败。');
     } finally {
       setBusy(false);
@@ -74,6 +79,9 @@ export function MarketplaceReportForm({ kind, targetId, onNavigate }: {
         </form>
       )}
       {message && <small role="status">{message}</small>}
+      {verificationUrl && (
+        <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>
+      )}
     </aside>
   );
 }

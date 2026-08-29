@@ -10,6 +10,7 @@ import type {
 } from '../shared/marketplace.ts';
 import type { AuthenticatedIdentity } from '../server/auth/session.ts';
 import { demoPublishedPreset } from '../server/marketplace/demoPreset.ts';
+import type { MarketplaceWriteLimiter } from '../server/abuse/writeLimiter.ts';
 
 const publishedPreset: CanonicalPublishedPreset = {
   id: 'preset-demo-crunch',
@@ -87,10 +88,24 @@ const adaIdentity: AuthenticatedIdentity = {
   avatarUrl: null,
 };
 
+test('new publication distinguishes an unverified email from an anonymous session', async () => {
+  const { api } = publicationApi(undefined, { ...adaIdentity, emailVerified: false });
+  const response = await api.fetch(publishRequest());
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), {
+    error: {
+      code: 'email_verification_required',
+      message: 'Verify your email before this community write',
+      verificationUrl: '/login?verify=email&return=%2Fmarketplace%2Fpublish',
+    },
+  });
+});
+
 function publicationApi(
   repository = createMemoryPublishedPresetRepository([], controlledTags),
   identity: AuthenticatedIdentity | null = adaIdentity,
   communityStatus: 'active' | 'banned' = 'active',
+  writeLimiter?: MarketplaceWriteLimiter,
 ) {
   const members = identity ? createMemoryMemberRepository([{
     id: 'member-ada', authUserId: identity.authUserId,
@@ -114,6 +129,7 @@ function publicationApi(
         createRevisionId: () => 'revision-ada-crunch-1',
         createMemberId: () => 'member-ada',
         createHandleSuffix: () => 'ada00001',
+        writeLimiter,
       },
     }),
   };
@@ -134,7 +150,12 @@ function publishRequest(extra: Record<string, unknown> = {}) {
   });
 }
 
-function managementApi(memberId = 'member-ada', sourcePreset: CanonicalPublishedPreset = publishedPreset) {
+function managementApi(
+  memberId = 'member-ada',
+  sourcePreset: CanonicalPublishedPreset = publishedPreset,
+  writeLimiter?: MarketplaceWriteLimiter,
+  identity: AuthenticatedIdentity = adaIdentity,
+) {
   const ownedPreset: CanonicalPublishedPreset = {
     ...sourcePreset,
     id: 'preset-ada-crunch',
@@ -160,17 +181,64 @@ function managementApi(memberId = 'member-ada', sourcePreset: CanonicalPublished
     publishedPresets: repository,
     publication: {
       repository,
-      sessions: { async verify() { return adaIdentity; } },
+      sessions: { async verify() { return identity; } },
       members,
       now: () => new Date(`2026-08-29T10:00:0${nowIndex++}.000Z`),
       createPresetId: () => 'unused-preset-id',
       createRevisionId: () => `revision-ada-crunch-${++revisionIndex}`,
       createMemberId: () => 'unused-member-id',
       createHandleSuffix: () => 'unused001',
+      writeLimiter,
     },
   });
   return { api, repository, ownedPreset };
 }
+
+test('publication and revision paths use separate limits after verification and validation', async () => {
+  const operations: string[] = [];
+  const limiter: MarketplaceWriteLimiter = {
+    async consume(input) {
+      operations.push(input.operation);
+      return { allowed: false, retryAt: new Date('2026-08-29T10:01:00.000Z') };
+    },
+  };
+  const publish = publicationApi(undefined, adaIdentity, 'active', limiter);
+  assert.equal((await publish.api.fetch(publishRequest())).status, 429);
+
+  const management = managementApi('member-ada', publishedPreset, limiter);
+  const append = await management.api.fetch(new Request(
+    'https://pedalboard.test/api/marketplace/presets/preset-ada-crunch/revisions',
+    {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 5,
+        rig: management.ownedPreset.currentRevision.rig,
+        expectedUpdatedAt: management.ownedPreset.updatedAt,
+      }),
+    },
+  ));
+  assert.equal(append.status, 429);
+  assert.deepEqual(operations, ['publish', 'revision']);
+});
+
+test('append revision requires a verified email and preserves its management return path', async () => {
+  const { api, ownedPreset } = managementApi(
+    'member-ada', publishedPreset, undefined, { ...adaIdentity, emailVerified: false },
+  );
+  const response = await api.fetch(new Request(
+    'https://pedalboard.test/api/marketplace/presets/preset-ada-crunch/revisions',
+    {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 5, rig: ownedPreset.currentRevision.rig,
+        expectedUpdatedAt: ownedPreset.updatedAt,
+      }),
+    },
+  ));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.verificationUrl,
+    '/login?verify=email&return=%2Fmarketplace%2Ftones%2Fpreset-ada-crunch%2Fmanage');
+});
 
 test('visitor can read a public Published Preset by its stable id', async () => {
   const api = createMarketplaceApi({
@@ -183,6 +251,29 @@ test('visitor can read a public Published Preset by its stable id', async () => 
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { preset: publishedPreset });
+});
+
+test('compatibility endpoint exposes recomputed external facts without withdrawing the work', async () => {
+  const api = createMarketplaceApi({
+    publishedPresets: createMemoryPublishedPresetRepository([publishedPreset]),
+    compatibilityFacts: {
+      async inspectTone3000Dependencies() { return []; },
+    },
+  });
+  const compatibility = await api.fetch(new Request(
+    `https://pedalboard.test/api/marketplace/presets/${publishedPreset.id}`
+      + `/revisions/${publishedPreset.currentRevision.id}/compatibility`,
+  ));
+  assert.equal(compatibility.status, 200);
+  assert.deepEqual(await compatibility.json(), {
+    compatibility: { status: 'compatible', blockers: [] },
+  });
+
+  const detail = await api.fetch(new Request(
+    `https://pedalboard.test/api/marketplace/presets/${publishedPreset.id}`,
+  ));
+  assert.equal(detail.status, 200);
+  assert.equal((await detail.json()).preset.visibility, 'public');
 });
 
 test('missing and non-public presets share the same anonymous not-found response', async () => {

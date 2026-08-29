@@ -38,7 +38,7 @@ function collection(input: {
       handle: input.creator.handle,
       displayName: input.creator.displayName,
     },
-    tags: [rock],
+    tags: [{ ...rock, aliases: ['arena-code'] }],
     items: input.itemTitle === undefined ? [] : [{
       position: 0,
       presetId: 'preset-secret',
@@ -96,6 +96,20 @@ test('unified discovery searches Public collections and creators in separate tab
   assert.equal(creators.status, 200);
   assert.deepEqual((await creators.json()).items.map((item: { id: string }) => item.id), [
     'member-ada',
+  ]);
+
+  const alias = await api.fetch(new Request(
+    'https://pedalboard.test/api/marketplace/search/collections?q=arena-code',
+  ));
+  assert.deepEqual((await alias.json()).items.map((item: { id: string }) => item.id), [
+    'collection-public-new',
+    'collection-public-old',
+  ]);
+  const author = await api.fetch(new Request(
+    'https://pedalboard.test/api/marketplace/search/collections?q=hopper',
+  ));
+  assert.deepEqual((await author.json()).items.map((item: { id: string }) => item.id), [
+    'collection-public-old',
   ]);
 });
 

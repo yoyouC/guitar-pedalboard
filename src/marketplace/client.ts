@@ -20,6 +20,7 @@ import type {
   PublishedPreset,
   PublishedPresetConcurrencyState,
   PublishedPresetRevisionSummary,
+  PublishedPresetRevisionCompatibility,
   PublishedPresetRevisionView,
   PublishPresetRequest,
   RestorePublishedPresetRevisionRequest,
@@ -27,6 +28,7 @@ import type {
   UpdatePublishedPresetVisibilityRequest,
   UpdatePresetCollectionRequest,
 } from '../../shared/marketplace';
+import { parsePublishedPresetRevisionCompatibility } from '../../shared/marketplaceCompatibility';
 import {
   parseManagedPublishedPreset,
   parseMarketplaceAuthorModerationCases,
@@ -51,6 +53,8 @@ export type MarketplaceClientErrorCode =
   | 'invalid_update'
   | 'invalid_search'
   | 'forbidden'
+  | 'verification_required'
+  | 'rate_limited'
   | 'update_conflict';
 
 export class MarketplaceClientError extends Error {
@@ -58,6 +62,8 @@ export class MarketplaceClientError extends Error {
   readonly fields?: Record<string, string>;
   readonly current?: PublishedPresetConcurrencyState;
   readonly collectionCurrent?: PresetCollectionConcurrencyState;
+  readonly verificationUrl?: string;
+  readonly retryAt?: string;
 
   constructor(
     code: MarketplaceClientErrorCode,
@@ -65,6 +71,8 @@ export class MarketplaceClientError extends Error {
     fields?: Record<string, string>,
     current?: PublishedPresetConcurrencyState,
     collectionCurrent?: PresetCollectionConcurrencyState,
+    verificationUrl?: string,
+    retryAt?: string,
   ) {
     super(message);
     this.name = 'MarketplaceClientError';
@@ -72,6 +80,8 @@ export class MarketplaceClientError extends Error {
     this.fields = fields;
     this.current = current;
     this.collectionCurrent = collectionCurrent;
+    this.verificationUrl = verificationUrl;
+    this.retryAt = retryAt;
   }
 }
 
@@ -82,6 +92,10 @@ export interface MarketplaceClient {
   getManagedPublishedPreset(id: string): Promise<PublishedPreset>;
   listManagedPublishedPresets(): Promise<PublishedPreset[]>;
   getPublishedPresetRevision(id: string, revisionId: string): Promise<PublishedPresetRevisionView>;
+  getPublishedPresetRevisionCompatibility(
+    id: string,
+    revisionId: string,
+  ): Promise<PublishedPresetRevisionCompatibility>;
   listPublishedPresetRevisions(id: string): Promise<PublishedPresetRevisionSummary[]>;
   updatePublishedPresetMetadata(
     id: string,
@@ -165,6 +179,35 @@ async function publicationError(response: Response): Promise<MarketplaceClientEr
       if (response.status === 401) {
         return new MarketplaceClientError('authentication_required', '请先登录再发布。');
       }
+      if (
+        error.code === 'email_verification_required'
+        && typeof error.verificationUrl === 'string'
+        && error.verificationUrl.startsWith('/')
+      ) {
+        return new MarketplaceClientError(
+          'verification_required',
+          '请先验证邮箱；当前输入已保留。',
+          undefined,
+          undefined,
+          undefined,
+          error.verificationUrl,
+        );
+      }
+      if (
+        error.code === 'write_rate_limited'
+        && typeof error.retryAt === 'string'
+        && !Number.isNaN(Date.parse(error.retryAt))
+      ) {
+        return new MarketplaceClientError(
+          'rate_limited',
+          '操作过于频繁；请稍后重试，当前输入已保留。',
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          error.retryAt,
+        );
+      }
       if (error.code === 'self_like_forbidden') {
         return new MarketplaceClientError('forbidden', '不能给自己的作品点赞。');
       }
@@ -206,7 +249,11 @@ async function publicationError(response: Response): Promise<MarketplaceClientEr
           { items: '请选择允许收录的固定修订' },
         );
       }
-      if (error.code === 'invalid_preset_search' || error.code === 'invalid_search_cursor') {
+      if (
+        error.code === 'invalid_preset_search'
+        || error.code === 'invalid_marketplace_search'
+        || error.code === 'invalid_search_cursor'
+      ) {
         return new MarketplaceClientError(
           'invalid_search',
           error.code === 'invalid_search_cursor'
@@ -413,6 +460,27 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
       const preset = parsePublishedPresetRevisionView(body.preset, id, revisionId);
       if (!preset) throw new MarketplaceClientError('invalid_response', '音色修订响应无效。');
       return preset;
+    },
+
+    async getPublishedPresetRevisionCompatibility(id, revisionId) {
+      let response: Response;
+      try {
+        response = await fetchResponse(
+          `/api/marketplace/presets/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/compatibility`,
+        );
+      } catch {
+        throw new MarketplaceClientError('network', '无法检查音色兼容性；本地效果器仍可正常使用。');
+      }
+      if (response.status === 404) {
+        throw new MarketplaceClientError('not_found', '找不到这个音色修订。');
+      }
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { compatibility?: unknown };
+      const compatibility = parsePublishedPresetRevisionCompatibility(body.compatibility);
+      if (!compatibility) {
+        throw new MarketplaceClientError('invalid_response', '音色兼容性响应无效。');
+      }
+      return compatibility;
     },
 
     async getManagedPublishedPreset(id) {

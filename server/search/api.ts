@@ -7,9 +7,11 @@ import type {
 import { InvalidSearchCursorError } from './cursor.ts';
 import { parseRigResourceDependencyKey } from '../../shared/marketplaceResource.ts';
 
-export interface PublishedPresetSearchApi {
+export interface MarketplaceSearchApi {
   fetch(request: Request): Promise<Response>;
 }
+
+export type PublishedPresetSearchApi = MarketplaceSearchApi;
 
 const SEARCH_PATH = '/api/marketplace/search/presets';
 const COLLECTION_SEARCH_PATH = '/api/marketplace/search/collections';
@@ -24,7 +26,7 @@ export function createPublishedPresetSearchApi(input: {
 export function createMarketplaceSearchApi(input: {
   presets: PublishedPresetSearchRepository;
   discovery?: MarketplaceDiscoveryRepository;
-}): PublishedPresetSearchApi {
+}): MarketplaceSearchApi {
   return {
     async fetch(request) {
       const url = new URL(request.url);

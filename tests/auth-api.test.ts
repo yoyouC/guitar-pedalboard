@@ -306,6 +306,7 @@ test('verified sessions become independent identities with a non-empty automatic
   assert.deepEqual(await verifier.verify(new Request('https://pedalboard.test')), {
     authUserId: 'auth-user',
     email: 'player@example.test',
+    emailVerified: true,
     displayName: 'Guitar Player',
     avatarUrl: null,
   });

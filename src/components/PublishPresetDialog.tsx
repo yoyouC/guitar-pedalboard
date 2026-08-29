@@ -18,6 +18,7 @@ interface PublishPresetDialogProps {
   initialTitle: string;
   provenance: RigProvenance | null;
   onClose(): void;
+  onNavigate(pathname: string): void;
   onPublished(pathname: string, preset: PublishedPreset): void;
 }
 
@@ -27,6 +28,7 @@ export function PublishPresetDialog({
   initialTitle,
   provenance,
   onClose,
+  onNavigate,
   onPublished,
 }: PublishPresetDialogProps) {
   const [title, setTitle] = useState(initialTitle);
@@ -34,6 +36,7 @@ export function PublishPresetDialog({
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [tags, setTags] = useState<MarketplaceTag[]>([]);
   const [message, setMessage] = useState('');
+  const [verificationUrl, setVerificationUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const session = useMemberSession();
   const currentMemberId = session.status === 'authenticated' ? session.member.id : null;
@@ -85,6 +88,7 @@ export function PublishPresetDialog({
     ) return;
     setBusy(true);
     setMessage('');
+    setVerificationUrl(null);
     try {
       const request = preview.value?.request ?? {
         title: '',
@@ -101,6 +105,9 @@ export function PublishPresetDialog({
       });
       onPublished(`/marketplace/tones/${encodeURIComponent(preset.id)}`, preset);
     } catch (cause) {
+      if (cause instanceof MarketplaceClientError && cause.verificationUrl) {
+        setVerificationUrl(cause.verificationUrl);
+      }
       if (cause instanceof MarketplaceClientError && cause.fields) {
         setMessage(Object.values(cause.fields).join('；'));
       } else {
@@ -147,6 +154,11 @@ export function PublishPresetDialog({
             <div><dt>资源</dt><dd>{soundAnalysis?.resourceDependencies.map((item) => item.kind === 'builtin' ? '内置' : `TONE3000 ${item.toneId}`).join('、') ?? errors.rig ?? 'Rig 无法无损发布或包含本机资源'}</dd></div>
           </dl>
           {message && <p className="publish-dialog__error" role="alert">{message}</p>}
+          {verificationUrl && (
+            <button type="button" onClick={() => { onClose(); onNavigate(verificationUrl); }}>
+              验证邮箱
+            </button>
+          )}
           <div className="publish-dialog__actions">
             <button type="button" onClick={onClose}>取消</button>
             <button type="submit" disabled={busy || !currentMemberId || !soundAnalysis || (!appendsOwnWork && !preview.value)}>

@@ -6,7 +6,7 @@ export interface SearchBoundary {
   id: string;
 }
 
-interface SearchCursor {
+export interface StableSearchCursor {
   version: 1;
   fingerprint: string;
   snapshot: SearchBoundary;
@@ -46,9 +46,17 @@ export function encodeSearchCursor(
   snapshot: SearchBoundary,
   after: SearchBoundary,
 ): string {
-  const cursor: SearchCursor = {
+  return encodeStableSearchCursor(searchFingerprint(input), snapshot, after);
+}
+
+export function encodeStableSearchCursor(
+  fingerprint: string,
+  snapshot: SearchBoundary,
+  after: SearchBoundary,
+): string {
+  const cursor: StableSearchCursor = {
     version: 1,
-    fingerprint: searchFingerprint(input),
+    fingerprint,
     snapshot,
     after,
   };
@@ -58,17 +66,24 @@ export function encodeSearchCursor(
 export function decodeSearchCursor(
   encoded: string,
   input: PublishedPresetSearchInput,
-): SearchCursor {
+): StableSearchCursor {
+  return decodeStableSearchCursor(encoded, searchFingerprint(input));
+}
+
+export function decodeStableSearchCursor(
+  encoded: string,
+  fingerprint: string,
+): StableSearchCursor {
   try {
     const value = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as Record<string, unknown>;
     if (
       Object.keys(value).length !== 4
       || value.version !== 1
-      || value.fingerprint !== searchFingerprint(input)
+      || value.fingerprint !== fingerprint
       || !isBoundary(value.snapshot)
       || !isBoundary(value.after)
     ) throw new InvalidSearchCursorError();
-    return value as unknown as SearchCursor;
+    return value as unknown as StableSearchCursor;
   } catch (cause) {
     if (cause instanceof InvalidSearchCursorError) throw cause;
     throw new InvalidSearchCursorError();

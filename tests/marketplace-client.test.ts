@@ -113,6 +113,25 @@ test('official client preserves a future revision as an explicit opaque payload'
   assert.deepEqual(await client.getPublishedPreset(demoPublishedPreset.id), future);
 });
 
+test('official client reads the revision compatibility contract', async () => {
+  const client = createMarketplaceClient(async (input) => {
+    assert.match(String(input), /\/compatibility$/);
+    return Response.json({
+      compatibility: {
+        status: 'incompatible',
+        blockers: [{
+          kind: 'tone3000', dependencyKey: 'tone3000:42:9001',
+          availability: 'unavailable', reason: 'deleted',
+        }],
+      },
+    });
+  });
+  assert.equal((await client.getPublishedPresetRevisionCompatibility(
+    demoPublishedPreset.id,
+    demoPublishedPreset.currentRevision.id,
+  )).status, 'incompatible');
+});
+
 test('official client lists controlled tags and publishes only the request contract', async () => {
   const tag: MarketplaceTag = {
     id: 'tone-crunch',
@@ -160,6 +179,35 @@ test('official client preserves shared server publication field errors', async (
     (error) => error instanceof MarketplaceClientError
       && error.code === 'invalid_publication'
       && error.fields?.title === '标题最多 80 个字符',
+  );
+});
+
+test('official client exposes verification and retry feedback without changing the publication request', async () => {
+  const request = {
+    title: 'Keep This Draft', description: 'Unsaved editor input.', tagIds: ['tone-crunch'],
+    schemaVersion: 5 as const, rig: demoPublishedPreset.currentRevision.rig,
+  };
+  const verification = createMarketplaceClient(async (_input, init) => {
+    assert.deepEqual(JSON.parse(String(init?.body)), request);
+    return Response.json({ error: {
+      code: 'email_verification_required', verificationUrl: '/login?verify=email',
+    } }, { status: 403 });
+  });
+  await assert.rejects(
+    () => verification.publishPreset(request),
+    (error) => error instanceof MarketplaceClientError
+      && error.code === 'verification_required'
+      && error.verificationUrl === '/login?verify=email',
+  );
+
+  const limited = createMarketplaceClient(async () => Response.json({ error: {
+    code: 'write_rate_limited', operation: 'publish', retryAt: '2026-08-29T10:01:00.000Z',
+  } }, { status: 429 }));
+  await assert.rejects(
+    () => limited.publishPreset(request),
+    (error) => error instanceof MarketplaceClientError
+      && error.code === 'rate_limited'
+      && error.retryAt === '2026-08-29T10:01:00.000Z',
   );
 });
 
