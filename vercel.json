@@ -42,6 +42,38 @@
       "destination": "/api/marketplace-like?route=mine"
     },
     {
+      "source": "/api/marketplace/reports",
+      "destination": "/api/marketplace-moderation?route=reports"
+    },
+    {
+      "source": "/api/marketplace/infringement-notices",
+      "destination": "/api/marketplace-moderation?route=notice"
+    },
+    {
+      "source": "/api/marketplace/me/moderation",
+      "destination": "/api/marketplace-moderation?route=mine"
+    },
+    {
+      "source": "/api/marketplace/moderation/appeals",
+      "destination": "/api/marketplace-moderation?route=appeals"
+    },
+    {
+      "source": "/api/marketplace/admin/moderation/queue",
+      "destination": "/api/marketplace-moderation?route=queue"
+    },
+    {
+      "source": "/api/marketplace/admin/moderation/actions",
+      "destination": "/api/marketplace-moderation?route=actions"
+    },
+    {
+      "source": "/api/marketplace/admin/moderation/appeals",
+      "destination": "/api/marketplace-moderation?route=admin-appeals"
+    },
+    {
+      "source": "/api/marketplace/admin/moderation/audit",
+      "destination": "/api/marketplace-moderation?route=audit"
+    },
+    {
       "source": "/api/marketplace/popular/presets",
       "destination": "/api/marketplace-like?route=popular-presets"
     },

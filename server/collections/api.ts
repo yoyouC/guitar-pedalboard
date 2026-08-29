@@ -1,5 +1,6 @@
 import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
+import { communityWriteDenied } from '../members/communityWriteApi.ts';
 import {
   PresetCollectionAccessError,
   PresetCollectionConflictError,
@@ -65,6 +66,10 @@ export function createPresetCollectionApi(input: {
             handle: `player-${input.management.createHandleSuffix()}`,
             now,
           });
+          if (request.method !== 'GET') {
+            const denied = communityWriteDenied(member);
+            if (denied) return denied;
+          }
           if (request.method === 'POST') {
             const tags = await input.management.repository.listAvailableTags();
             const validation = validateCreatePresetCollection(

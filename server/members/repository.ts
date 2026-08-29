@@ -12,6 +12,7 @@ export interface MemberRecord {
   handleChangedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  communityStatus?: 'active' | 'banned';
 }
 
 export interface CreateMemberInput {

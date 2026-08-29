@@ -23,7 +23,15 @@ interface Target {
 export function createMemoryMarketplaceLikeRepository(input: {
   presets: readonly PublishedPreset[];
   collections: readonly PresetCollection[];
-}): MarketplaceLikeRepository & MarketplaceLikeFactSource {
+  bannedMemberIds?: ReadonlySet<string>;
+}): MarketplaceLikeRepository & MarketplaceLikeFactSource & {
+  rebuildCounts(): Promise<void>;
+  setTargetVisibility(
+    kind: MarketplaceLikeTargetKind,
+    targetId: string,
+    visibility: PublishedPreset['visibility'],
+  ): Promise<void>;
+} {
   const presets = new Map(input.presets.map((target) => [target.id, target]));
   const collections = new Map(input.collections.map((target) => [target.id, target]));
   const likes = new Map<string, string>();
@@ -41,7 +49,10 @@ export function createMemoryMarketplaceLikeRepository(input: {
     return target!;
   };
   const count = (kind: MarketplaceLikeTargetKind, id: string) => [...likes.keys()]
-    .filter((value) => value.startsWith(`${kind}\u0000${id}\u0000`)).length;
+    .filter((value) => {
+      const [likeKind, targetId, memberId] = value.split('\u0000');
+      return likeKind === kind && targetId === id && !input.bannedMemberIds?.has(memberId);
+    }).length;
   const historyKey = (kind: MarketplaceLikeTargetKind, id: string) => `${kind}\u0000${id}`;
   const recordCount = (kind: MarketplaceLikeTargetKind, id: string) => {
     rankVersion += 1;
@@ -129,6 +140,16 @@ export function createMemoryMarketplaceLikeRepository(input: {
           likedAt: new Date(likedAt),
         };
       });
+    },
+    async rebuildCounts() {
+      for (const kind of ['preset', 'collection'] as const) {
+        for (const target of targets(kind).values()) recordCount(kind, target.id);
+      }
+    },
+    async setTargetVisibility(kind, targetId, visibility) {
+      const target = targets(kind).get(targetId);
+      if (!target) throw new LikeTargetNotFoundError();
+      target.visibility = visibility;
     },
   };
 }

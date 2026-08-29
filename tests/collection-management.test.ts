@@ -39,7 +39,10 @@ CanonicalPublishedPreset {
   };
 }
 
-function createFixture(identity: AuthenticatedIdentity | null = adaIdentity) {
+function createFixture(
+  identity: AuthenticatedIdentity | null = adaIdentity,
+  communityStatus: 'active' | 'banned' = 'active',
+) {
   const presets = createMemoryPublishedPresetRepository(
     [demoPublishedPreset, ownPreset()],
     tags,
@@ -50,7 +53,11 @@ function createFixture(identity: AuthenticatedIdentity | null = adaIdentity) {
     management: {
       repository: collections,
       sessions: session(identity),
-      members: createMemoryMemberRepository(),
+      members: communityStatus === 'banned' ? createMemoryMemberRepository([{
+        id: 'member-ada', authUserId: adaIdentity.authUserId,
+        handle: 'ada', displayName: 'Ada', bio: '', avatarUrl: null,
+        handleChangedAt: null, createdAt: now, updatedAt: now, communityStatus,
+      }]) : createMemoryMemberRepository(),
       now: () => now,
       createCollectionId: () => 'collection-ada-live',
       createMemberId: () => 'member-ada',
@@ -94,6 +101,13 @@ test('authenticated member creates one owned collection with controlled tags', a
   const anonymous = createFixture(null);
   const rejected = await createCollection(anonymous.api);
   assert.equal(rejected.status, 401);
+});
+
+test('banned member cannot create a community collection', async () => {
+  const { api } = createFixture(adaIdentity, 'banned');
+  const response = await createCollection(api);
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'member_banned');
 });
 
 test('owner atomically adds, sorts, removes, and explicitly upgrades fixed revisions', async () => {

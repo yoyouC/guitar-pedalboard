@@ -26,6 +26,7 @@ test('PostgreSQL likes enforce uniqueness, privacy, two target kinds, and rebuil
       '0004_preset_publication.sql', '0005_preset_revision_management.sql',
       '0006_preset_remix_provenance.sql', '0007_preset_collections.sql',
       '0008_preset_search_indexes.sql', '0009_marketplace_likes.sql',
+      '0010_marketplace_trending.sql',
     ]) {
       await client.query(await readFile(
         new URL(`../server/marketplace/migrations/${migration}`, import.meta.url), 'utf8',

@@ -4,6 +4,7 @@ import { marketplaceClient } from '../marketplace/client';
 import { presetCollectionIdFromPath } from '../marketplace/route';
 import { PresetCollectionManager } from './PresetCollectionManager';
 import { MarketplaceLikeButton } from './MarketplaceLikeButton';
+import { MarketplaceReportForm } from './MarketplaceReportForm';
 
 interface PresetCollectionRouteProps {
   pathname: string;
@@ -92,6 +93,14 @@ export function PresetCollectionRoute({ pathname, onClose, onNavigate }: PresetC
           </p>
           {state.collection.visibility !== 'withdrawn' && (
             <MarketplaceLikeButton kind="collection" targetId={state.collection.id} />
+          )}
+          {(state.collection.visibility === 'public'
+            || state.collection.visibility === 'unlisted') && (
+            <MarketplaceReportForm
+              kind="collection"
+              targetId={state.collection.id}
+              onNavigate={onNavigate}
+            />
           )}
           {state.collection.visibility !== 'public' && (
             <p className="marketplace-detail__warning">

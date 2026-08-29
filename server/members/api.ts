@@ -8,6 +8,7 @@ import {
   HandleUnavailableError,
   MemberUpdateConflictError,
 } from './repository.ts';
+import { communityWriteDenied } from './communityWriteApi.ts';
 
 const ME_PATH = '/api/marketplace/me';
 const PROFILE_PATH = '/api/marketplace/me/profile';
@@ -119,6 +120,8 @@ export function createMemberApi(dependencies: MemberApiDependencies): MemberApi 
       if (request.method === 'PATCH' && url.pathname === PROFILE_PATH) {
         const member = await currentMember(request);
         if (member instanceof Response) return member;
+        const denied = communityWriteDenied(member);
+        if (denied) return denied;
         let update: UpdateMemberProfileInput | null = null;
         try {
           update = parseProfileUpdate(await request.json());

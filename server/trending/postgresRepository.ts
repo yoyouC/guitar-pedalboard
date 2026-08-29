@@ -120,48 +120,55 @@ export async function rebuildMarketplaceTrending(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('SELECT pg_advisory_xact_lock($1)', [MARKETPLACE_LIKE_WRITE_LOCK]);
-    const version = await client.query<{ rank_version: string } & QueryResultRow>(
-      `SELECT nextval('marketplace_trending_rank_version_seq')::text AS rank_version`,
-    );
-    const rankVersion = version.rows[0].rank_version;
-    await client.query(
-      `INSERT INTO marketplace_trending_rebuilds
-         (rank_version, computed_at, window_hours, half_life_hours)
-       VALUES ($1, $2, $3, $4)`,
-      [rankVersion, input.now, input.policy.windowHours, input.policy.halfLifeHours],
-    );
-    for (const kind of ['preset', 'collection'] as const) {
-      const config = CONFIG[kind];
-      await client.query(
-        `WITH scored AS (
-           SELECT active.${config.idColumn}, count(*)::integer AS valid_like_count,
-             sum(CASE
-               WHEN active.created_at >= $2::timestamptz - make_interval(hours => $3)
-               THEN power(
-                 2.0,
-                 -extract(epoch FROM ($2::timestamptz - active.created_at)) / 3600.0 / $4
-               )
-               ELSE 0
-             END)::double precision AS trend_score
-           FROM ${config.likeTable} AS active
-           JOIN marketplace_members AS member ON member.id = active.member_id
-           WHERE member.community_status = 'active' AND active.created_at <= $2::timestamptz
-           GROUP BY active.${config.idColumn}
-         )
-         INSERT INTO ${config.trendingTable}
-           (rank_version, ${config.idColumn}, trend_score, valid_like_count)
-         SELECT $1, scored.${config.idColumn}, scored.trend_score, scored.valid_like_count
-         FROM scored
-         WHERE scored.trend_score > 0`,
-        [rankVersion, input.now, input.policy.windowHours, input.policy.halfLifeHours],
-      );
-    }
+    await rebuildMarketplaceTrendingInTransaction(client, input);
     await client.query('COMMIT');
   } catch (cause) {
     await rollback(client);
     throw cause;
   } finally {
     client.release();
+  }
+}
+
+export async function rebuildMarketplaceTrendingInTransaction(
+  database: PostgresQueryable,
+  input: { now: Date; policy: MarketplaceTrendingPolicy },
+): Promise<void> {
+  await database.query('SELECT pg_advisory_xact_lock($1)', [MARKETPLACE_LIKE_WRITE_LOCK]);
+  const version = await database.query<{ rank_version: string } & QueryResultRow>(
+    `SELECT nextval('marketplace_trending_rank_version_seq')::text AS rank_version`,
+  );
+  const rankVersion = version.rows[0].rank_version;
+  await database.query(
+    `INSERT INTO marketplace_trending_rebuilds
+       (rank_version, computed_at, window_hours, half_life_hours)
+     VALUES ($1, $2, $3, $4)`,
+    [rankVersion, input.now, input.policy.windowHours, input.policy.halfLifeHours],
+  );
+  for (const kind of ['preset', 'collection'] as const) {
+    const config = CONFIG[kind];
+    await database.query(
+      `WITH scored AS (
+         SELECT active.${config.idColumn}, count(*)::integer AS valid_like_count,
+           sum(CASE
+             WHEN active.created_at >= $2::timestamptz - make_interval(hours => $3)
+             THEN power(
+               2.0,
+               -extract(epoch FROM ($2::timestamptz - active.created_at)) / 3600.0 / $4
+             )
+             ELSE 0
+           END)::double precision AS trend_score
+         FROM ${config.likeTable} AS active
+         JOIN marketplace_members AS member ON member.id = active.member_id
+         WHERE member.community_status = 'active' AND active.created_at <= $2::timestamptz
+         GROUP BY active.${config.idColumn}
+       )
+       INSERT INTO ${config.trendingTable}
+         (rank_version, ${config.idColumn}, trend_score, valid_like_count)
+       SELECT $1, scored.${config.idColumn}, scored.trend_score, scored.valid_like_count
+       FROM scored
+       WHERE scored.trend_score > 0`,
+      [rankVersion, input.now, input.policy.windowHours, input.policy.halfLifeHours],
+    );
   }
 }

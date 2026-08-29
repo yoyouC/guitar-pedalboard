@@ -21,6 +21,7 @@ import {
 } from '../../shared/marketplaceManagement.ts';
 import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
+import { communityWriteDenied } from '../members/communityWriteApi.ts';
 
 export interface MarketplaceApiDependencies {
   publishedPresets: PublishedPresetRepository;
@@ -144,6 +145,8 @@ export function createMarketplaceApi({
             handle: `player-${publication.createHandleSuffix()}`,
             now,
           });
+          const denied = communityWriteDenied(member);
+          if (denied) return denied;
           const created = await publication.repository.create({
             id: publication.createPresetId(),
             revisionId: publication.createRevisionId(),
@@ -231,6 +234,10 @@ export function createMarketplaceApi({
               handle: `player-${publication.createHandleSuffix()}`,
               now,
             });
+            if (request.method !== 'GET') {
+              const denied = communityWriteDenied(member);
+              if (denied) return denied;
+            }
             const presetId = decodeURIComponent(managementMatch[1]);
 
             if (manageMatch) {

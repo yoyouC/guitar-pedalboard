@@ -218,6 +218,33 @@ test('profile update rejects a stale optimistic concurrency token', async () => 
   assert.equal((await response.json()).error.code, 'profile_update_conflict');
 });
 
+test('banned member keeps read access but cannot update the community profile', async () => {
+  const members = createMemoryMemberRepository([{
+    id: 'member-ada',
+    authUserId: adaIdentity.authUserId,
+    handle: 'ada',
+    displayName: 'Ada',
+    bio: '',
+    avatarUrl: null,
+    handleChangedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    communityStatus: 'banned',
+  }]);
+  const api = createMemberApi({
+    members,
+    sessions: session(adaIdentity),
+    now: () => now,
+    createId: () => 'member-unused',
+    createHandleSuffix: () => 'unused',
+  });
+
+  assert.equal((await api.fetch(new Request('https://pedalboard.test/api/marketplace/me'))).status, 200);
+  const response = await api.fetch(profilePatch({ displayName: 'Still Ada' }));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'member_banned');
+});
+
 test('member fact-source failure becomes a stable unavailable response', async () => {
   const members = createMemoryMemberRepository();
   members.resolveHandle = async () => { throw new Error('database offline'); };

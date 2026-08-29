@@ -37,6 +37,7 @@ GOOGLE_CLIENT_SECRET=...      # 可选
 CRON_SECRET=至少16字符的独立随机密钥
 MARKETPLACE_TRENDING_WINDOW_HOURS=168       # 可选，默认 7 天
 MARKETPLACE_TRENDING_HALF_LIFE_HOURS=48    # 可选，默认 48 小时
+MARKETPLACE_ADMIN_AUTH_USER_IDS=auth-user-id-1,auth-user-id-2
 ```
 
 Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。魔法链接验证令牌在数据库中哈希保存、五分钟过期并且只能消费一次；本站不启用密码认证。相同邮箱不会自动连接 Google 身份，成员必须从资料面板显式发起“验证并绑定 Google”。
@@ -54,6 +55,12 @@ Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。�
 - `GET /api/marketplace/me/likes`
 - `GET /api/marketplace/popular/presets` 与 `GET /api/marketplace/popular/collections`
 - `GET /api/marketplace/trending/presets` 与 `GET /api/marketplace/trending/collections`
+- `POST /api/marketplace/reports`（已验证成员举报可访问的 Public / Unlisted 内容；同一成员和目标只接受一次）
+- `POST /api/marketplace/infringement-notices`（无需登录的独立正式通知）
+- `GET /api/marketplace/me/moderation` 与 `POST /api/marketplace/moderation/appeals`
+- `GET /api/marketplace/admin/moderation/queue`
+- `POST /api/marketplace/admin/moderation/actions` 与 `POST /api/marketplace/admin/moderation/appeals`
+- `GET /api/marketplace/admin/moderation/audit`
 - `POST /api/marketplace/presets`
 - `GET /api/marketplace/presets/:id`（Public / Unlisted 当前修订）
 - `GET /api/marketplace/presets/:id/revisions/:revisionId`（固定修订永久链接）
@@ -65,6 +72,17 @@ Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。�
 资料与作品管理写入携带 `expectedUpdatedAt` 做乐观并发检查；冲突返回 `409 preset_update_conflict` 及最新 `updatedAt/currentRevisionId/visibility`，客户端不会静默覆盖。公开创作者响应使用字段白名单，不包含邮箱、认证账户或第三方 token。发布请求只接受标题、纯文本介绍、1–5 个标签、schema 版本、完整 Rig，以及可选的来源作品/修订；来源必须真实存在、修订属于该作品、对发布者可引用且不是发布者自己的作品，自己的作品改走作者专属追加修订接口。owner、点赞数与排名全部由服务端拥有。写入前共用 `publishableRig` 边界执行无损 canonical 校验，并自行派生 Pedal、Amp、Cab 与精确 TONE3000 依赖；本机 NAM 和自定义 Cab IR 会被拒绝。
 
 Public 作品进入公开发现；Unlisted 只通过直接链接访问，页面动态设置 `noindex,nofollow`；Withdrawn 对访客与不存在作品使用相同 404，但作者仍可通过管理入口恢复原作品 id。Hidden 不属于作者可写状态。
+
+治理入口把普通成员举报与无需登录的正式侵权通知分开保存。管理员白名单使用认证系统生成的稳定 `auth_user_id`，不是邮箱；生产部署必须显式设置 `MARKETPLACE_ADMIN_AUTH_USER_IDS`，空值表示没有管理员。管理员私有队列包含处理正式通知所需的联系人，但公开内容与作者治理记录不会投影举报人或通知人信息。管理员动作只允许隐藏/恢复内容、封禁/解封成员、关闭举报/通知和复核申诉；没有冒充成员、读取认证凭据或转移作品所有权的接口。每次动作记录 actor、目标、动作、原因和时间。
+
+Hidden 与 Withdrawn 独立：管理员隐藏时保存治理前可见性，恢复或申诉成立时回到原来的 Public、Unlisted 或 Withdrawn。成员封禁会阻止发布、作品/合集管理、资料修改、点赞、举报和申诉等社区写入，但仍允许读取本人记录；既有点赞事实保留在私有事实表，公开计数、Popular 和 Trending 会立即重建并排除这些点赞。解封同样触发重建。
+
+真实数据库验证可指向一次性 PostgreSQL 数据库：
+
+```bash
+MARKETPLACE_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55440/marketplace_test \
+  npx tsx --test tests/marketplace-moderation-postgres.integration.test.ts
+```
 
 部署路由先把公开稳定 URL 转给 Vercel Function，再由最后的 SPA rewrite 处理前端页面。数据库未配置或查询失败时 API 返回稳定的 `503 marketplace_unavailable`；不存在和非公开作品统一返回 `404 published_preset_not_found`。
 

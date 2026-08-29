@@ -14,6 +14,7 @@ import {
   type MarketplaceLikeRepository,
 } from './repository.ts';
 import { MARKETPLACE_LIKE_WRITE_LOCK } from './postgresLock.ts';
+import { BannedMemberError } from '../members/standing.ts';
 
 interface TargetConfig {
   targetTable: string;
@@ -168,6 +169,11 @@ export function createPostgresMarketplaceLikeRepository(pool: Pool): Marketplace
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock($1)', [MARKETPLACE_LIKE_WRITE_LOCK]);
+        const standing = await client.query<{ community_status: 'active' | 'banned' } & QueryResultRow>(
+          `SELECT community_status FROM marketplace_members WHERE id = $1 FOR SHARE`,
+          [memberId],
+        );
+        if (standing.rows[0]?.community_status === 'banned') throw new BannedMemberError();
         const target = await client.query<{ creator_id: string } & QueryResultRow>(
           `SELECT creator_id FROM ${config.targetTable}
            WHERE id = $1 AND visibility IN ('public', 'unlisted') FOR SHARE`,
@@ -276,44 +282,56 @@ export async function rebuildMarketplaceLikeCounts(pool: Pool, now: Date): Promi
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('SELECT pg_advisory_xact_lock($1)', [MARKETPLACE_LIKE_WRITE_LOCK]);
-    for (const kind of ['preset', 'collection'] as const) {
-      const config = CONFIG[kind];
-      await client.query(
-        `INSERT INTO ${config.countTable} (${config.idColumn}, like_count, computed_at)
-         SELECT ${config.idColumn}, count(*)::integer, $1
-         FROM ${config.likeTable} GROUP BY ${config.idColumn}
-         ON CONFLICT (${config.idColumn}) DO UPDATE SET
-           like_count = EXCLUDED.like_count, computed_at = EXCLUDED.computed_at`,
-        [now],
-      );
-      await client.query(
-        `DELETE FROM ${config.countTable} AS counts
-         WHERE NOT EXISTS (
-           SELECT 1 FROM ${config.likeTable} AS active
-           WHERE active.${config.idColumn} = counts.${config.idColumn}
-         )`,
-      );
-    }
-    const version = await client.query<{ rank_version: string } & QueryResultRow>(
-      `SELECT nextval('marketplace_like_rank_version_seq')::text AS rank_version`,
-    );
-    for (const kind of ['preset', 'collection'] as const) {
-      const config = CONFIG[kind];
-      await client.query(
-        `INSERT INTO ${config.historyTable}
-           (${config.idColumn}, rank_version, like_count, computed_at)
-         SELECT target.id, $1, COALESCE(counts.like_count, 0), $2
-         FROM ${config.targetTable} AS target
-         LEFT JOIN ${config.countTable} AS counts ON counts.${config.idColumn} = target.id`,
-        [version.rows[0].rank_version, now],
-      );
-    }
+    await rebuildMarketplaceLikeCountsInTransaction(client, now);
     await client.query('COMMIT');
   } catch (cause) {
     await rollback(client);
     throw cause;
   } finally {
     client.release();
+  }
+}
+
+export async function rebuildMarketplaceLikeCountsInTransaction(
+  database: PostgresQueryable,
+  now: Date,
+): Promise<void> {
+  await database.query('SELECT pg_advisory_xact_lock($1)', [MARKETPLACE_LIKE_WRITE_LOCK]);
+  for (const kind of ['preset', 'collection'] as const) {
+    const config = CONFIG[kind];
+    await database.query(
+      `INSERT INTO ${config.countTable} (${config.idColumn}, like_count, computed_at)
+       SELECT active.${config.idColumn}, count(*)::integer, $1
+       FROM ${config.likeTable} AS active
+       JOIN marketplace_members AS member ON member.id = active.member_id
+       WHERE member.community_status = 'active'
+       GROUP BY active.${config.idColumn}
+       ON CONFLICT (${config.idColumn}) DO UPDATE SET
+         like_count = EXCLUDED.like_count, computed_at = EXCLUDED.computed_at`,
+      [now],
+    );
+    await database.query(
+      `DELETE FROM ${config.countTable} AS counts
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ${config.likeTable} AS active
+         JOIN marketplace_members AS member ON member.id = active.member_id
+         WHERE active.${config.idColumn} = counts.${config.idColumn}
+           AND member.community_status = 'active'
+       )`,
+    );
+  }
+  const version = await database.query<{ rank_version: string } & QueryResultRow>(
+    `SELECT nextval('marketplace_like_rank_version_seq')::text AS rank_version`,
+  );
+  for (const kind of ['preset', 'collection'] as const) {
+    const config = CONFIG[kind];
+    await database.query(
+      `INSERT INTO ${config.historyTable}
+         (${config.idColumn}, rank_version, like_count, computed_at)
+       SELECT target.id, $1, COALESCE(counts.like_count, 0), $2
+       FROM ${config.targetTable} AS target
+       LEFT JOIN ${config.countTable} AS counts ON counts.${config.idColumn} = target.id`,
+      [version.rows[0].rank_version, now],
+    );
   }
 }

@@ -90,7 +90,16 @@ const adaIdentity: AuthenticatedIdentity = {
 function publicationApi(
   repository = createMemoryPublishedPresetRepository([], controlledTags),
   identity: AuthenticatedIdentity | null = adaIdentity,
+  communityStatus: 'active' | 'banned' = 'active',
 ) {
+  const members = communityStatus === 'banned' ? createMemoryMemberRepository([{
+    id: 'member-ada', authUserId: adaIdentity.authUserId,
+    handle: 'ada', displayName: 'Ada', bio: '', avatarUrl: null,
+    handleChangedAt: null,
+    createdAt: new Date('2026-08-29T00:00:00.000Z'),
+    updatedAt: new Date('2026-08-29T00:00:00.000Z'),
+    communityStatus,
+  }]) : createMemoryMemberRepository();
   return {
     repository,
     api: createMarketplaceApi({
@@ -98,7 +107,7 @@ function publicationApi(
       publication: {
         repository,
         sessions: { async verify() { return identity; } },
-        members: createMemoryMemberRepository(),
+        members,
         now: () => new Date('2026-08-29T10:00:00.000Z'),
         createPresetId: () => 'preset-ada-crunch',
         createRevisionId: () => 'revision-ada-crunch-1',
@@ -284,6 +293,14 @@ test('publication rejects anonymous and forged ownership without leaving a work'
   assert.equal(forgedResponse.status, 400);
   assert.equal((await forgedResponse.json()).error.code, 'invalid_publication');
   assert.equal(await forged.repository.count(), 0);
+});
+
+test('banned member cannot publish a new community work', async () => {
+  const banned = publicationApi(undefined, adaIdentity, 'banned');
+  const response = await banned.api.fetch(publishRequest());
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'member_banned');
+  assert.equal(await banned.repository.count(), 0);
 });
 
 test('schema, metadata, tag, and local-resource failures leave no partial publication', async () => {

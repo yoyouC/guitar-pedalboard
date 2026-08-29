@@ -1,5 +1,6 @@
 import type {
   CanonicalPublishedPresetRevision,
+  MarketplaceAuthorModerationCase,
   MarketplaceLikeState,
   MarketplaceMyLikes,
   MarketplaceRankingPage,
@@ -403,4 +404,27 @@ export function parseMarketplaceRankingPage(value: unknown): MarketplaceRankingP
     || (value.nextCursor !== null && typeof value.nextCursor !== 'string')
   ) return null;
   return value as unknown as MarketplaceRankingPage;
+}
+
+export function parseMarketplaceAuthorModerationCases(
+  value: unknown,
+): MarketplaceAuthorModerationCase[] | null {
+  if (!Array.isArray(value) || !value.every((item) => {
+    if (!isRecord(item) || !hasOnlyKeys(item, [
+      'actionId', 'targetKind', 'targetId', 'action', 'reason', 'createdAt', 'appeal',
+    ])) return false;
+    const appeal = item.appeal;
+    return typeof item.actionId === 'string'
+      && (item.targetKind === 'preset' || item.targetKind === 'collection')
+      && typeof item.targetId === 'string' && item.action === 'hide'
+      && typeof item.reason === 'string'
+      && typeof item.createdAt === 'string' && Number.isFinite(Date.parse(item.createdAt))
+      && (appeal === null || (
+        isRecord(appeal) && hasOnlyKeys(appeal, ['id', 'status', 'statement'])
+        && typeof appeal.id === 'string'
+        && ['pending', 'upheld', 'rejected'].includes(String(appeal.status))
+        && typeof appeal.statement === 'string'
+      ));
+  })) return null;
+  return value as MarketplaceAuthorModerationCase[];
 }

@@ -20,7 +20,12 @@ export function createMemoryPresetCollectionRepository(
   initialCollections: readonly PresetCollection[],
   presets: PresetCollectionReferenceSource,
   tags: readonly MarketplaceTag[],
-): PresetCollectionRepository & PresetCollectionManagementRepository {
+): PresetCollectionRepository & PresetCollectionManagementRepository & {
+  setModerationVisibility(
+    collectionId: string,
+    visibility: PresetCollection['visibility'],
+  ): Promise<void>;
+} {
   const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
   const collectionsById = new Map<string, StoredPresetCollection>(initialCollections.map((item) => [
     item.id,
@@ -170,6 +175,12 @@ export function createMemoryPresetCollectionRepository(
         return null;
       }
       return project(stored);
+    },
+
+    async setModerationVisibility(collectionId, visibility) {
+      const stored = collectionsById.get(collectionId);
+      if (!stored) throw new PresetCollectionAccessError();
+      collectionsById.set(collectionId, { ...stored, visibility });
     },
   };
 }

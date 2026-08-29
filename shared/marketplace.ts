@@ -121,6 +121,24 @@ export interface MarketplaceRankingPage {
   nextCursor: string | null;
 }
 
+export type MarketplaceModerationTargetKind = 'preset' | 'collection';
+export type MarketplaceModerationReportReason =
+  | 'copyright' | 'spam' | 'impersonation' | 'inappropriate';
+
+export interface MarketplaceAuthorModerationCase {
+  actionId: string;
+  targetKind: MarketplaceModerationTargetKind;
+  targetId: string;
+  action: 'hide';
+  reason: string;
+  createdAt: string;
+  appeal: null | {
+    id: string;
+    status: 'pending' | 'upheld' | 'rejected';
+    statement: string;
+  };
+}
+
 export interface PublishedPresetSearchRequest {
   text?: string;
   tagIds?: string[];

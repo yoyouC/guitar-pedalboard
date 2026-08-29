@@ -2,10 +2,13 @@ import type {
   AppendPublishedPresetRevisionRequest,
   CreatePresetCollectionRequest,
   MarketplaceTag,
+  MarketplaceAuthorModerationCase,
   MarketplaceLikeState,
   MarketplaceLikeTargetKind,
   MarketplaceMyLikes,
   MarketplaceRankingPage,
+  MarketplaceModerationReportReason,
+  MarketplaceModerationTargetKind,
   PresetCollection,
   PresetCollectionConcurrencyState,
   PublishedPresetSearchPage,
@@ -22,6 +25,7 @@ import type {
 } from '../../shared/marketplace';
 import {
   parseManagedPublishedPreset,
+  parseMarketplaceAuthorModerationCases,
   parseMarketplaceLikeState,
   parseMarketplaceMyLikes,
   parseMarketplaceRankingPage,
@@ -108,6 +112,22 @@ export interface MarketplaceClient {
     kind: MarketplaceLikeTargetKind,
     request?: { limit?: number; cursor?: string },
   ): Promise<MarketplaceRankingPage>;
+  submitReport(request: {
+    targetKind: MarketplaceModerationTargetKind;
+    targetId: string;
+    reason: MarketplaceModerationReportReason;
+    details: string;
+  }): Promise<void>;
+  submitInfringementNotice(request: {
+    claimantName: string;
+    claimantEmail: string;
+    targetKind: MarketplaceModerationTargetKind;
+    targetId: string;
+    rightsStatement: string;
+    goodFaith: true;
+  }): Promise<void>;
+  getMyModerationCases(): Promise<MarketplaceAuthorModerationCase[]>;
+  submitModerationAppeal(actionId: string, statement: string): Promise<void>;
 }
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -136,6 +156,21 @@ async function publicationError(response: Response): Promise<MarketplaceClientEr
       }
       if (error.code === 'like_target_not_found') {
         return new MarketplaceClientError('not_found', '点赞目标当前不可访问。');
+      }
+      if (error.code === 'member_banned') {
+        return new MarketplaceClientError('forbidden', '账号已被禁止执行社区写操作。');
+      }
+      if (error.code === 'duplicate_report') {
+        return new MarketplaceClientError('invalid_update', '你已经举报过这个内容。');
+      }
+      if (error.code === 'moderation_target_not_found') {
+        return new MarketplaceClientError('not_found', '治理目标当前不可访问。');
+      }
+      if (error.code === 'appeal_forbidden') {
+        return new MarketplaceClientError('forbidden', '只有作品作者可以对这次处理提出申诉。');
+      }
+      if (error.code === 'moderation_transition_conflict') {
+        return new MarketplaceClientError('invalid_update', '治理状态已经变化，请重新载入。');
       }
       if (error.code === 'invalid_publication') {
         return new MarketplaceClientError(
@@ -543,7 +578,45 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
     async listTrending(kind, request = {}) {
       return rankingRequest(fetchResponse, 'trending', kind, request);
     },
+
+    async submitReport(request) {
+      await moderationWrite(fetchResponse, '/api/marketplace/reports', request);
+    },
+
+    async submitInfringementNotice(request) {
+      await moderationWrite(fetchResponse, '/api/marketplace/infringement-notices', request);
+    },
+
+    async getMyModerationCases() {
+      const response = await fetchResponse('/api/marketplace/me/moderation').catch(() => null);
+      if (!response) throw new MarketplaceClientError('network', '无法连接音色广场。');
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { cases?: unknown };
+      const cases = parseMarketplaceAuthorModerationCases(body.cases);
+      if (!cases) throw new MarketplaceClientError('invalid_response', '治理记录格式无效。');
+      return cases;
+    },
+
+    async submitModerationAppeal(actionId, statement) {
+      await moderationWrite(fetchResponse, '/api/marketplace/moderation/appeals', {
+        actionId, statement,
+      });
+    },
   };
+}
+
+async function moderationWrite(
+  fetchResponse: Fetch,
+  path: string,
+  body: object,
+): Promise<void> {
+  const response = await fetchResponse(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!response) throw new MarketplaceClientError('network', '无法连接音色广场。');
+  if (!response.ok) throw await publicationError(response);
 }
 
 async function rankingRequest(

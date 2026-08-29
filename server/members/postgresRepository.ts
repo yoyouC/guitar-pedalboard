@@ -23,6 +23,7 @@ interface MemberRow extends QueryResultRow {
   handle_changed_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  community_status: 'active' | 'banned';
 }
 
 function date(value: Date | string): Date {
@@ -40,6 +41,7 @@ function record(row: MemberRow): MemberRecord {
     handleChangedAt: row.handle_changed_at ? date(row.handle_changed_at) : null,
     createdAt: date(row.created_at),
     updatedAt: date(row.updated_at),
+    communityStatus: row.community_status,
   };
 }
 
@@ -60,7 +62,8 @@ const MEMBER_SELECT = `SELECT
   member.avatar_url,
   member.handle_changed_at,
   member.created_at,
-  member.updated_at
+  member.updated_at,
+  member.community_status
 FROM marketplace_members AS member
 LEFT JOIN marketplace_member_auth_identities AS identity ON identity.member_id = member.id`;
 
@@ -106,6 +109,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
           handleChangedAt: null,
           createdAt: input.now,
           updatedAt: input.now,
+          communityStatus: 'active',
         };
       } catch (cause) {
         await rollback(client);
@@ -176,7 +180,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
            WHERE member.id = $1 AND identity.member_id = member.id
            RETURNING member.id, identity.auth_user_id, member.handle, member.display_name,
              member.bio, member.avatar_url, member.handle_changed_at,
-             member.created_at, member.updated_at`,
+             member.created_at, member.updated_at, member.community_status`,
           [
             memberId,
             changesHandle ? update.handle : current.handle,

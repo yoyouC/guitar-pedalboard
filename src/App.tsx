@@ -41,6 +41,7 @@ import { CreatorProfileRoute } from './components/CreatorProfileRoute';
 import { PresetCollectionRoute } from './components/PresetCollectionRoute';
 import { PublishedPresetSearchRoute } from './components/PublishedPresetSearchRoute';
 import { MarketplaceLikesRoute } from './components/MarketplaceLikesRoute';
+import { MarketplaceModerationRoute } from './components/MarketplaceModerationRoute';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -397,6 +398,12 @@ export default function App() {
         <button className="marketplace-demo-link" type="button" onClick={() => navigate('/marketplace/me/likes')}>
           我的点赞
         </button>
+        <button className="marketplace-demo-link" type="button" onClick={() => navigate('/marketplace/me/moderation')}>
+          我的治理记录
+        </button>
+        <button className="marketplace-demo-link" type="button" onClick={() => navigate('/marketplace/infringement-notice')}>
+          侵权通知
+        </button>
         <button
           className="marketplace-demo-link"
           type="button"
@@ -431,6 +438,11 @@ export default function App() {
         onNavigate={navigate}
       />
       <MarketplaceLikesRoute pathname={pathname} onClose={() => navigate('/')} onNavigate={navigate} />
+      <MarketplaceModerationRoute
+        pathname={pathname}
+        onClose={() => navigate('/')}
+        onNavigate={navigate}
+      />
 
       <TopBar
         inputType={inputType}

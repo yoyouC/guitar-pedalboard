@@ -432,3 +432,92 @@ test('official client reads and mutates likes without accepting private trajecto
     (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
   );
 });
+
+test('official client submits moderation requests, validates author cases, and preserves governance errors', async () => {
+  const calls: Array<{ path: string; method?: string; body?: unknown }> = [];
+  const moderationCase = {
+    actionId: 'action-hide-1',
+    targetKind: 'preset',
+    targetId: demoPublishedPreset.id,
+    action: 'hide',
+    reason: 'Confirmed impersonation.',
+    createdAt: '2026-08-29T14:00:00.000Z',
+    appeal: null,
+  } as const;
+  const client = createMarketplaceClient(async (input, init) => {
+    calls.push({
+      path: String(input),
+      method: init?.method,
+      ...(typeof init?.body === 'string' ? { body: JSON.parse(init.body) } : {}),
+    });
+    if (String(input) === '/api/marketplace/me/moderation') {
+      return Response.json({ cases: [moderationCase] });
+    }
+    return new Response(null, { status: 201 });
+  });
+
+  await client.submitReport({
+    targetKind: 'preset', targetId: demoPublishedPreset.id,
+    reason: 'impersonation', details: 'The author identity is misleading.',
+  });
+  await client.submitInfringementNotice({
+    claimantName: 'Rights Holder', claimantEmail: 'rights@example.test',
+    targetKind: 'preset', targetId: demoPublishedPreset.id,
+    rightsStatement: 'I own the identified work and request its review.', goodFaith: true,
+  });
+  assert.deepEqual(await client.getMyModerationCases(), [moderationCase]);
+  await client.submitModerationAppeal('action-hide-1', 'The attribution is accurate.');
+  assert.deepEqual(calls, [
+    {
+      path: '/api/marketplace/reports', method: 'POST',
+      body: {
+        targetKind: 'preset', targetId: demoPublishedPreset.id,
+        reason: 'impersonation', details: 'The author identity is misleading.',
+      },
+    },
+    {
+      path: '/api/marketplace/infringement-notices', method: 'POST',
+      body: {
+        claimantName: 'Rights Holder', claimantEmail: 'rights@example.test',
+        targetKind: 'preset', targetId: demoPublishedPreset.id,
+        rightsStatement: 'I own the identified work and request its review.', goodFaith: true,
+      },
+    },
+    { path: '/api/marketplace/me/moderation', method: undefined },
+    {
+      path: '/api/marketplace/moderation/appeals', method: 'POST',
+      body: { actionId: 'action-hide-1', statement: 'The attribution is accurate.' },
+    },
+  ]);
+
+  const malformed = createMarketplaceClient(async () => Response.json({
+    cases: [{ ...moderationCase, actorAuthUserId: 'auth-admin' }],
+  }));
+  await assert.rejects(
+    () => malformed.getMyModerationCases(),
+    (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
+  );
+
+  const duplicate = createMarketplaceClient(async () => Response.json({
+    error: { code: 'duplicate_report', message: 'duplicate' },
+  }, { status: 409 }));
+  await assert.rejects(
+    () => duplicate.submitReport({
+      targetKind: 'preset', targetId: demoPublishedPreset.id,
+      reason: 'spam', details: 'Already reported.',
+    }),
+    (error) => error instanceof MarketplaceClientError
+      && error.code === 'invalid_update'
+      && error.message === '你已经举报过这个内容。',
+  );
+
+  const banned = createMarketplaceClient(async () => Response.json({
+    error: { code: 'member_banned', message: 'banned' },
+  }, { status: 403 }));
+  await assert.rejects(
+    () => banned.submitModerationAppeal('action-hide-1', 'Please review.'),
+    (error) => error instanceof MarketplaceClientError
+      && error.code === 'forbidden'
+      && error.message === '账号已被禁止执行社区写操作。',
+  );
+});

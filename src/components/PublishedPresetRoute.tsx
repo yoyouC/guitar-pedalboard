@@ -13,6 +13,7 @@ import { publishedPresetRouteFromPath } from '../marketplace/route';
 import { rigStore } from '../state/useRig';
 import { PublishedPresetManager } from './PublishedPresetManager';
 import { MarketplaceLikeButton } from './MarketplaceLikeButton';
+import { MarketplaceReportForm } from './MarketplaceReportForm';
 
 interface DisplayedPreset {
   id: string;
@@ -228,6 +229,14 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
             </p>
             {!loadState.displayed.fixedRevision && loadState.displayed.visibility !== 'withdrawn' && (
               <MarketplaceLikeButton kind="preset" targetId={loadState.displayed.id} />
+            )}
+            {(loadState.displayed.visibility === 'public'
+              || loadState.displayed.visibility === 'unlisted') && (
+              <MarketplaceReportForm
+                kind="preset"
+                targetId={loadState.displayed.id}
+                onNavigate={onNavigate}
+              />
             )}
           </div>
 

@@ -3502,6 +3502,47 @@ body.midi-learn-mode input:disabled {
 
 .marketplace-like { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .marketplace-like small { opacity: 0.72; }
+.marketplace-report { display: grid; gap: 10px; margin-top: 12px; }
+.marketplace-report__buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.marketplace-report form,
+.marketplace-report label,
+.marketplace-moderation__form,
+.marketplace-moderation__form label { display: grid; gap: 7px; }
+.marketplace-report form,
+.marketplace-moderation__form {
+  max-width: 680px;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(8, 12, 17, 0.5);
+}
+.marketplace-report select,
+.marketplace-report textarea,
+.marketplace-moderation__form input:not([type='checkbox']),
+.marketplace-moderation__form select,
+.marketplace-moderation__form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+}
+.marketplace-report textarea,
+.marketplace-moderation__form textarea { min-height: 100px; resize: vertical; }
+.marketplace-moderation__check { grid-template-columns: auto 1fr; align-items: start; }
+.marketplace-moderation__case {
+  display: grid;
+  gap: 9px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: #20252c;
+}
+.marketplace-moderation__case h3,
+.marketplace-moderation__case p { margin: 0; }
 .marketplace-ranking-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
 .marketplace-ranking article { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; padding: 11px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
 .marketplace-ranking article small { grid-column: 2; }

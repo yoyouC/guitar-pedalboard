@@ -1,5 +1,9 @@
 import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
+import {
+  communityWriteDenied,
+  communityWriteErrorResponse,
+} from '../members/communityWriteApi.ts';
 import type { MarketplaceLikeTargetKind } from '../../shared/marketplace.ts';
 import {
   InvalidTrendingCursorError,
@@ -37,13 +41,17 @@ export function createMarketplaceLikesApi(input: {
   createMemberId(): string;
   createHandleSuffix(): string;
 }): MarketplaceLikesApi {
-  const memberId = async (request: Request): Promise<string | null> => {
+  const memberId = async (request: Request, requireWrite = false): Promise<string | null | Response> => {
     const identity = await input.sessions.verify(request);
     if (!identity) return null;
     const member = await input.members.findOrCreateForIdentity({
       id: input.createMemberId(), identity,
       handle: `player-${input.createHandleSuffix()}`, now: input.now(),
     });
+    if (requireWrite) {
+      const denied = communityWriteDenied(member);
+      if (denied) return denied;
+    }
     return member.id;
   };
 
@@ -56,7 +64,8 @@ export function createMarketplaceLikesApi(input: {
         if (likeMatch && ['GET', 'PUT', 'DELETE'].includes(request.method)) {
           const kind = targetKind(likeMatch[1]);
           const targetId = decodeURIComponent(likeMatch[2]);
-          const currentMemberId = await memberId(request);
+          const currentMemberId = await memberId(request, request.method !== 'GET');
+          if (currentMemberId instanceof Response) return currentMemberId;
           if (request.method === 'GET') {
             return Response.json({
               state: await input.repository.getState(kind, targetId, currentMemberId),
@@ -75,6 +84,7 @@ export function createMarketplaceLikesApi(input: {
         }
         if (request.method === 'GET' && url.pathname === MY_LIKES_PATH) {
           const currentMemberId = await memberId(request);
+          if (currentMemberId instanceof Response) return currentMemberId;
           if (!currentMemberId) return error(401, 'authentication_required', 'Authentication required');
           return Response.json({ likes: await input.repository.listMine(currentMemberId) });
         }
@@ -109,6 +119,8 @@ export function createMarketplaceLikesApi(input: {
         if (cause instanceof SelfLikeForbiddenError) {
           return error(403, 'self_like_forbidden', 'Members cannot like their own content');
         }
+        const denied = communityWriteErrorResponse(cause);
+        if (denied) return denied;
         if (cause instanceof InvalidPopularCursorError) {
           return error(400, 'invalid_popular_cursor', 'Popular cursor is invalid');
         }

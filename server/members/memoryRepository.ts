@@ -14,7 +14,10 @@ import {
 
 export function createMemoryMemberRepository(
   initialMembers: readonly MemberRecord[] = [],
-): MemberRepository & { count(): Promise<number> } {
+): MemberRepository & {
+  count(): Promise<number>;
+  setCommunityStatus(memberId: string, status: 'active' | 'banned'): Promise<void>;
+} {
   const membersById = new Map(initialMembers.map((member) => [member.id, { ...member }]));
   const memberIdsByAuthUserId = new Map(
     initialMembers.flatMap((member) => member.authUserId ? [[member.authUserId, member.id]] : []),
@@ -88,6 +91,10 @@ export function createMemoryMemberRepository(
 
     async count() {
       return membersById.size;
+    },
+    async setCommunityStatus(memberId: string, communityStatus: 'active' | 'banned') {
+      const member = currentMember(memberId);
+      membersById.set(memberId, { ...member, communityStatus });
     },
   };
 }
