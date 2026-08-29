@@ -42,3 +42,36 @@ test('email verification keeps a publication draft in place', async ({ page }) =
   await expect(dialog.getByLabel('清音 / Clean')).toBeChecked();
   await expect(page.getByRole('heading', { name: '验证邮箱' })).toBeVisible();
 });
+
+test('account recovery opens its returned email verification entry', async ({ page }) => {
+  const now = '2026-08-29T10:00:00.000Z';
+  await page.route('**/api/marketplace/me', async (route) => route.fulfill({
+    json: { member: {
+      id: 'member-ada', handle: 'ada', displayName: 'Ada', bio: '', avatarUrl: null,
+      handleChangedAt: null, nextHandleChangeAt: null, createdAt: now, updatedAt: now,
+    } },
+  }));
+  await page.route('**/api/marketplace/me/deletion', async (route) => {
+    if (route.request().method() === 'DELETE') {
+      return route.fulfill({
+        status: 403,
+        json: { error: {
+          code: 'email_verification_required',
+          message: 'Verify your email before recovering this account',
+          verificationUrl: '/login?verify=email&return=%2Fmarketplace%2Faccount',
+        } },
+      });
+    }
+    return route.fulfill({ json: { deletion: {
+      status: 'pending', requestedAt: now, purgeAfter: '2026-09-28T10:00:00.000Z',
+    } } });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: '登录 / 创作者' }).click();
+  await page.getByRole('button', { name: '取消注销并恢复账户' }).click();
+
+  await expect(page.getByRole('heading', { name: '验证邮箱' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '发送邮箱验证链接' })).toBeVisible();
+  await expect(page.getByLabel('邮箱')).toHaveCount(0);
+});

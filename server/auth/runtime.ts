@@ -1,6 +1,9 @@
 import type { Pool } from 'pg';
 import { createPlatformAuth } from './betterAuth.ts';
-import { createResendMagicLinkSender } from './resend.ts';
+import {
+  createResendEmailVerificationSender,
+  createResendMagicLinkSender,
+} from './resend.ts';
 
 export class AuthConfigurationError extends Error {}
 
@@ -37,6 +40,10 @@ export function createRuntimeAuth(database: Pool) {
     secret,
     database,
     sendMagicLink: createResendMagicLinkSender({
+      apiKey: resendApiKey,
+      from: emailFrom,
+    }),
+    sendEmailVerification: createResendEmailVerificationSender({
       apiKey: resendApiKey,
       from: emailFrom,
     }),

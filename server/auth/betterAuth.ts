@@ -2,6 +2,9 @@ import { betterAuth, type BetterAuthOptions } from 'better-auth';
 import { magicLink, type MagicLinkOptions } from 'better-auth/plugins/magic-link';
 
 export type MagicLinkSender = MagicLinkOptions['sendMagicLink'];
+export type EmailVerificationSender = NonNullable<
+  BetterAuthOptions['emailVerification']
+>['sendVerificationEmail'];
 
 export type GoogleProviderOptions = NonNullable<
   NonNullable<BetterAuthOptions['socialProviders']>['google']
@@ -12,6 +15,7 @@ export interface PlatformAuthDependencies {
   secret: string;
   database?: BetterAuthOptions['database'];
   sendMagicLink: MagicLinkSender;
+  sendEmailVerification: NonNullable<EmailVerificationSender>;
   google?: GoogleProviderOptions;
   trustedOrigins?: string[];
 }
@@ -21,6 +25,7 @@ export function createPlatformAuthOptions({
   secret,
   database,
   sendMagicLink,
+  sendEmailVerification,
   google,
   trustedOrigins,
 }: PlatformAuthDependencies): BetterAuthOptions {
@@ -45,9 +50,7 @@ export function createPlatformAuthOptions({
     verification: { modelName: 'marketplace_auth_verifications' },
     emailVerification: {
       expiresIn: 5 * 60,
-      sendVerificationEmail: async ({ user, url, token }) => {
-        await sendMagicLink({ email: user.email, url, token });
-      },
+      sendVerificationEmail: sendEmailVerification,
     },
     plugins: [
       magicLink({

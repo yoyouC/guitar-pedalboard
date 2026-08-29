@@ -1,5 +1,50 @@
+import type { PlatformAuth } from './betterAuth.ts';
+
 export interface AuthenticationHandler {
   handler(request: Request): Promise<Response>;
+}
+
+export function createSessionBoundAuthenticationHandler(
+  auth: PlatformAuth,
+): AuthenticationHandler {
+  return {
+    async handler(request) {
+      const url = new URL(request.url);
+      if (
+        request.method !== 'POST'
+        || url.pathname !== '/api/auth/send-verification-email'
+      ) return auth.handler(request);
+
+      const session = await auth.api.getSession({ headers: request.headers });
+      if (!session) {
+        return Response.json(
+          { error: { code: 'authentication_required', message: 'Authentication required' } },
+          { status: 401 },
+        );
+      }
+
+      let callbackURL: string | undefined;
+      try {
+        const body = await request.json() as { callbackURL?: unknown };
+        if (body.callbackURL !== undefined && typeof body.callbackURL !== 'string') {
+          throw new Error('invalid callback URL');
+        }
+        callbackURL = body.callbackURL;
+      } catch {
+        return Response.json(
+          { error: { code: 'invalid_auth_request', message: 'Invalid authentication request' } },
+          { status: 400 },
+        );
+      }
+
+      return auth.handler(new Request(request, {
+        body: JSON.stringify({
+          email: session.user.email,
+          ...(callbackURL === undefined ? {} : { callbackURL }),
+        }),
+      }));
+    },
+  };
 }
 
 export interface AuthenticationApi {

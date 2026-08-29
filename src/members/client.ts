@@ -85,14 +85,13 @@ export async function requestMagicLink(
 }
 
 export async function requestEmailVerification(
-  email: string,
   callbackURL: string,
   fetch: FetchLike = globalThis.fetch,
 ): Promise<void> {
   const response = await fetch('/api/auth/send-verification-email', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email, callbackURL }),
+    body: JSON.stringify({ callbackURL }),
   });
   if (!response.ok) throw await responseError(response, 'email_verification_unavailable');
 }

@@ -95,12 +95,11 @@ test('email verification uses the current-session verification endpoint', async 
     return Response.json({ status: true });
   };
 
-  await requestEmailVerification('ada@example.test', '/marketplace/presets/preset-1', fetch);
+  await requestEmailVerification('/marketplace/presets/preset-1', fetch);
 
   assert.equal(calls[0].input, '/api/auth/send-verification-email');
   assert.equal(calls[0].init?.method, 'POST');
   assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
-    email: 'ada@example.test',
     callbackURL: '/marketplace/presets/preset-1',
   });
 });

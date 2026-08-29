@@ -7,6 +7,7 @@ import { demoPublishedPreset } from './server/marketplace/demoPreset.ts'
 import { createMemoryPublishedPresetRepository } from './server/marketplace/memoryRepository.ts'
 import { memoryAdapter } from 'better-auth/adapters/memory'
 import { createPlatformAuth } from './server/auth/betterAuth.ts'
+import { createSessionBoundAuthenticationHandler } from './server/auth/api.ts'
 import { createBetterAuthSessionVerifier } from './server/auth/betterAuthSession.ts'
 import { createMemberApi } from './server/members/api.ts'
 import { createMemoryMemberRepository } from './server/members/memoryRepository.ts'
@@ -72,7 +73,11 @@ function serveMarketplaceApi(): Plugin {
     sendMagicLink: ({ email, url }) => {
       console.info(`[dev auth] ${email}: ${url}`)
     },
+    sendEmailVerification: async ({ user, url }) => {
+      console.info(`[dev auth verification] ${user.email}: ${url}`)
+    },
   })
+  const sessionBoundAuth = createSessionBoundAuthenticationHandler(auth)
   const demoCreatedAt = new Date(demoPublishedPreset.createdAt)
   const members = createMemoryMemberRepository([{
     id: demoPublishedPreset.creator.id,
@@ -379,7 +384,7 @@ function serveMarketplaceApi(): Plugin {
             ...(body && body.length > 0 ? { body: body.toString() } : {}),
           })
           const response = req.url.startsWith('/api/auth/')
-            ? await auth.handler(request)
+            ? await sessionBoundAuth.handler(request)
             : req.url.startsWith('/api/marketplace/me/export')
               || req.url.startsWith('/api/marketplace/me/deletion')
               || req.url.startsWith('/api/internal/marketplace/purge-deleted-accounts')

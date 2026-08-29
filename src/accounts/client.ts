@@ -7,10 +7,12 @@ type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 
 export class MarketplaceAccountClientError extends Error {
   readonly code: string;
+  readonly verificationUrl?: string;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, verificationUrl?: string) {
     super(message);
     this.code = code;
+    this.verificationUrl = verificationUrl;
   }
 }
 
@@ -20,9 +22,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function responseError(response: Response): Promise<MarketplaceAccountClientError> {
   try {
-    const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
+    const body = await response.json() as {
+      error?: { code?: unknown; message?: unknown; verificationUrl?: unknown };
+    };
     if (typeof body.error?.code === 'string' && typeof body.error.message === 'string') {
-      return new MarketplaceAccountClientError(body.error.code, body.error.message);
+      const verificationUrl = typeof body.error.verificationUrl === 'string'
+        && body.error.verificationUrl.startsWith('/')
+        && !body.error.verificationUrl.startsWith('//')
+        ? body.error.verificationUrl
+        : undefined;
+      return new MarketplaceAccountClientError(
+        body.error.code,
+        body.error.message,
+        verificationUrl,
+      );
     }
   } catch {
     // Stable fallback below owns malformed error responses.

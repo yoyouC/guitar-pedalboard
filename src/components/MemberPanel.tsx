@@ -4,6 +4,7 @@ import type { MarketplaceAccountDeletion } from '../../shared/account.ts';
 import {
   fetchMarketplaceAccountDeletion,
   fetchMarketplaceAccountExport,
+  MarketplaceAccountClientError,
   recoverMarketplaceAccount,
   requestMarketplaceAccountDeletion,
 } from '../accounts/client.ts';
@@ -20,6 +21,7 @@ import { CreatePresetCollectionForm } from './CreatePresetCollectionForm.tsx';
 import {
   MARKETPLACE_EMAIL_VERIFICATION_EVENT,
   parseMarketplaceEmailVerificationRequest,
+  requestMarketplaceEmailVerification,
   type MarketplaceEmailVerificationRequest,
 } from '../members/emailVerification.ts';
 
@@ -83,14 +85,14 @@ export function MemberPanel({ onNavigate, emailVerificationUrl }: MemberPanelPro
       .finally(() => setLoading(false));
   }, [open]);
 
-  const sendMagicLink = async (event: FormEvent) => {
+  const sendEmailLink = async (event: FormEvent) => {
     event.preventDefault();
     setLoading(true);
     setMessage('');
     try {
       const callbackURL = verificationReturnPath
         ?? `${window.location.pathname}${window.location.hash}`;
-      if (verificationReturnPath) await requestEmailVerification(email, callbackURL);
+      if (verificationReturnPath) await requestEmailVerification(callbackURL);
       else await requestMagicLink(email, callbackURL);
       setMessage(
         verificationReturnPath
@@ -200,6 +202,14 @@ export function MemberPanel({ onNavigate, emailVerificationUrl }: MemberPanelPro
       setDeletion(null);
       setMessage('账户与注销申请撤回前的公开内容已恢复。');
     } catch (cause) {
+      if (
+        cause instanceof MarketplaceAccountClientError
+        && cause.verificationUrl
+      ) {
+        if (!requestMarketplaceEmailVerification(cause.verificationUrl)) {
+          onNavigate(cause.verificationUrl);
+        }
+      }
       setMessage(cause instanceof Error ? cause.message : '恢复失败');
     } finally {
       setLoading(false);
@@ -218,11 +228,13 @@ export function MemberPanel({ onNavigate, emailVerificationUrl }: MemberPanelPro
           {loading && <p>处理中…</p>}
           {(anonymous || verificationReturnPath) && !loading && (
             <>
-              <form onSubmit={sendMagicLink}>
-                <label>
-                  邮箱
-                  <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
-                </label>
+              <form onSubmit={sendEmailLink}>
+                {!verificationReturnPath && (
+                  <label>
+                    邮箱
+                    <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+                  </label>
+                )}
                 <button type="submit">
                   {verificationReturnPath ? '发送邮箱验证链接' : '发送魔法链接'}
                 </button>

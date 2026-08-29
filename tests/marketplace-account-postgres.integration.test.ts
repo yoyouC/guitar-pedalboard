@@ -213,6 +213,7 @@ test('PostgreSQL account export, recovery, purge, and tombstones preserve only r
       secret: 'account-lifecycle-test-secret-at-least-32-characters',
       database: poolLike,
       sendMagicLink: async ({ url }) => { deliveredLinks.push(url); },
+      sendEmailVerification: async () => {},
     });
     const requestMagicLink = async (email: string, name: string): Promise<string> => {
       const requestedLink = await auth.handler(new Request(
