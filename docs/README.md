@@ -10,6 +10,7 @@
 |---|---|
 | [audio-architecture.md](./audio-architecture.md) | 音频后端:`AudioEngine`、效果器插件接口、17 款单块、箱头/箱体、如何新增效果器 |
 | [frontend-architecture.md](./frontend-architecture.md) | 前端架构:状态模型、UI↔引擎同步机制、组件清单、拟物 CSS 体系、可视化 |
+| [tone-marketplace-v1-requirements.md](./tone-marketplace-v1-requirements.md) | 音色广场 V1 的产品边界、内容模型、治理、兼容性、非功能目标与验收场景 |
 
 ## 快速开始
 
