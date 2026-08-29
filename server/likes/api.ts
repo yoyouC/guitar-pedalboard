@@ -2,6 +2,10 @@ import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
 import type { MarketplaceLikeTargetKind } from '../../shared/marketplace.ts';
 import {
+  InvalidTrendingCursorError,
+  type MarketplaceTrendingRepository,
+} from '../trending/repository.ts';
+import {
   InvalidPopularCursorError,
   LikeTargetNotFoundError,
   SelfLikeForbiddenError,
@@ -9,7 +13,7 @@ import {
 } from './repository.ts';
 
 const LIKE_PATH = /^\/api\/marketplace\/likes\/(presets|collections)\/([^/]+)$/;
-const POPULAR_PATH = /^\/api\/marketplace\/popular\/(presets|collections)$/;
+const RANKING_PATH = /^\/api\/marketplace\/(popular|trending)\/(presets|collections)$/;
 const MY_LIKES_PATH = '/api/marketplace/me/likes';
 const TARGET_KIND_BY_SEGMENT: Record<'presets' | 'collections', MarketplaceLikeTargetKind> = {
   presets: 'preset',
@@ -26,6 +30,7 @@ export interface MarketplaceLikesApi {
 
 export function createMarketplaceLikesApi(input: {
   repository: MarketplaceLikeRepository;
+  trending: MarketplaceTrendingRepository;
   sessions: SessionVerifier;
   members: MemberRepository;
   now(): Date;
@@ -46,7 +51,7 @@ export function createMarketplaceLikesApi(input: {
     async fetch(request) {
       const url = new URL(request.url);
       const likeMatch = LIKE_PATH.exec(url.pathname);
-      const popularMatch = POPULAR_PATH.exec(url.pathname);
+      const rankingMatch = RANKING_PATH.exec(url.pathname);
       try {
         if (likeMatch && ['GET', 'PUT', 'DELETE'].includes(request.method)) {
           const kind = targetKind(likeMatch[1]);
@@ -73,17 +78,25 @@ export function createMarketplaceLikesApi(input: {
           if (!currentMemberId) return error(401, 'authentication_required', 'Authentication required');
           return Response.json({ likes: await input.repository.listMine(currentMemberId) });
         }
-        if (request.method === 'GET' && popularMatch) {
+        if (request.method === 'GET' && rankingMatch) {
+          const invalidRankingQuery = () => error(
+            400,
+            `invalid_${rankingMatch[1]}_query`,
+            `${rankingMatch[1] === 'popular' ? 'Popular' : 'Trending'} query is invalid`,
+          );
           if ([...url.searchParams.keys()].some((key) => key !== 'limit' && key !== 'cursor')) {
-            return error(400, 'invalid_popular_query', 'Popular query is invalid');
+            return invalidRankingQuery();
           }
           const limitValue = url.searchParams.get('limit');
           const limit = limitValue === null ? 20 : Number(limitValue);
           if (!Number.isInteger(limit) || limit < 1 || limit > 50 || (limitValue && String(limit) !== limitValue)) {
-            return error(400, 'invalid_popular_query', 'Popular query is invalid');
+            return invalidRankingQuery();
           }
-          return Response.json(await input.repository.listPopular({
-            kind: targetKind(popularMatch[1]),
+          const list = rankingMatch[1] === 'popular'
+            ? input.repository.listPopular.bind(input.repository)
+            : input.trending.list.bind(input.trending);
+          return Response.json(await list({
+            kind: targetKind(rankingMatch[2]),
             limit,
             cursor: url.searchParams.get('cursor'),
           }));
@@ -98,6 +111,9 @@ export function createMarketplaceLikesApi(input: {
         }
         if (cause instanceof InvalidPopularCursorError) {
           return error(400, 'invalid_popular_cursor', 'Popular cursor is invalid');
+        }
+        if (cause instanceof InvalidTrendingCursorError) {
+          return error(400, 'invalid_trending_cursor', 'Trending cursor is invalid');
         }
         return error(503, 'marketplace_unavailable', 'Marketplace is temporarily unavailable');
       }

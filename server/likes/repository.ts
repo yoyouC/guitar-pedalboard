@@ -2,18 +2,13 @@ import type {
   MarketplaceLikeState,
   MarketplaceLikeTargetKind,
   MarketplaceMyLikes,
-  MarketplacePopularPage,
+  MarketplaceRankingPage,
 } from '../../shared/marketplace.ts';
+import type { MarketplaceRankingPageInput } from '../ranking.ts';
 
 export class LikeTargetNotFoundError extends Error {}
 export class SelfLikeForbiddenError extends Error {}
 export class InvalidPopularCursorError extends Error {}
-
-export interface PopularInput {
-  kind: MarketplaceLikeTargetKind;
-  limit: number;
-  cursor: string | null;
-}
 
 export interface MarketplaceLikeRepository {
   getState(
@@ -29,5 +24,5 @@ export interface MarketplaceLikeRepository {
     now: Date;
   }): Promise<MarketplaceLikeState>;
   listMine(memberId: string): Promise<MarketplaceMyLikes>;
-  listPopular(input: PopularInput): Promise<MarketplacePopularPage>;
+  listPopular(input: MarketplaceRankingPageInput): Promise<MarketplaceRankingPage>;
 }

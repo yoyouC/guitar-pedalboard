@@ -13,6 +13,7 @@
     "marketplace:seed": "tsx scripts/marketplace-seed.ts",
     "marketplace:rebuild-search": "tsx scripts/marketplace-rebuild-search.ts",
     "marketplace:rebuild-likes": "tsx scripts/marketplace-rebuild-likes.ts",
+    "marketplace:rebuild-trending": "tsx scripts/marketplace-rebuild-trending.ts",
     "generate:rig-catalog": "tsx scripts/generate-rig-preset-catalog.ts",
     "check:rig-catalog": "tsx scripts/generate-rig-preset-catalog.ts --check",
     "wdf:test": "node scripts/wdf-test.ts",

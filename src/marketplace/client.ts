@@ -5,7 +5,7 @@ import type {
   MarketplaceLikeState,
   MarketplaceLikeTargetKind,
   MarketplaceMyLikes,
-  MarketplacePopularPage,
+  MarketplaceRankingPage,
   PresetCollection,
   PresetCollectionConcurrencyState,
   PublishedPresetSearchPage,
@@ -24,7 +24,7 @@ import {
   parseManagedPublishedPreset,
   parseMarketplaceLikeState,
   parseMarketplaceMyLikes,
-  parseMarketplacePopularPage,
+  parseMarketplaceRankingPage,
   parsePresetCollection,
   parsePublishedPresetSearchPage,
   parsePublicPublishedPreset,
@@ -103,7 +103,11 @@ export interface MarketplaceClient {
   listPopular(
     kind: MarketplaceLikeTargetKind,
     request?: { limit?: number; cursor?: string },
-  ): Promise<MarketplacePopularPage>;
+  ): Promise<MarketplaceRankingPage>;
+  listTrending(
+    kind: MarketplaceLikeTargetKind,
+    request?: { limit?: number; cursor?: string },
+  ): Promise<MarketplaceRankingPage>;
 }
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -533,19 +537,35 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
     },
 
     async listPopular(kind, request = {}) {
-      const params = new URLSearchParams();
-      if (request.limit !== undefined) params.set('limit', String(request.limit));
-      if (request.cursor) params.set('cursor', request.cursor);
-      const response = await fetchResponse(
-        `/api/marketplace/popular/${likeTargetSegment(kind)}?${params}`,
-      ).catch(() => null);
-      if (!response) throw new MarketplaceClientError('network', '无法连接音色广场。');
-      if (!response.ok) throw await publicationError(response);
-      const page = parseMarketplacePopularPage(await response.json());
-      if (!page) throw new MarketplaceClientError('invalid_response', '热门列表格式无效。');
-      return page;
+      return rankingRequest(fetchResponse, 'popular', kind, request);
+    },
+
+    async listTrending(kind, request = {}) {
+      return rankingRequest(fetchResponse, 'trending', kind, request);
     },
   };
+}
+
+async function rankingRequest(
+  fetchResponse: Fetch,
+  ranking: 'popular' | 'trending',
+  kind: MarketplaceLikeTargetKind,
+  request: { limit?: number; cursor?: string },
+): Promise<MarketplaceRankingPage> {
+  const params = new URLSearchParams();
+  if (request.limit !== undefined) params.set('limit', String(request.limit));
+  if (request.cursor) params.set('cursor', request.cursor);
+  const response = await fetchResponse(
+    `/api/marketplace/${ranking}/${likeTargetSegment(kind)}?${params}`,
+  ).catch(() => null);
+  if (!response) throw new MarketplaceClientError('network', '无法连接音色广场。');
+  if (!response.ok) throw await publicationError(response);
+  const page = parseMarketplaceRankingPage(await response.json());
+  if (!page) throw new MarketplaceClientError(
+    'invalid_response',
+    `${ranking === 'popular' ? '热门' : '趋势'}列表格式无效。`,
+  );
+  return page;
 }
 
 async function likeStateRequest(

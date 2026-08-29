@@ -2,7 +2,7 @@ import type {
   CanonicalPublishedPresetRevision,
   MarketplaceLikeState,
   MarketplaceMyLikes,
-  MarketplacePopularPage,
+  MarketplaceRankingPage,
   PresetCollection,
   PublishedPresetSearchPage,
   PublishedPreset,
@@ -396,11 +396,11 @@ export function parseMarketplaceMyLikes(value: unknown): MarketplaceMyLikes | nu
   return value as unknown as MarketplaceMyLikes;
 }
 
-export function parseMarketplacePopularPage(value: unknown): MarketplacePopularPage | null {
+export function parseMarketplaceRankingPage(value: unknown): MarketplaceRankingPage | null {
   if (
     !isRecord(value) || !hasOnlyKeys(value, ['items', 'nextCursor'])
     || !Array.isArray(value.items) || !value.items.every((item) => isLikeSummary(item, false))
     || (value.nextCursor !== null && typeof value.nextCursor !== 'string')
   ) return null;
-  return value as unknown as MarketplacePopularPage;
+  return value as unknown as MarketplaceRankingPage;
 }

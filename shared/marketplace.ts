@@ -116,7 +116,7 @@ export interface MarketplaceMyLikes {
   collections: MarketplaceLikedTargetSummary[];
 }
 
-export interface MarketplacePopularPage {
+export interface MarketplaceRankingPage {
   items: MarketplaceLikeTargetSummary[];
   nextCursor: string | null;
 }

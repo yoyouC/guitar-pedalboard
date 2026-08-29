@@ -391,6 +391,9 @@ export default function App() {
         <button className="marketplace-demo-link" type="button" onClick={() => navigate('/marketplace/popular')}>
           热门内容
         </button>
+        <button className="marketplace-demo-link" type="button" onClick={() => navigate('/marketplace/trending')}>
+          近期趋势
+        </button>
         <button className="marketplace-demo-link" type="button" onClick={() => navigate('/marketplace/me/likes')}>
           我的点赞
         </button>

@@ -13,6 +13,7 @@ import {
   SelfLikeForbiddenError,
   type MarketplaceLikeRepository,
 } from './repository.ts';
+import { MARKETPLACE_LIKE_WRITE_LOCK } from './postgresLock.ts';
 
 interface TargetConfig {
   targetTable: string;
@@ -36,8 +37,6 @@ const CONFIG: Record<MarketplaceLikeTargetKind, TargetConfig> = {
     idColumn: 'collection_id',
   },
 };
-
-const RANK_WRITE_LOCK = 1_296_844_851;
 
 interface StateRow extends QueryResultRow {
   creator_id: string;
@@ -168,7 +167,7 @@ export function createPostgresMarketplaceLikeRepository(pool: Pool): Marketplace
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        await client.query('SELECT pg_advisory_xact_lock($1)', [RANK_WRITE_LOCK]);
+        await client.query('SELECT pg_advisory_xact_lock($1)', [MARKETPLACE_LIKE_WRITE_LOCK]);
         const target = await client.query<{ creator_id: string } & QueryResultRow>(
           `SELECT creator_id FROM ${config.targetTable}
            WHERE id = $1 AND visibility IN ('public', 'unlisted') FOR SHARE`,
@@ -277,7 +276,7 @@ export async function rebuildMarketplaceLikeCounts(pool: Pool, now: Date): Promi
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('SELECT pg_advisory_xact_lock($1)', [RANK_WRITE_LOCK]);
+    await client.query('SELECT pg_advisory_xact_lock($1)', [MARKETPLACE_LIKE_WRITE_LOCK]);
     for (const kind of ['preset', 'collection'] as const) {
       const config = CONFIG[kind];
       await client.query(

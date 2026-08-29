@@ -34,6 +34,9 @@ RESEND_API_KEY=...
 AUTH_EMAIL_FROM='Guitar Pedalboard <login@example.com>'
 GOOGLE_CLIENT_ID=...          # 可选；必须与 secret 同时提供
 GOOGLE_CLIENT_SECRET=...      # 可选
+CRON_SECRET=至少16字符的独立随机密钥
+MARKETPLACE_TRENDING_WINDOW_HOURS=168       # 可选，默认 7 天
+MARKETPLACE_TRENDING_HALF_LIFE_HOURS=48    # 可选，默认 48 小时
 ```
 
 Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。魔法链接验证令牌在数据库中哈希保存、五分钟过期并且只能消费一次；本站不启用密码认证。相同邮箱不会自动连接 Google 身份，成员必须从资料面板显式发起“验证并绑定 Google”。
@@ -50,6 +53,7 @@ Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。�
 - `GET|PUT|DELETE /api/marketplace/likes/collections/:id`
 - `GET /api/marketplace/me/likes`
 - `GET /api/marketplace/popular/presets` 与 `GET /api/marketplace/popular/collections`
+- `GET /api/marketplace/trending/presets` 与 `GET /api/marketplace/trending/collections`
 - `POST /api/marketplace/presets`
 - `GET /api/marketplace/presets/:id`（Public / Unlisted 当前修订）
 - `GET /api/marketplace/presets/:id/revisions/:revisionId`（固定修订永久链接）
@@ -63,3 +67,5 @@ Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。�
 Public 作品进入公开发现；Unlisted 只通过直接链接访问，页面动态设置 `noindex,nofollow`；Withdrawn 对访客与不存在作品使用相同 404，但作者仍可通过管理入口恢复原作品 id。Hidden 不属于作者可写状态。
 
 部署路由先把公开稳定 URL 转给 Vercel Function，再由最后的 SPA rewrite 处理前端页面。数据库未配置或查询失败时 API 返回稳定的 `503 marketplace_unavailable`；不存在和非公开作品统一返回 `404 published_preset_not_found`。
+
+Trending 由 Vercel Cron 以五分钟目标周期重建，也可用 `npm run marketplace:rebuild-trending` 手动重建。任务只读取当前点赞事实、点赞时间和成员 `community_status`，取消点赞与封禁在下一次成功重建后从榜单排除；公开 API 不接受趋势权重或任何浏览/应用信号。定时入口只接受 Vercel 从 `CRON_SECRET` 生成的 Bearer 授权。

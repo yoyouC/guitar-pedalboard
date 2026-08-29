@@ -5,6 +5,7 @@ import type {
   PublishedPreset,
 } from '../../shared/marketplace.ts';
 import { decodePopularCursor, encodePopularCursor, followsPopularBoundary } from './cursor.ts';
+import type { MarketplaceLikeFactSource } from './factSource.ts';
 import {
   InvalidPopularCursorError,
   LikeTargetNotFoundError,
@@ -22,7 +23,7 @@ interface Target {
 export function createMemoryMarketplaceLikeRepository(input: {
   presets: readonly PublishedPreset[];
   collections: readonly PresetCollection[];
-}): MarketplaceLikeRepository {
+}): MarketplaceLikeRepository & MarketplaceLikeFactSource {
   const presets = new Map(input.presets.map((target) => [target.id, target]));
   const collections = new Map(input.collections.map((target) => [target.id, target]));
   const likes = new Map<string, string>();
@@ -117,6 +118,17 @@ export function createMemoryMarketplaceLikeRepository(input: {
           ? encodePopularCursor(kind, limit, snapshotVersion, last)
           : null,
       };
+    },
+    async listActiveLikes() {
+      return [...likes.entries()].map(([likeKey, likedAt]) => {
+        const [kind, targetId, memberId] = likeKey.split('\u0000');
+        return {
+          kind: kind as MarketplaceLikeTargetKind,
+          targetId,
+          memberId,
+          likedAt: new Date(likedAt),
+        };
+      });
     },
   };
 }

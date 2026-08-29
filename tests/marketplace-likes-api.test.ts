@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createMarketplaceLikesApi } from '../server/likes/api.ts';
 import { createMemoryMarketplaceLikeRepository } from '../server/likes/memoryRepository.ts';
+import { createMemoryMarketplaceTrendingRepository } from '../server/trending/memoryRepository.ts';
 import { createMemoryMemberRepository } from '../server/members/memoryRepository.ts';
 import type { AuthenticatedIdentity } from '../server/auth/session.ts';
 import type { CanonicalPublishedPreset, PresetCollection } from '../shared/marketplace.ts';
@@ -42,6 +43,10 @@ function fixture() {
   const repository = createMemoryMarketplaceLikeRepository({
     presets: [presetA, presetB, unlistedPreset, hiddenPreset], collections: [collection],
   });
+  const trending = createMemoryMarketplaceTrendingRepository({
+    presets: [presetA, presetB, unlistedPreset, hiddenPreset], collections: [collection],
+    likes: repository,
+  });
   const members = createMemoryMemberRepository([
     {
       id: 'member-ada', authUserId: 'auth-ada', handle: 'ada', displayName: 'Ada', bio: '',
@@ -60,6 +65,7 @@ function fixture() {
   let tick = 0;
   const api = createMarketplaceLikesApi({
     repository,
+    trending,
     sessions: {
       async verify(request) { return identities[request.headers.get('x-user') ?? ''] ?? null; },
     },

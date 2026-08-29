@@ -2,6 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build && node scripts/check-publish-models.mjs",
   "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/internal/marketplace/rebuild-trending",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/auth/:path*",
@@ -42,6 +48,18 @@
     {
       "source": "/api/marketplace/popular/collections",
       "destination": "/api/marketplace-like?route=popular-collections"
+    },
+    {
+      "source": "/api/marketplace/trending/presets",
+      "destination": "/api/marketplace-like?route=trending-presets"
+    },
+    {
+      "source": "/api/marketplace/trending/collections",
+      "destination": "/api/marketplace-like?route=trending-collections"
+    },
+    {
+      "source": "/api/internal/marketplace/rebuild-trending",
+      "destination": "/api/marketplace-trending-rebuild"
     },
     {
       "source": "/api/marketplace/likes/presets/:id",

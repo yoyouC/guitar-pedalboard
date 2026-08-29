@@ -403,7 +403,7 @@ test('official client reads and mutates likes without accepting private trajecto
         likes: { presets: [{ ...summary, likedAt: demoPublishedPreset.updatedAt }], collections: [] },
       });
     }
-    if (path.startsWith('/api/marketplace/popular/')) {
+    if (path.startsWith('/api/marketplace/popular/') || path.startsWith('/api/marketplace/trending/')) {
       return Response.json({ items: [summary], nextCursor: 'popular-next' });
     }
     return Response.json({ state: { liked: init?.method !== 'DELETE', canLike: true, likeCount: 3 } });
@@ -414,19 +414,21 @@ test('official client reads and mutates likes without accepting private trajecto
   assert.equal((await client.setLike('preset', demoPublishedPreset.id, false)).liked, false);
   assert.deepEqual((await client.getMyLikes()).presets.map((item) => item.id), [demoPublishedPreset.id]);
   assert.deepEqual((await client.listPopular('preset', { limit: 1, cursor: 'current' })).items, [summary]);
+  assert.deepEqual((await client.listTrending('collection', { limit: 2 })).items, [summary]);
   assert.deepEqual(calls, [
     { path: `/api/marketplace/likes/presets/${demoPublishedPreset.id}`, method: 'GET' },
     { path: `/api/marketplace/likes/presets/${demoPublishedPreset.id}`, method: 'PUT' },
     { path: `/api/marketplace/likes/presets/${demoPublishedPreset.id}`, method: 'DELETE' },
     { path: '/api/marketplace/me/likes', method: undefined },
     { path: '/api/marketplace/popular/presets?limit=1&cursor=current', method: undefined },
+    { path: '/api/marketplace/trending/collections?limit=2', method: undefined },
   ]);
 
   const leaked = createMarketplaceClient(async () => Response.json({
     items: [{ ...summary, likedAt: demoPublishedPreset.updatedAt }], nextCursor: null,
   }));
   await assert.rejects(
-    () => leaked.listPopular('preset'),
+    () => leaked.listTrending('preset'),
     (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
   );
 });

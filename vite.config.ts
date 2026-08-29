@@ -17,6 +17,8 @@ import type { MarketplaceTag, PresetCollection } from './shared/marketplace.ts'
 import { createPublishedPresetSearchApi } from './server/search/api.ts'
 import { createMarketplaceLikesApi } from './server/likes/api.ts'
 import { createMemoryMarketplaceLikeRepository } from './server/likes/memoryRepository.ts'
+import { DEFAULT_MARKETPLACE_TRENDING_POLICY } from './server/trending/policy.ts'
+import { createMemoryMarketplaceTrendingRepository } from './server/trending/memoryRepository.ts'
 
 // 本地评估模型(models-local/,git-ignored,许可不允许公开分发):
 // 仅开发期经此中间件提供;/models-local/** 不进入 dist,也不会被部署。
@@ -139,11 +141,22 @@ function serveMarketplaceApi(): Plugin {
     },
   })
   const searchApi = createPublishedPresetSearchApi({ presets: publications })
+  const likes = createMemoryMarketplaceLikeRepository({
+    presets: [demoPublishedPreset],
+    collections: [demoCollection],
+  })
+  const trending = createMemoryMarketplaceTrendingRepository({
+    presets: [demoPublishedPreset],
+    collections: [demoCollection],
+    likes,
+  })
+  const rebuildTrending = () => trending.rebuild({
+    now: new Date(), policy: DEFAULT_MARKETPLACE_TRENDING_POLICY,
+  })
+  void rebuildTrending()
   const likesApi = createMarketplaceLikesApi({
-    repository: createMemoryMarketplaceLikeRepository({
-      presets: [demoPublishedPreset],
-      collections: [demoCollection],
-    }),
+    repository: likes,
+    trending,
     sessions,
     members,
     now: () => new Date(),
@@ -153,6 +166,8 @@ function serveMarketplaceApi(): Plugin {
   return {
     name: 'serve-marketplace-api',
     configureServer(server) {
+      const trendingInterval = setInterval(() => void rebuildTrending(), 5 * 60_000)
+      server.httpServer?.once('close', () => clearInterval(trendingInterval))
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith('/api/marketplace/') && !req.url?.startsWith('/api/auth/')) {
           return next()
@@ -181,6 +196,7 @@ function serveMarketplaceApi(): Plugin {
             ? await auth.handler(request)
             : req.url.startsWith('/api/marketplace/likes/')
               || req.url.startsWith('/api/marketplace/popular/')
+              || req.url.startsWith('/api/marketplace/trending/')
               || req.url.startsWith('/api/marketplace/me/likes')
               ? await likesApi.fetch(request)
             : req.url.startsWith('/api/marketplace/me')
