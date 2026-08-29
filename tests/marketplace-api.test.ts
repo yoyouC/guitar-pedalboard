@@ -240,6 +240,43 @@ test('append revision requires a verified email and preserves its management ret
     '/login?verify=email&return=%2Fmarketplace%2Ftones%2Fpreset-ada-crunch%2Fmanage');
 });
 
+test('copy-and-restore requires a verified email because it appends a revision', async () => {
+  const { api, ownedPreset } = managementApi(
+    'member-ada', publishedPreset, undefined, { ...adaIdentity, emailVerified: false },
+  );
+  const response = await api.fetch(new Request(
+    `https://pedalboard.test/api/marketplace/presets/preset-ada-crunch/revisions/`
+      + `${ownedPreset.currentRevision.id}/restore`,
+    {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedUpdatedAt: ownedPreset.updatedAt }),
+    },
+  ));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'email_verification_required');
+});
+
+test('copy-and-restore consumes the same revision limit as a normal append', async () => {
+  const operations: string[] = [];
+  const limiter: MarketplaceWriteLimiter = {
+    async consume(input) {
+      operations.push(input.operation);
+      return { allowed: false, retryAt: new Date('2026-08-29T10:01:00.000Z') };
+    },
+  };
+  const { api, ownedPreset } = managementApi('member-ada', publishedPreset, limiter);
+  const response = await api.fetch(new Request(
+    `https://pedalboard.test/api/marketplace/presets/preset-ada-crunch/revisions/`
+      + `${ownedPreset.currentRevision.id}/restore`,
+    {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedUpdatedAt: ownedPreset.updatedAt }),
+    },
+  ));
+  assert.equal(response.status, 429);
+  assert.deepEqual(operations, ['revision']);
+});
+
 test('visitor can read a public Published Preset by its stable id', async () => {
   const api = createMarketplaceApi({
     publishedPresets: createMemoryPublishedPresetRepository([publishedPreset]),

@@ -18,6 +18,8 @@ import {
 import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
 import { canIncludePresetRevision } from './referencePolicy.ts';
 import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
+import { normalizeSearchText } from '../search/text.ts';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
 
 interface CollectionRow extends QueryResultRow {
   id: string;
@@ -157,13 +159,18 @@ function tagFromRow(row: TagRow): MarketplaceTag {
   return { id: row.id, dimension: row.dimension, nameZh: row.name_zh, nameEn: row.name_en };
 }
 
-async function activeTags(database: PostgresQueryable, tagIds?: readonly string[]): Promise<MarketplaceTag[]> {
+async function activeTags(
+  database: PostgresQueryable,
+  tagIds?: readonly string[],
+  lock = false,
+): Promise<MarketplaceTag[]> {
   const result = tagIds
     ? await database.query<TagRow>(
       `SELECT id, dimension, name_zh, name_en
        FROM marketplace_tags
        WHERE status = 'active' AND id = ANY($1::text[])
-       ORDER BY dimension, id`,
+       ORDER BY dimension, id
+       ${lock ? 'FOR SHARE' : ''}`,
       [tagIds],
     )
     : await database.query<TagRow>(
@@ -176,7 +183,7 @@ async function activeTags(database: PostgresQueryable, tagIds?: readonly string[
 }
 
 async function requireTags(database: PostgresQueryable, tagIds: readonly string[]): Promise<void> {
-  const tags = await activeTags(database, tagIds);
+  const tags = await activeTags(database, tagIds, true);
   if (tags.length !== new Set(tagIds).size) throw new PresetCollectionTagError();
 }
 
@@ -210,7 +217,7 @@ async function lockOwnedCollection(
     `SELECT visibility, updated_at
      FROM marketplace_preset_collections
      WHERE id = $1 AND creator_id = $2 AND visibility <> 'hidden'
-     FOR UPDATE`,
+     FOR NO KEY UPDATE`,
     [input.collectionId, input.creatorId],
   );
   const current = result.rows[0];
@@ -346,9 +353,10 @@ export function createPostgresPresetCollectionManagementRepository(
         await requireTags(client, input.tagIds);
         await client.query(
           `INSERT INTO marketplace_preset_collections
-             (id, creator_id, title, description, visibility, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $6)`,
-          [input.id, input.creator.id, input.title, input.description, input.visibility, input.now],
+             (id, creator_id, title, description, visibility, search_text, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+          [input.id, input.creator.id, input.title, input.description, input.visibility,
+            normalizeSearchText(`${input.title} ${input.description}`), input.now],
         );
         await replaceTags(client, input.id, input.tagIds);
         await client.query('COMMIT');
@@ -371,12 +379,14 @@ export function createPostgresPresetCollectionManagementRepository(
         const current = await lockOwnedCollection(client, input);
         await requireTags(client, input.tagIds);
         await validateReferences(client, input, current.visibility);
+        await markMarketplaceTextSearchProjectionWrite(client);
         await client.query(
           `UPDATE marketplace_preset_collections
            SET title = $3,
                description = $4,
                visibility = $5,
-               updated_at = GREATEST($6::timestamptz, updated_at + interval '1 millisecond')
+               search_text = $6,
+               updated_at = GREATEST($7::timestamptz, updated_at + interval '1 millisecond')
            WHERE id = $1 AND creator_id = $2`,
           [
             input.collectionId,
@@ -384,6 +394,7 @@ export function createPostgresPresetCollectionManagementRepository(
             input.title,
             input.description,
             input.visibility,
+            normalizeSearchText(`${input.title} ${input.description}`),
             input.now,
           ],
         );

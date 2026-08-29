@@ -7,6 +7,7 @@ import { demoPublishedPreset } from './server/marketplace/demoPreset.ts'
 import { createMemoryPublishedPresetRepository } from './server/marketplace/memoryRepository.ts'
 import { memoryAdapter } from 'better-auth/adapters/memory'
 import { createPlatformAuth } from './server/auth/betterAuth.ts'
+import { createSessionBoundAuthenticationHandler } from './server/auth/api.ts'
 import { createBetterAuthSessionVerifier } from './server/auth/betterAuthSession.ts'
 import { createMemberApi } from './server/members/api.ts'
 import { createMemoryMemberRepository } from './server/members/memoryRepository.ts'
@@ -31,6 +32,8 @@ import {
   assertAccountActive,
   assertCommunityWriteAllowed,
 } from './server/members/standing.ts'
+import { createMarketplaceTagAdministrationApi } from './server/tags/api.ts'
+import { createMemoryMarketplaceTagAdministrationRepository } from './server/tags/memoryRepository.ts'
 
 // 本地评估模型(models-local/,git-ignored,许可不允许公开分发):
 // 仅开发期经此中间件提供;/models-local/** 不进入 dist,也不会被部署。
@@ -72,7 +75,11 @@ function serveMarketplaceApi(): Plugin {
     sendMagicLink: ({ email, url }) => {
       console.info(`[dev auth] ${email}: ${url}`)
     },
+    sendEmailVerification: async ({ user, url }) => {
+      console.info(`[dev auth verification] ${user.email}: ${url}`)
+    },
   })
+  const sessionBoundAuth = createSessionBoundAuthenticationHandler(auth)
   const demoCreatedAt = new Date(demoPublishedPreset.createdAt)
   const members = createMemoryMemberRepository([{
     id: demoPublishedPreset.creator.id,
@@ -328,6 +335,7 @@ function serveMarketplaceApi(): Plugin {
               )?.email ?? '')
             : ''
           await likes.purgeAccount(memberId)
+          await writeLimiter.purgeMember?.(memberId)
           await publications.purgeAccount(memberId, now)
           await collections.purgeAccount(memberId, now)
           if (member?.authUserId) {
@@ -353,6 +361,34 @@ function serveMarketplaceApi(): Plugin {
     sessions,
     now: () => new Date(),
     cronSecret: 'local-account-cron',
+  })
+  const tagAdministrationApi = createMarketplaceTagAdministrationApi({
+    repository: createMemoryMarketplaceTagAdministrationRepository({
+      tags: marketplaceTags.map((tag) => ({
+        ...tag, status: 'active' as const, mergedIntoId: null,
+      })),
+      presetTagIds: new Map([
+        [demoPublishedPreset.id, demoPublishedPreset.tags.map((tag) => tag.id)],
+        [demoUnlistedPreset.id, demoUnlistedPreset.tags.map((tag) => tag.id)],
+      ]),
+      collectionTagIds: new Map([
+        [demoCollection.id, demoCollection.tags.map((tag) => tag.id)],
+      ]),
+      bindings: {
+        presetTagIds: () => publications.snapshotTagAssignments(),
+        collectionTagIds: () => collections.snapshotTagAssignments(),
+        synchronizeTags(tags) {
+          publications.synchronizeManagedTags(tags)
+          collections.synchronizeManagedTags(tags)
+        },
+      },
+    }),
+    sessions,
+    adminAuthUserIds: new Set(
+      (process.env.VITE_DEV_ADMIN_AUTH_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
+    ),
+    now: () => new Date(),
+    createAuditId: () => crypto.randomUUID(),
   })
   return {
     name: 'serve-marketplace-api',
@@ -384,11 +420,13 @@ function serveMarketplaceApi(): Plugin {
             ...(body && body.length > 0 ? { body: body.toString() } : {}),
           })
           const response = req.url.startsWith('/api/auth/')
-            ? await auth.handler(request)
+            ? await sessionBoundAuth.handler(request)
             : req.url.startsWith('/api/marketplace/me/export')
               || req.url.startsWith('/api/marketplace/me/deletion')
               || req.url.startsWith('/api/internal/marketplace/purge-deleted-accounts')
               ? await accountApi.fetch(request)
+              : req.url.startsWith('/api/marketplace/admin/tags')
+               ? await tagAdministrationApi.fetch(request)
             : req.url.startsWith('/api/marketplace/reports')
               || req.url.startsWith('/api/marketplace/infringement-notices')
               || req.url.startsWith('/api/marketplace/me/moderation')

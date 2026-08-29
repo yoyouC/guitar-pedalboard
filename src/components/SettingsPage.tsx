@@ -181,13 +181,24 @@ function AccountSettings({ locale, onNavigate }: { locale: AppLocale; onNavigate
   }, []);
   if (!member) return null;
 
-  const requireRecentAuthentication = async (cause: unknown): Promise<boolean> => {
-    if (!(cause instanceof MarketplaceAccountClientError)
-      || cause.code !== 'recent_authentication_required' || !cause.verificationUrl) return false;
-    setMessage(locale === 'zh-CN' ? '此操作需要重新验证身份；你的选择已保留。' : 'Re-authenticate to continue; your choice is preserved.');
-    await memberSession.logout();
-    onNavigate(cause.verificationUrl);
-    return true;
+  const requireAccountVerification = async (cause: unknown): Promise<boolean> => {
+    if (!(cause instanceof MarketplaceAccountClientError) || !cause.verificationUrl) return false;
+    if (cause.code === 'recent_authentication_required') {
+      setMessage(locale === 'zh-CN'
+        ? '此操作需要重新验证身份；你的选择已保留。'
+        : 'Re-authenticate to continue; your choice is preserved.');
+      await memberSession.logout();
+      onNavigate(cause.verificationUrl);
+      return true;
+    }
+    if (cause.code === 'email_verification_required') {
+      setMessage(locale === 'zh-CN'
+        ? '恢复账户前需要验证当前登录邮箱。'
+        : 'Verify the signed-in email before recovering this account.');
+      onNavigate(cause.verificationUrl);
+      return true;
+    }
+    return false;
   };
 
   const downloadExport = async () => {
@@ -212,7 +223,7 @@ function AccountSettings({ locale, onNavigate }: { locale: AppLocale; onNavigate
       await memberSession.refresh();
       onNavigate(`/login?return=${encodeURIComponent('/settings?section=account')}`);
     } catch (cause) {
-      if (!await requireRecentAuthentication(cause)) {
+      if (!await requireAccountVerification(cause)) {
         setMessage(cause instanceof Error ? cause.message : 'Account deletion failed.');
       }
     } finally { setBusy(false); }
@@ -225,7 +236,7 @@ function AccountSettings({ locale, onNavigate }: { locale: AppLocale; onNavigate
       setDeletion(null);
       setMessage(locale === 'zh-CN' ? '账户已恢复；公开作品会按原可见性重新出现。' : 'Account restored.');
     } catch (cause) {
-      if (!await requireRecentAuthentication(cause)) {
+      if (!await requireAccountVerification(cause)) {
         setMessage(cause instanceof Error ? cause.message : 'Account recovery failed.');
       }
     } finally { setBusy(false); }

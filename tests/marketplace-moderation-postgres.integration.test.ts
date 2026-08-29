@@ -33,8 +33,8 @@ test('PostgreSQL moderation enforces lifecycle, privacy, bans, and recognition e
       '0008_preset_search_indexes.sql', '0009_marketplace_likes.sql',
       '0009_member_public_profile_terms.sql',
       '0010_marketplace_trending.sql', '0011_marketplace_moderation.sql',
-      '0012_account_lifecycle.sql', '0013_marketplace_write_limits.sql',
-      '0014_member_moderation_reports.sql',
+      '0012_account_lifecycle.sql', '0013_tag_administration.sql',
+      '0014_marketplace_write_limits.sql', '0017_member_moderation_reports.sql',
     ]) {
       await client.query(await readFile(
         new URL(`../server/marketplace/migrations/${migration}`, import.meta.url), 'utf8',

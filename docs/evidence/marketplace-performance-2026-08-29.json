@@ -1,0 +1,48 @@
+{
+  "scope": "local representative verification",
+  "environment": {
+    "hardware": "Apple M4, 16 GiB RAM",
+    "os": "Darwin 24.6.0 arm64",
+    "node": "v25.2.1",
+    "postgresql": "17.11 (postgres:17-alpine)",
+    "region": "local, Asia/Shanghai",
+    "databaseSpec": "Docker Desktop, no explicit CPU or memory limit",
+    "datasetGenerator": "scripts/marketplace-prepare-benchmark.ts",
+    "commands": [
+      "MARKETPLACE_ALLOW_BENCHMARK_RESET=true npm run marketplace:benchmark:prepare",
+      "MARKETPLACE_BENCHMARK_SAMPLES=20 npm run marketplace:benchmark:verify"
+    ]
+  },
+  "passed": true,
+  "dataset": {
+    "members": 10000,
+    "publicPresets": 100000
+  },
+  "samples": {
+    "list": 20,
+    "detail": 20,
+    "search": 20,
+    "revision": 20
+  },
+  "p95Ms": {
+    "list": 2.9597499999999854,
+    "detail": 1.898541999999992,
+    "search": 71.07224999999994,
+    "revision": 3.6260829999998805
+  },
+  "searchConvergenceMs": {
+    "publication": 116.66254200000003,
+    "metadata": 95.08279200000015
+  },
+  "targets": {
+    "readP95Ms": 500,
+    "revisionP95Ms": 2000,
+    "searchConvergenceMs": 60000
+  },
+  "failures": [],
+  "convergenceObserved": {
+    "publication": true,
+    "metadata": true
+  },
+  "measuredAt": "2026-08-29T15:42:40.976Z"
+}

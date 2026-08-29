@@ -39,6 +39,10 @@
       "destination": "/api/marketplace-member?route=profile"
     },
     {
+      "source": "/api/marketplace/health",
+      "destination": "/api/marketplace-health"
+    },
+    {
       "source": "/api/marketplace/me/export",
       "destination": "/api/marketplace-account?route=export"
     },
@@ -73,6 +77,26 @@
     {
       "source": "/api/marketplace/me/tones",
       "destination": "/api/marketplace-preset?route=my-tones"
+    },
+    {
+      "source": "/api/marketplace/admin/tags/audit",
+      "destination": "/api/marketplace-tag-admin?route=audit"
+    },
+    {
+      "source": "/api/marketplace/admin/tags/:id/deprecate",
+      "destination": "/api/marketplace-tag-admin?route=deprecate&id=:id"
+    },
+    {
+      "source": "/api/marketplace/admin/tags/:id/merge",
+      "destination": "/api/marketplace-tag-admin?route=merge&id=:id"
+    },
+    {
+      "source": "/api/marketplace/admin/tags/:id",
+      "destination": "/api/marketplace-tag-admin?route=tag&id=:id"
+    },
+    {
+      "source": "/api/marketplace/admin/tags",
+      "destination": "/api/marketplace-tag-admin?route=tags"
     },
     {
       "source": "/api/marketplace/search/presets",

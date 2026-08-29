@@ -8,6 +8,9 @@ import {
   PresetCollectionReferenceError,
   PresetCollectionTagError,
 } from './repository.ts';
+import type { ManagedMarketplaceTag } from '../tags/repository.ts';
+
+type MemoryCollectionTag = MarketplaceTag & { aliases?: readonly string[] };
 import type { MarketplaceAccountExport } from '../../shared/account.ts';
 import { canIncludePresetRevision } from './referencePolicy.ts';
 import type {
@@ -39,8 +42,11 @@ export function createMemoryPresetCollectionRepository(
     now: Date,
   ): Promise<void>;
   purgeAccount(memberId: string, now: Date): Promise<void>;
+  snapshotTagAssignments(): ReadonlyMap<string, readonly string[]>;
+  synchronizeManagedTags(tags: readonly ManagedMarketplaceTag[]): void;
 } {
-  const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+  const tagsById = new Map<string, MemoryCollectionTag>(tags.map((tag) => [tag.id, tag]));
+  const activeTagIds = new Set(tags.map((tag) => tag.id));
   const publicTag = (tag: MarketplaceTag): MarketplaceTag => ({
     id: tag.id,
     dimension: tag.dimension,
@@ -117,7 +123,7 @@ export function createMemoryPresetCollectionRepository(
   }
 
   function selectedTags(tagIds: readonly string[]): void {
-    if (tagIds.some((tagId) => !tagsById.has(tagId))) throw new PresetCollectionTagError();
+    if (tagIds.some((tagId) => !activeTagIds.has(tagId))) throw new PresetCollectionTagError();
   }
 
   async function validateReferences(
@@ -149,6 +155,46 @@ export function createMemoryPresetCollectionRepository(
   }
 
   return {
+    snapshotTagAssignments() {
+      return new Map([...collectionsById].map(([id, collection]) => [
+        id, [...collection.tagIds],
+      ]));
+    },
+    synchronizeManagedTags(managedTags) {
+      tagsById.clear();
+      activeTagIds.clear();
+      const managedById = new Map(managedTags.map((tag) => [tag.id, tag]));
+      const resolve = (id: string): string | null => {
+        const visited = new Set<string>();
+        let current = managedById.get(id);
+        while (current?.mergedIntoId) {
+          if (visited.has(current.id)) return null;
+          visited.add(current.id);
+          current = managedById.get(current.mergedIntoId);
+        }
+        return current?.id ?? null;
+      };
+      for (const tag of managedTags) {
+        const { aliases, status, mergedIntoId: _mergedIntoId,
+          presetCount: _presetCount, collectionCount: _collectionCount, ...publicTag } = tag;
+        tagsById.set(tag.id, {
+          ...publicTag,
+          aliases: [
+            ...aliases,
+            ...managedTags.filter((source) => (
+              source.id !== tag.id && resolve(source.id) === tag.id
+            )).flatMap((source) => [
+              ...source.aliases, source.id, source.nameZh, source.nameEn,
+            ]),
+          ],
+        });
+        if (status === 'active') activeTagIds.add(tag.id);
+      }
+      for (const collection of collectionsById.values()) {
+        const tagIds = [...new Set(collection.tagIds.map((id) => resolve(id) ?? id))];
+        collectionsById.set(collection.id, { ...collection, tagIds });
+      }
+    },
     async listForDiscovery() {
       return [...collectionsById.values()].map((stored) => ({
         id: stored.id,
@@ -168,7 +214,9 @@ export function createMemoryPresetCollectionRepository(
     },
 
     async listAvailableTags() {
-      return [...tagsById.values()].map(publicTag);
+      return [...tagsById.values()]
+        .filter((tag) => activeTagIds.has(tag.id))
+        .map(publicTag);
     },
 
     async listManagedByCreator(creatorId) {

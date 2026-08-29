@@ -1,5 +1,8 @@
 import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { createAuthenticationApi } from '../server/auth/api.ts';
+import {
+  createAuthenticationApi,
+  createSessionBoundAuthenticationHandler,
+} from '../server/auth/api.ts';
 import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
 
 let authenticationApi: ReturnType<typeof createAuthenticationApi> | null = null;
@@ -17,7 +20,7 @@ export default {
     try {
       authenticationApi ??= createAuthenticationApi(
         authenticationBaseURL(),
-        createRuntimeAuth(marketplacePool),
+        createSessionBoundAuthenticationHandler(createRuntimeAuth(marketplacePool)),
       );
       return authenticationApi.fetch(request);
     } catch {

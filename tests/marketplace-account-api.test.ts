@@ -68,17 +68,28 @@ function fixture() {
     sessions: {
       async verify(request) {
         return request.headers.get('x-user') === 'ada' ? {
-          authUserId: 'auth-ada', email: 'ada@example.test', displayName: 'Ada', avatarUrl: null,
+          authUserId: 'auth-ada', email: 'ada@example.test',
+          emailVerified: request.headers.get('x-email-verified') !== 'false',
+          displayName: 'Ada', avatarUrl: null,
         } : null;
       },
     },
     now: () => now,
     cronSecret: 'cron-secret',
   });
-  const request = (path: string, method = 'GET', authenticated = true, body?: string) => api.fetch(
+  const request = (
+    path: string,
+    method = 'GET',
+    authenticated = true,
+    body?: string,
+    emailVerified = true,
+  ) => api.fetch(
     new Request(`https://pedalboard.test${path}`, {
       method,
-      headers: authenticated ? { 'x-user': 'ada' } : {},
+      headers: authenticated ? {
+        'x-user': 'ada',
+        'x-email-verified': String(emailVerified),
+      } : {},
       ...(body === undefined ? {} : { body }),
     }),
   );
@@ -102,6 +113,11 @@ test('deletion request, verified recovery, and scheduler purge have separate aut
   assert.equal(requested.status, 202);
   assert.equal((await requested.json()).deletion.purgeAfter, '2026-09-28T12:00:00.000Z');
   assert.equal((await (await request('/api/marketplace/me/deletion')).json()).deletion.status, 'pending');
+  const unverifiedRecovery = await request(
+    '/api/marketplace/me/deletion', 'DELETE', true, undefined, false,
+  );
+  assert.equal(unverifiedRecovery.status, 403);
+  assert.equal((await unverifiedRecovery.json()).error.code, 'email_verification_required');
   assert.equal((await request('/api/marketplace/me/deletion', 'DELETE')).status, 200);
   assert.equal((await request('/api/marketplace/me/deletion', 'DELETE')).status, 409);
   assert.equal((await request('/api/marketplace/me/deletion', 'POST', true, '{}')).status, 400);

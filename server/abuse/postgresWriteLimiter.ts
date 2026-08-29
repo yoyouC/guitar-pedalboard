@@ -1,4 +1,5 @@
-import type { Pool, QueryResultRow } from 'pg';
+import type { Pool, PoolClient, QueryResultRow } from 'pg';
+import { AccountDeletionPendingError } from '../members/standing.ts';
 import type { MarketplaceWriteLimiter, MarketplaceWritePolicies, TokenBucketPolicy } from './writeLimiter.ts';
 
 interface BucketRow extends QueryResultRow {
@@ -8,9 +9,27 @@ interface BucketRow extends QueryResultRow {
   updated_at: Date | string;
 }
 
-async function hash(value: string): Promise<string> {
+export async function marketplaceWriteSubjectHash(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+export async function deleteMarketplaceWriteBucketsForMember(
+  client: Pick<PoolClient, 'query'>,
+  memberId: string,
+): Promise<void> {
+  await client.query(
+    `DELETE FROM marketplace_write_rate_buckets
+     WHERE scope = 'member' AND subject_hash = $1`,
+    [await marketplaceWriteSubjectHash(memberId)],
+  );
+}
+
+function idleTtlMs(policy: { member: TokenBucketPolicy; network: TokenBucketPolicy }): number {
+  return Math.ceil(Math.max(
+    policy.member.burst / policy.member.refillPerMinute,
+    policy.network.burst / policy.network.refillPerMinute,
+  ) * 60_000);
 }
 
 function refill(row: BucketRow | undefined, policy: TokenBucketPolicy, now: number): number {
@@ -28,12 +47,22 @@ export function createPostgresMarketplaceWriteLimiter(
       const policy = policies[input.operation];
       if (!policy) return { allowed: true };
       const subjects = {
-        member: await hash(input.memberId),
-        network: await hash(input.networkSource),
+        member: await marketplaceWriteSubjectHash(input.memberId),
+        network: await marketplaceWriteSubjectHash(input.networkSource),
       };
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        const member = await client.query<{ account_status: string } & QueryResultRow>(
+          `SELECT account_status FROM marketplace_members WHERE id = $1 FOR UPDATE`,
+          [input.memberId],
+        );
+        if (member.rows[0]?.account_status !== 'active') throw new AccountDeletionPendingError();
+        await client.query(
+          `DELETE FROM marketplace_write_rate_buckets
+           WHERE operation = $1 AND updated_at <= $2`,
+          [input.operation, new Date(input.now.getTime() - idleTtlMs(policy))],
+        );
         for (const scope of ['member', 'network'] as const) {
           await client.query(
             `INSERT INTO marketplace_write_rate_buckets
@@ -75,6 +104,20 @@ export function createPostgresMarketplaceWriteLimiter(
             now + (1 - item.tokens) * 60_000 / item.policy.refillPerMinute
           ))))),
         };
+      } catch (cause) {
+        try { await client.query('ROLLBACK'); } catch { /* preserve original error */ }
+        throw cause;
+      } finally {
+        client.release();
+      }
+    },
+    async purgeMember(memberId) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT id FROM marketplace_members WHERE id = $1 FOR UPDATE', [memberId]);
+        await deleteMarketplaceWriteBucketsForMember(client, memberId);
+        await client.query('COMMIT');
       } catch (cause) {
         try { await client.query('ROLLBACK'); } catch { /* preserve original error */ }
         throw cause;

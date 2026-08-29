@@ -7,6 +7,8 @@ import type {
   UpdateMemberProfileInput,
 } from './repository.ts';
 import { assertCommunityWriteAllowed } from './standing.ts';
+import { normalizeSearchText } from '../search/text.ts';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
 import {
   HANDLE_CHANGE_INTERVAL_MS,
   HandleChangeTooSoonError,
@@ -104,9 +106,10 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
 
         await client.query(
           `INSERT INTO marketplace_members
-            (id, handle, display_name, bio, avatar_url, created_at, updated_at)
-           VALUES ($1, $2, $3, '', $4, $5, $5)`,
-          [input.id, input.handle, input.identity.displayName, input.identity.avatarUrl, input.now],
+            (id, handle, display_name, bio, avatar_url, search_text, created_at, updated_at)
+           VALUES ($1, $2, $3, '', $4, $5, $6, $6)`,
+          [input.id, input.handle, input.identity.displayName, input.identity.avatarUrl,
+            normalizeSearchText(`${input.handle} ${input.identity.displayName}`), input.now],
         );
         await client.query(
           `INSERT INTO marketplace_member_handle_claims (handle, member_id, claimed_at)
@@ -193,6 +196,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
           );
         }
 
+        await markMarketplaceTextSearchProjectionWrite(client);
         const result = await client.query<MemberRow>(
           `UPDATE marketplace_members AS member SET
              handle = $2,
@@ -201,7 +205,8 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
              handle_changed_at = $5,
              terms_accepted_version = $6,
              public_profile_completed_at = $7,
-             updated_at = $8
+             search_text = $8,
+             updated_at = $9
            FROM marketplace_member_auth_identities AS identity
            WHERE member.id = $1 AND identity.member_id = member.id
            RETURNING member.id, identity.auth_user_id, member.handle, member.display_name,
@@ -217,6 +222,9 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
             changesHandle ? now : current.handleChangedAt,
             update.termsAcceptedVersion ?? current.termsAcceptedVersion,
             update.termsAcceptedVersion ? now : current.publicProfileCompletedAt,
+            normalizeSearchText(`${
+              changesHandle ? update.handle : current.handle
+            } ${update.displayName ?? current.displayName}`),
             now,
           ],
         );

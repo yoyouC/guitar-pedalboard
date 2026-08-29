@@ -1,4 +1,5 @@
 import type { SessionVerifier } from '../auth/session.ts';
+import { emailVerificationRequired } from '../members/communityWriteApi.ts';
 import type { MarketplaceAccountRepository } from './repository.ts';
 import {
   MarketplaceAccountDeletionNotPendingError,
@@ -79,6 +80,7 @@ export function createMarketplaceAccountApi(input: {
           const deletion = await input.repository.requestDeletion(identity.authUserId, now);
           return Response.json({ deletion }, { status: 202 });
         }
+        if (identity.emailVerified !== true) return emailVerificationRequired('/');
         await input.repository.recoverDeletion(identity.authUserId, now);
         return Response.json({ recovered: true });
       } catch (cause) {

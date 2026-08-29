@@ -15,6 +15,7 @@ test('PostgreSQL auth migration contains every Better Auth model and field', asy
       marketplace_auth_verifications: [],
     }),
     sendMagicLink: async () => {},
+    sendEmailVerification: async () => {},
   });
   const context = await auth.$context;
   const sql = await readFile(new URL(

@@ -32,6 +32,8 @@ import {
 } from './repository.ts';
 import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.ts';
 import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
+import { normalizeSearchText } from '../search/text.ts';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
 
 export interface PostgresQueryable {
   query<R extends QueryResultRow>(text: string, values?: readonly unknown[]): Promise<QueryResult<R>>;
@@ -364,7 +366,7 @@ async function lockOwnedPreset(
     `SELECT current_revision_id, updated_at, visibility
      FROM marketplace_published_presets
      WHERE id = $1 AND creator_id = $2 AND visibility <> 'hidden'
-     FOR UPDATE`,
+     FOR NO KEY UPDATE`,
     [presetId, creatorId],
   );
   const current = result.rows[0];
@@ -499,8 +501,8 @@ export function createPostgresPublishedPresetPublicationRepository(
         await client.query(
           `INSERT INTO marketplace_published_presets
              (id, creator_id, title, description, visibility, current_revision_id,
-              source_preset_id, source_revision_id, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+              source_preset_id, source_revision_id, search_text, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
           [
             input.id,
             input.creator.id,
@@ -510,6 +512,7 @@ export function createPostgresPublishedPresetPublicationRepository(
             input.revisionId,
             input.source?.presetId ?? null,
             input.source?.revisionId ?? null,
+            normalizeSearchText(`${input.title} ${input.description}`),
             input.now,
           ],
         );
@@ -636,13 +639,16 @@ export function createPostgresPublishedPresetPublicationRepository(
           [input.tagIds],
         );
         if (selected.rows.length !== input.tagIds.length) throw new UnavailableTagError();
+        await markMarketplaceTextSearchProjectionWrite(client);
         await client.query(
           `UPDATE marketplace_published_presets
            SET title = $3,
                description = $4,
-               updated_at = GREATEST($5, updated_at + interval '1 millisecond')
+               search_text = $5,
+               updated_at = GREATEST($6, updated_at + interval '1 millisecond')
            WHERE id = $1 AND creator_id = $2`,
-          [input.presetId, input.creatorId, input.title, input.description, input.now],
+          [input.presetId, input.creatorId, input.title, input.description,
+            normalizeSearchText(`${input.title} ${input.description}`), input.now],
         );
         await client.query(
           `DELETE FROM marketplace_published_preset_tags WHERE preset_id = $1`,

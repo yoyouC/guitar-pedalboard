@@ -76,4 +76,16 @@ test('account client rejects malformed export and preserves lifecycle errors', a
       && cause.code === 'recent_authentication_required'
       && cause.verificationUrl === '/login?return=%2Fsettings%3Fsection%3Daccount',
   );
+  await assert.rejects(
+    recoverMarketplaceAccount(async () => Response.json({
+      error: {
+        code: 'email_verification_required',
+        message: 'verify email',
+        verificationUrl: '/login?verify=email&return=%2Fmarketplace%2Faccount',
+      },
+    }, { status: 403 })),
+    (cause) => cause instanceof MarketplaceAccountClientError
+      && cause.code === 'email_verification_required'
+      && cause.verificationUrl === '/login?verify=email&return=%2Fmarketplace%2Faccount',
+  );
 });

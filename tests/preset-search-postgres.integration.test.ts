@@ -10,6 +10,7 @@ import {
   rebuildPublishedPresetSearchProjection,
 } from '../server/search/postgresRepository.ts';
 import type { PublishedPresetSearchInput } from '../server/search/repository.ts';
+import { rebuildMarketplaceTextSearchProjection } from '../server/search/postgresTextProjection.ts';
 import type { CanonicalPublishedPreset } from '../shared/marketplace.ts';
 
 const connectionString = process.env.MARKETPLACE_TEST_DATABASE_URL;
@@ -69,6 +70,8 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
       '0006_preset_remix_provenance.sql',
       '0007_preset_collections.sql',
       '0008_preset_search_indexes.sql',
+      '0015_marketplace_text_search.sql',
+      '0016_marketplace_normalized_search.sql',
     ];
     for (const migration of migrations) {
       await client.query(await readFile(
@@ -88,6 +91,11 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
     const older = clonePreset(
       'preset-search-older', 'Rock Rhythm', 'public', '2026-08-29T03:00:00.000Z',
     );
+    const unicode = clonePreset(
+      'preset-search-unicode', 'ＦＥＮＤＥＲ Glass שָׁלוֹם ꟱tack axcd', 'public',
+      '2026-08-29T00:30:00.000Z',
+    );
+    unicode.tags = [{ id: 'tone-clean', dimension: 'tone', nameZh: '清音', nameEn: 'Clean' }];
     const unlisted = clonePreset(
       'preset-search-secret', 'Secret Distortion', 'unlisted', '2026-08-29T04:00:00.000Z',
     );
@@ -110,7 +118,7 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
     toneDependency.derivedAttributes.resourceKinds = ['builtin', 'tone3000'];
     toneDependency.currentRevision.derivedAttributes.resourceKinds = ['builtin', 'tone3000'];
     await client.query('BEGIN');
-    for (const preset of [newest, older, unlisted, withdrawn, hidden, toneDependency]) {
+    for (const preset of [newest, older, unicode, unlisted, withdrawn, hidden, toneDependency]) {
       await seedPublishedPreset(client, preset);
     }
     await client.query('COMMIT');
@@ -119,8 +127,24 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
       `UPDATE marketplace_tags SET aliases = '["distortion", "rock tone"]'::jsonb
        WHERE id = 'tone-crunch'`,
     );
+    await rebuildMarketplaceTextSearchProjection(client);
+
+    const projectedUnicode = await client.query<{ search_text: string }>(
+      `SELECT search_text FROM marketplace_published_presets WHERE id = $1`, [unicode.id],
+    );
+    assert.match(projectedUnicode.rows[0].search_text, /^fender glass שלום stack axcd\b/);
 
     const repository = createPostgresPublishedPresetSearchRepository(client);
+    assert.deepEqual(
+      (await repository.searchPublicPresets(searchInput({ text: 'fender' }))).items.map((item) => item.id),
+      [unicode.id],
+    );
+    for (const text of ['שלום', 'stack', 'abcd']) {
+      assert.deepEqual(
+        (await repository.searchPublicPresets(searchInput({ text }))).items.map((item) => item.id),
+        [unicode.id],
+      );
+    }
     const alias = await repository.searchPublicPresets(searchInput({
       text: 'distorsion',
       ampIds: [newest.derivedAttributes.ampId],
@@ -160,6 +184,9 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
       derivedAttributes: demoPublishedPreset.derivedAttributes,
       now: new Date('2026-08-29T03:30:00.000Z'),
     });
+    assert.equal((await client.query<{ search_text: string | null }>(
+      `SELECT search_text FROM marketplace_published_presets WHERE id = 'preset-fresh-publication'`,
+    )).rows[0].search_text, 'freshly published');
     assert.deepEqual(
       (await repository.searchPublicPresets(searchInput({ text: 'freshly' }))).items.map((item) => item.id),
       ['preset-fresh-publication'],
@@ -169,6 +196,9 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
       `UPDATE marketplace_published_presets SET title = 'Immediate Search' WHERE id = $1`,
       [newest.id],
     );
+    assert.equal((await client.query<{ search_text: string | null }>(
+      `SELECT search_text FROM marketplace_published_presets WHERE id = $1`, [newest.id],
+    )).rows[0].search_text, null);
     const immediate = await repository.searchPublicPresets(searchInput({ text: 'immed' }));
     assert.deepEqual(immediate.items.map((item) => item.id), [newest.id]);
 

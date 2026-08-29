@@ -1,0 +1,48 @@
+{
+  "scope": "local representative recovery drill",
+  "environment": {
+    "hardware": "Apple M4, 16 GiB RAM",
+    "os": "Darwin 24.6.0 arm64",
+    "node": "v25.2.1",
+    "postgresqlClient": "17.11",
+    "postgresqlServer": "17.11 (postgres:17-alpine)",
+    "region": "local, Asia/Shanghai",
+    "databaseSpec": "Docker Desktop, no explicit CPU or memory limit",
+    "target": "new disposable database",
+    "command": "MARKETPLACE_ALLOW_RESTORE_DRILL=true npm run marketplace:restore-drill"
+  },
+  "passed": true,
+  "archiveSha256": "238e2ce3afd7e2c157e8055576b59858d58226f27b982364fa45e28b9e51e5fd",
+  "backupCompletedAt": "2026-08-29T15:43:19.604Z",
+  "drillStartedAt": "2026-08-29T15:43:20.113Z",
+  "drillCompletedAt": "2026-08-29T15:43:23.839Z",
+  "rpoHours": 0.0001413888888888889,
+  "rtoHours": 0.001035,
+  "targets": {
+    "rpoHours": 24,
+    "rtoHours": 8
+  },
+  "source": {
+    "host": "127.0.0.1",
+    "port": "55440",
+    "database": "marketplace_benchmark_issue37"
+  },
+  "facts": {
+    "members": {
+      "count": 10000,
+      "checksum": "3425185316037867823"
+    },
+    "presets": {
+      "count": 100001,
+      "checksum": "5557992547460139833"
+    },
+    "revisions": {
+      "count": 100021,
+      "checksum": "8986555486765366030"
+    },
+    "collections": {
+      "count": 0,
+      "checksum": "0"
+    }
+  }
+}

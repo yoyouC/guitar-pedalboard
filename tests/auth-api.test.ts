@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { memoryAdapter } from 'better-auth/adapters/memory';
-import { createAuthenticationApi } from '../server/auth/api.ts';
+import {
+  createAuthenticationApi,
+  createSessionBoundAuthenticationHandler,
+} from '../server/auth/api.ts';
 import { createPlatformAuth, createPlatformAuthOptions } from '../server/auth/betterAuth.ts';
-import { createResendMagicLinkSender } from '../server/auth/resend.ts';
+import {
+  createResendEmailVerificationSender,
+  createResendMagicLinkSender,
+} from '../server/auth/resend.ts';
 import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.ts';
 import { createMemberApi } from '../server/members/api.ts';
 import { createMemoryMemberRepository } from '../server/members/memoryRepository.ts';
@@ -53,6 +59,7 @@ test('magic link signs in without exposing a password endpoint', async () => {
     secret,
     database: testDatabase(),
     sendMagicLink: async ({ email, url }) => { deliveries.push({ email, url }); },
+    sendEmailVerification: async () => {},
   });
 
   const request = await auth.handler(new Request(`${baseURL}/api/auth/sign-in/magic-link`, {
@@ -88,12 +95,82 @@ test('magic link signs in without exposing a password endpoint', async () => {
   assert.equal((await password.json()).code, 'EMAIL_PASSWORD_DISABLED');
 });
 
+test('email verification is bound to the current session identity', async () => {
+  const database = {
+    marketplace_auth_users: [] as Array<Record<string, unknown>>,
+    marketplace_auth_sessions: [] as Array<Record<string, unknown>>,
+    marketplace_auth_accounts: [] as Array<Record<string, unknown>>,
+    marketplace_auth_verifications: [] as Array<Record<string, unknown>>,
+  };
+  const deliveries: Array<{ email: string; url: string }> = [];
+  const auth = createPlatformAuth({
+    baseURL,
+    secret,
+    database: memoryAdapter(database),
+    sendMagicLink: async ({ email, url }) => { deliveries.push({ email, url }); },
+    sendEmailVerification: async ({ user, url }) => {
+      deliveries.push({ email: user.email, url });
+    },
+  });
+  const sessionBoundAuth = createSessionBoundAuthenticationHandler(auth);
+
+  await auth.handler(new Request(`${baseURL}/api/auth/sign-in/magic-link`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: baseURL },
+    body: JSON.stringify({ email: 'ada@example.test', callbackURL: '/' }),
+  }));
+  const signIn = await auth.handler(new Request(deliveries[0].url, {
+    headers: { origin: baseURL },
+    redirect: 'manual',
+  }));
+  const cookie = cookies(signIn);
+  database.marketplace_auth_users[0].emailVerified = false;
+
+  const anonymous = await sessionBoundAuth.handler(new Request(
+    `${baseURL}/api/auth/send-verification-email`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: baseURL },
+      body: JSON.stringify({ callbackURL: '/marketplace' }),
+    },
+  ));
+  assert.equal(anonymous.status, 401);
+  assert.equal(deliveries.length, 1);
+
+  const mismatch = await sessionBoundAuth.handler(new Request(`${baseURL}/api/auth/send-verification-email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+    body: JSON.stringify({ email: 'grace@example.test', callbackURL: '/marketplace' }),
+  }));
+  assert.equal(mismatch.status, 200);
+  assert.equal(deliveries.length, 2);
+  assert.equal(deliveries[1].email, 'ada@example.test');
+
+  const request = await sessionBoundAuth.handler(new Request(`${baseURL}/api/auth/send-verification-email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie, origin: baseURL },
+    body: JSON.stringify({ callbackURL: '/marketplace' }),
+  }));
+  assert.equal(request.status, 200);
+  assert.equal(deliveries.length, 3);
+  assert.equal(deliveries[2].email, 'ada@example.test');
+  assert.match(deliveries[2].url, /\/api\/auth\/verify-email\?token=/);
+
+  const verification = await auth.handler(new Request(deliveries[2].url, {
+    headers: { cookie, origin: baseURL },
+    redirect: 'manual',
+  }));
+  assert.equal(verification.status, 302);
+  assert.equal(database.marketplace_auth_users[0].emailVerified, true);
+});
+
 test('account linking policy requires an authenticated explicit Google link', async () => {
   const options = createPlatformAuthOptions({
     baseURL,
     secret,
     database: testDatabase(),
     sendMagicLink: async () => {},
+    sendEmailVerification: async () => {},
     google: { clientId: 'google-client', clientSecret: 'google-secret' },
   });
 
@@ -106,6 +183,7 @@ test('account linking policy requires an authenticated explicit Google link', as
     secret,
     database: testDatabase(),
     sendMagicLink: async () => {},
+    sendEmailVerification: async () => {},
     google: { clientId: 'google-client', clientSecret: 'google-secret' },
   });
   const response = await auth.handler(new Request(`${baseURL}/api/auth/link-social`, {
@@ -129,6 +207,7 @@ test('same-email Google sign-in is rejected, then explicit verified linking pres
     secret,
     database: memoryAdapter(database),
     sendMagicLink: async ({ url }) => { deliveries.push(url); },
+    sendEmailVerification: async () => {},
     google: {
       clientId: 'google-client',
       clientSecret: 'google-secret',
@@ -273,6 +352,36 @@ test('Resend sender delivers only the magic link through its narrow adapter', as
   assert.equal(body.to[0], 'ada@example.test');
   assert.match(body.text, /magic-link\/verify\?token=secret-token/);
   assert.equal(JSON.stringify(body).includes('resend-test-key'), false);
+});
+
+test('Resend verification sender describes verification rather than sign-in', async () => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const sender = createResendEmailVerificationSender({
+    apiKey: 'resend-test-key',
+    from: 'Guitar Pedalboard <login@example.test>',
+    fetch: async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return Response.json({ id: 'email-verify' }, { status: 200 });
+    },
+  });
+
+  await sender({
+    user: {
+      id: 'auth-ada',
+      email: 'ada@example.test',
+      emailVerified: false,
+      name: 'Ada',
+      image: null,
+      createdAt: new Date('2026-08-29T00:00:00.000Z'),
+      updatedAt: new Date('2026-08-29T00:00:00.000Z'),
+    },
+    url: 'https://pedalboard.test/api/auth/verify-email?token=verification-token',
+    token: 'verification-token',
+  });
+
+  assert.match(String(bodies[0].subject), /Verify your email/i);
+  assert.match(String(bodies[0].text), /verify your email/i);
+  assert.doesNotMatch(String(bodies[0].text), /sign in/i);
 });
 
 test('Resend failure is surfaced so auth does not claim an undelivered link', async () => {

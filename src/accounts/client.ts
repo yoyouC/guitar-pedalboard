@@ -22,13 +22,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 async function responseError(response: Response): Promise<MarketplaceAccountClientError> {
   try {
-    const body = await response.json() as { error?: { code?: unknown; message?: unknown; verificationUrl?: unknown } };
+    const body = await response.json() as {
+      error?: { code?: unknown; message?: unknown; verificationUrl?: unknown };
+    };
     if (typeof body.error?.code === 'string' && typeof body.error.message === 'string') {
+      const verificationUrl = typeof body.error.verificationUrl === 'string'
+        && body.error.verificationUrl.startsWith('/')
+        && !body.error.verificationUrl.startsWith('//')
+        ? body.error.verificationUrl
+        : undefined;
       return new MarketplaceAccountClientError(
         body.error.code,
         body.error.message,
-        typeof body.error.verificationUrl === 'string' && body.error.verificationUrl.startsWith('/')
-          ? body.error.verificationUrl : undefined,
+        verificationUrl,
       );
     }
   } catch {

@@ -1,8 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { beginGoogleAuth, requestMagicLink } from '../members/client.ts';
+import {
+  beginGoogleAuth,
+  requestEmailVerification,
+  requestMagicLink,
+} from '../members/client.ts';
 import { useMemberSession } from '../members/useMemberSession.ts';
 import { loginReturnFromSearch } from '../app/loginReturn.ts';
 import type { AppLocale } from '../app/preferences.ts';
+import { parseMarketplaceEmailVerificationRequest } from '../members/emailVerification.ts';
 
 interface LoginPageProps {
   search: string;
@@ -15,11 +20,12 @@ export function LoginPage({ search, locale, onNavigate }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const returnTo = loginReturnFromSearch(search);
+  const verification = parseMarketplaceEmailVerificationRequest(`/login${search}`);
+  const returnTo = verification?.returnPath ?? loginReturnFromSearch(search);
 
   useEffect(() => {
-    if (session.status === 'authenticated') onNavigate(returnTo);
-  }, [onNavigate, returnTo, session.status]);
+    if (!verification && session.status === 'authenticated') onNavigate(returnTo);
+  }, [onNavigate, returnTo, session.status, verification]);
 
   const magicLink = async (event: FormEvent) => {
     event.preventDefault();
@@ -45,6 +51,44 @@ export function LoginPage({ search, locale, onNavigate }: LoginPageProps) {
       setBusy(false);
     }
   };
+
+  const verifyEmail = async () => {
+    setBusy(true);
+    setMessage('');
+    try {
+      await requestEmailVerification(returnTo);
+      setMessage(locale === 'zh-CN'
+        ? '验证链接已发送，请检查当前账户邮箱。'
+        : 'Verification link sent. Check the email for this account.');
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : '邮箱验证服务暂时不可用');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (verification && session.status === 'authenticated') {
+    return (
+      <section className="login-page">
+        <div className="login-page__intro">
+          <span className="marketplace-detail__eyebrow">Verified community writes</span>
+          <h1>{locale === 'zh-CN' ? '验证邮箱' : 'Verify email'}</h1>
+          <p>{locale === 'zh-CN'
+            ? '验证链接只会发送到当前登录身份的邮箱；返回后原有发布或治理草稿仍保留。'
+            : 'The link is sent only to the signed-in identity; your publication or moderation draft remains available.'}</p>
+        </div>
+        <div className="login-page__card">
+          <button type="button" disabled={busy} onClick={() => void verifyEmail()}>
+            {locale === 'zh-CN' ? '发送邮箱验证链接' : 'Send verification link'}
+          </button>
+          <button type="button" disabled={busy} onClick={() => onNavigate(returnTo)}>
+            {locale === 'zh-CN' ? '返回原操作' : 'Return to previous task'}
+          </button>
+          {message && <p role="status">{message}</p>}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="login-page">
