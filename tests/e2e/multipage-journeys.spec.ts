@@ -229,13 +229,34 @@ test('Account Settings exports data, logs out on deletion, and requires an expli
 });
 
 test('offline discovery is announced as failure while local Rig and reduced-motion Settings remain usable', async ({ page }) => {
-  await page.route('**/api/marketplace/search/presets?**', (route) => route.abort('failed'));
-  await page.goto('/marketplace');
+  await startTestAudio(page);
+  await applyDemoTone(page);
+  await page.getByPlaceholder('新预设名称').fill('Offline Rig');
+  await page.getByRole('button', { name: '保存整套 Rig' }).click();
+  await expect(page.getByRole('option', { name: 'Offline Rig' })).toHaveCount(1);
+  await expect(page.locator('select').filter({
+    has: page.getByRole('option', { name: 'Offline Rig' }),
+  })).toHaveValue('Offline Rig');
+  await page.getByRole('button', { name: 'A:空槽,踩下存入当前状态' }).click();
+  await expect(page.getByRole('button', { name: /A:踩下恢复/ })).toBeVisible();
+
+  await page.getByRole('button', { name: '🔗 分享' }).click();
+  await expect(page.getByRole('button', { name: '✓ 已复制' })).toBeVisible();
+  expect(new URL(page.url()).hash.length).toBeGreaterThan(1);
+
+  await page.route('**/api/marketplace/**', (route) => route.fulfill({
+    status: 503,
+    json: { error: { code: 'marketplace_unavailable', message: 'Tone Market is offline.' } },
+  }));
+  await page.getByRole('link', { name: '音色市场' }).click();
   await expect(page.getByRole('alert')).toContainText('Tone Market 无法完成搜索');
   await expect(page.getByText('没有匹配的 Tone')).toHaveCount(0);
+  await expect(page.getByRole('status', { name: 'Audio input is active' })).toContainText('Test tone');
 
   await page.getByRole('button', { name: '返回效果器' }).click();
-  await page.getByRole('button', { name: 'A:空槽,踩下存入当前状态' }).click();
+  await expect(page.getByLabel('Tone Market session')).toContainText('Demo Crunch');
+  await expect(page.getByRole('button', { name: '■ 停止' })).toBeVisible();
+  await expect(page.getByRole('option', { name: 'Offline Rig' })).toHaveCount(1);
   await expect(page.getByRole('button', { name: /A:踩下恢复/ })).toBeVisible();
   await expect(page.getByRole('button', { name: '🔗 分享' })).toBeEnabled();
 
