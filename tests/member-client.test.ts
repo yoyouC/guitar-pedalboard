@@ -3,6 +3,8 @@ import test from 'node:test';
 import {
   MemberClientError,
   fetchCurrentMember,
+  fetchPublicCreatorById,
+  fetchPublicCreatorWorksById,
   requestMagicLink,
   updateMemberProfile,
 } from '../src/members/client.ts';
@@ -30,6 +32,29 @@ test('member client distinguishes anonymous state from marketplace failure', asy
     fetchCurrentMember(async () => Response.json({ error: {} }, { status: 503 })),
     (cause) => cause instanceof MemberClientError && cause.code === 'member_service_unavailable',
   );
+});
+
+test('creator client loads canonical member-id pages without relying on the current handle', async () => {
+  const calls: string[] = [];
+  const fetch = async (input: RequestInfo | URL) => {
+    calls.push(String(input));
+    if (String(input).endsWith('/presets')) {
+      return Response.json({ presets: [{
+        id: 'preset-clean', title: 'Ada Clean', url: '/marketplace/presets/preset-clean',
+      }] });
+    }
+    return Response.json({ creator: {
+      id: 'member-ada', handle: 'ada-new', displayName: 'Ada', bio: 'Clean rigs.',
+      avatarUrl: null, publicWorksUrl: '/api/marketplace/creators/id/member-ada/presets',
+    } });
+  };
+
+  assert.equal((await fetchPublicCreatorById('member-ada', fetch)).handle, 'ada-new');
+  assert.equal((await fetchPublicCreatorWorksById('member-ada', fetch))[0].id, 'preset-clean');
+  assert.deepEqual(calls, [
+    '/api/marketplace/creators/id/member-ada',
+    '/api/marketplace/creators/id/member-ada/presets',
+  ]);
 });
 
 test('member client rejects private or malformed fields crossing the profile seam', async () => {

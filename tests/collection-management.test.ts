@@ -43,7 +43,10 @@ CanonicalPublishedPreset {
   };
 }
 
-function createFixture(identity: AuthenticatedIdentity | null = adaIdentity) {
+function createFixture(
+  identity: AuthenticatedIdentity | null = adaIdentity,
+  communityStatus: 'active' | 'banned' = 'active',
+) {
   const presets = createMemoryPublishedPresetRepository(
     [demoPublishedPreset, ownPreset()],
     tags,
@@ -66,6 +69,7 @@ function createFixture(identity: AuthenticatedIdentity | null = adaIdentity) {
         publicProfileCompletedAt: now,
         createdAt: now,
         updatedAt: now,
+        communityStatus,
       }] : []),
       now: () => now,
       createCollectionId: () => 'collection-ada-live',
@@ -200,6 +204,13 @@ test('creating a collection requires explicit public attribution setup', async (
   const response = await createCollection(api);
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error.code, 'public_profile_required');
+});
+
+test('banned member cannot create a community collection', async () => {
+  const { api } = createFixture(adaIdentity, 'banned');
+  const response = await createCollection(api);
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'member_banned');
 });
 
 test('owner atomically adds, sorts, removes, and explicitly upgrades fixed revisions', async () => {

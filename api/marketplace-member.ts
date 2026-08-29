@@ -22,17 +22,27 @@ export default {
     const requestUrl = new URL(request.url);
     const route = requestUrl.searchParams.get('route');
     const handle = requestUrl.searchParams.get('handle');
+    const memberId = requestUrl.searchParams.get('memberId');
     if (route === 'me') requestUrl.pathname = '/api/marketplace/me';
     else if (route === 'profile') requestUrl.pathname = '/api/marketplace/me/profile';
     else if (route === 'creator' && handle) {
       requestUrl.pathname = `/api/marketplace/creators/${encodeURIComponent(handle)}`;
     } else if (route === 'creator-presets' && handle) {
       requestUrl.pathname = `/api/marketplace/creators/${encodeURIComponent(handle)}/presets`;
+    } else if (route === 'creator-id' && memberId) {
+      requestUrl.pathname = `/api/marketplace/creators/id/${encodeURIComponent(memberId)}`;
+    } else if (route === 'creator-id-presets' && memberId) {
+      requestUrl.pathname = `/api/marketplace/creators/id/${encodeURIComponent(memberId)}/presets`;
     } else return new Response(null, { status: 404 });
     requestUrl.search = '';
 
     try {
-      if (route === 'creator' || route === 'creator-presets') {
+      if (
+        route === 'creator'
+        || route === 'creator-presets'
+        || route === 'creator-id'
+        || route === 'creator-id-presets'
+      ) {
         publicApi ??= createMemberApi({
           members: createPostgresMemberRepository(marketplacePool),
           sessions: { async verify() { return null; } },

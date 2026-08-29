@@ -169,6 +169,19 @@ test('handle is unique, rate-limited for 90 days, and old handles redirect forev
   const changedAgain = await api.fetch(profilePatch({ handle: 'ada-rigs' }));
   assert.equal(changedAgain.status, 200);
 
+  const stableId = await api.fetch(
+    new Request('https://pedalboard.test/api/marketplace/creators/id/member-ada'),
+  );
+  assert.equal(stableId.status, 200);
+  assert.deepEqual((await stableId.json()).creator, {
+    id: 'member-ada',
+    handle: 'ada-rigs',
+    displayName: 'Ada Lovelace',
+    bio: '',
+    avatarUrl: 'https://images.example.test/ada.png',
+    publicWorksUrl: '/api/marketplace/creators/id/member-ada/presets',
+  });
+
   const reclaimed = await api.fetch(profilePatch({
     handle: 'player-4f82a1',
     expectedUpdatedAt: currentTime.toISOString(),
@@ -247,6 +260,33 @@ test('profile update rejects a stale optimistic concurrency token', async () => 
 
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error.code, 'profile_update_conflict');
+});
+
+test('banned member keeps read access but cannot update the community profile', async () => {
+  const members = createMemoryMemberRepository([{
+    id: 'member-ada',
+    authUserId: adaIdentity.authUserId,
+    handle: 'ada',
+    displayName: 'Ada',
+    bio: '',
+    avatarUrl: null,
+    handleChangedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    communityStatus: 'banned',
+  }]);
+  const api = createMemberApi({
+    members,
+    sessions: session(adaIdentity),
+    now: () => now,
+    createId: () => 'member-unused',
+    createHandleSuffix: () => 'unused',
+  });
+
+  assert.equal((await api.fetch(new Request('https://pedalboard.test/api/marketplace/me'))).status, 200);
+  const response = await api.fetch(profilePatch({ displayName: 'Still Ada' }));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, 'member_banned');
 });
 
 test('member fact-source failure becomes a stable unavailable response', async () => {

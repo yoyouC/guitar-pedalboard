@@ -1,6 +1,13 @@
 import type {
   CanonicalPublishedPresetRevision,
+  MarketplaceAuthorModerationCase,
+  MarketplaceLikeState,
+  MarketplaceMyLikes,
+  MarketplaceRankingPage,
+  MarketplaceSearchPage,
   PresetCollection,
+  PresetCollectionSearchItem,
+  PublicCreatorSearchItem,
   PublishedPresetSearchPage,
   PublishedPreset,
   PublishedPresetRevision,
@@ -359,4 +366,134 @@ export function parsePublishedPresetSearchPage(value: unknown): PublishedPresetS
     ) return null;
   }
   return value as unknown as PublishedPresetSearchPage;
+}
+
+function parseSearchEnvelope<Item>(
+  value: unknown,
+  parseItem: (item: unknown) => Item | null,
+): MarketplaceSearchPage<Item> | null {
+  if (
+    !isRecord(value)
+    || !hasOnlyKeys(value, ['items', 'nextCursor'])
+    || !Array.isArray(value.items)
+    || (value.nextCursor !== null && typeof value.nextCursor !== 'string')
+  ) return null;
+  const items = value.items.map(parseItem);
+  if (items.some((item) => item === null)) return null;
+  return { items: items as Item[], nextCursor: value.nextCursor };
+}
+
+export function parsePresetCollectionSearchPage(
+  value: unknown,
+): MarketplaceSearchPage<PresetCollectionSearchItem> | null {
+  return parseSearchEnvelope(value, (item) => {
+    if (
+      !isRecord(item)
+      || !isRecord(item.creator)
+      || !hasOnlyKeys(item, [
+        'id', 'title', 'description', 'creator', 'tags', 'url', 'createdAt', 'updatedAt',
+      ])
+      || typeof item.id !== 'string'
+      || typeof item.title !== 'string'
+      || typeof item.description !== 'string'
+      || !hasOnlyKeys(item.creator, ['id', 'handle', 'displayName'])
+      || typeof item.creator.id !== 'string'
+      || typeof item.creator.handle !== 'string'
+      || typeof item.creator.displayName !== 'string'
+      || !Array.isArray(item.tags)
+      || !item.tags.every(isMarketplaceTag)
+      || typeof item.url !== 'string'
+      || typeof item.createdAt !== 'string'
+      || typeof item.updatedAt !== 'string'
+    ) return null;
+    return item as unknown as PresetCollectionSearchItem;
+  });
+}
+
+export function parsePublicCreatorSearchPage(
+  value: unknown,
+): MarketplaceSearchPage<PublicCreatorSearchItem> | null {
+  return parseSearchEnvelope(value, (item) => {
+    if (
+      !isRecord(item)
+      || !hasOnlyKeys(item, [
+        'id', 'handle', 'displayName', 'bio', 'avatarUrl', 'url', 'createdAt',
+      ])
+      || typeof item.id !== 'string'
+      || typeof item.handle !== 'string'
+      || typeof item.displayName !== 'string'
+      || typeof item.bio !== 'string'
+      || (item.avatarUrl !== null && typeof item.avatarUrl !== 'string')
+      || typeof item.url !== 'string'
+      || typeof item.createdAt !== 'string'
+    ) return null;
+    return item as unknown as PublicCreatorSearchItem;
+  });
+}
+
+function isLikeSummary(value: unknown, withLikedAt: boolean): boolean {
+  if (!isRecord(value) || !isRecord(value.creator)) return false;
+  const keys = ['id', 'title', 'creator', 'likeCount', ...(withLikedAt ? ['likedAt'] : [])];
+  return hasOnlyKeys(value, keys)
+    && typeof value.id === 'string' && value.id.length > 0
+    && typeof value.title === 'string' && value.title.length > 0
+    && hasOnlyKeys(value.creator, ['id', 'handle', 'displayName'])
+    && typeof value.creator.id === 'string'
+    && typeof value.creator.handle === 'string'
+    && typeof value.creator.displayName === 'string'
+    && Number.isInteger(value.likeCount) && Number(value.likeCount) >= 0
+    && (!withLikedAt || typeof value.likedAt === 'string');
+}
+
+export function parseMarketplaceLikeState(value: unknown): MarketplaceLikeState | null {
+  return isRecord(value)
+    && hasOnlyKeys(value, ['liked', 'canLike', 'likeCount'])
+    && typeof value.liked === 'boolean'
+    && typeof value.canLike === 'boolean'
+    && Number.isInteger(value.likeCount)
+    && Number(value.likeCount) >= 0
+    ? value as unknown as MarketplaceLikeState
+    : null;
+}
+
+export function parseMarketplaceMyLikes(value: unknown): MarketplaceMyLikes | null {
+  if (
+    !isRecord(value) || !hasOnlyKeys(value, ['presets', 'collections'])
+    || !Array.isArray(value.presets) || !Array.isArray(value.collections)
+    || !value.presets.every((item) => isLikeSummary(item, true))
+    || !value.collections.every((item) => isLikeSummary(item, true))
+  ) return null;
+  return value as unknown as MarketplaceMyLikes;
+}
+
+export function parseMarketplaceRankingPage(value: unknown): MarketplaceRankingPage | null {
+  if (
+    !isRecord(value) || !hasOnlyKeys(value, ['items', 'nextCursor'])
+    || !Array.isArray(value.items) || !value.items.every((item) => isLikeSummary(item, false))
+    || (value.nextCursor !== null && typeof value.nextCursor !== 'string')
+  ) return null;
+  return value as unknown as MarketplaceRankingPage;
+}
+
+export function parseMarketplaceAuthorModerationCases(
+  value: unknown,
+): MarketplaceAuthorModerationCase[] | null {
+  if (!Array.isArray(value) || !value.every((item) => {
+    if (!isRecord(item) || !hasOnlyKeys(item, [
+      'actionId', 'targetKind', 'targetId', 'action', 'reason', 'createdAt', 'appeal',
+    ])) return false;
+    const appeal = item.appeal;
+    return typeof item.actionId === 'string'
+      && (item.targetKind === 'preset' || item.targetKind === 'collection')
+      && typeof item.targetId === 'string' && item.action === 'hide'
+      && typeof item.reason === 'string'
+      && typeof item.createdAt === 'string' && Number.isFinite(Date.parse(item.createdAt))
+      && (appeal === null || (
+        isRecord(appeal) && hasOnlyKeys(appeal, ['id', 'status', 'statement'])
+        && typeof appeal.id === 'string'
+        && ['pending', 'upheld', 'rejected'].includes(String(appeal.status))
+        && typeof appeal.statement === 'string'
+      ));
+  })) return null;
+  return value as MarketplaceAuthorModerationCase[];
 }

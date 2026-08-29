@@ -23,6 +23,7 @@ import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
 import { isReadyForPublicAttribution } from '../members/repository.ts';
 import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
+import { communityWriteDenied } from '../members/communityWriteApi.ts';
 
 export interface MarketplaceApiDependencies {
   publishedPresets: PublishedPresetRepository;
@@ -147,6 +148,8 @@ export function createMarketplaceApi({
             handle: `player-${publication.createHandleSuffix()}`,
             now,
           });
+          const denied = communityWriteDenied(member);
+          if (denied) return denied;
           if (!isReadyForPublicAttribution(member, CURRENT_MEMBER_TERMS_VERSION)) {
             return apiError(409, 'public_profile_required', 'Complete your public profile first', {
               requiredTermsVersion: CURRENT_MEMBER_TERMS_VERSION,
@@ -253,6 +256,10 @@ export function createMarketplaceApi({
               handle: `player-${publication.createHandleSuffix()}`,
               now,
             });
+            if (request.method !== 'GET') {
+              const denied = communityWriteDenied(member);
+              if (denied) return denied;
+            }
             const presetId = decodeURIComponent(managementMatch[1]);
 
             if (manageMatch) {

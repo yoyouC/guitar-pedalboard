@@ -19,6 +19,12 @@
       "permanent": true
     }
   ],
+  "crons": [
+    {
+      "path": "/api/internal/marketplace/rebuild-trending",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/auth/:path*",
@@ -31,6 +37,14 @@
     {
       "source": "/api/marketplace/me",
       "destination": "/api/marketplace-member?route=me"
+    },
+    {
+      "source": "/api/marketplace/creators/id/:memberId/presets",
+      "destination": "/api/marketplace-member?route=creator-id-presets&memberId=:memberId"
+    },
+    {
+      "source": "/api/marketplace/creators/id/:memberId",
+      "destination": "/api/marketplace-member?route=creator-id&memberId=:memberId"
     },
     {
       "source": "/api/marketplace/creators/:handle/presets",
@@ -50,7 +64,79 @@
     },
     {
       "source": "/api/marketplace/search/presets",
-      "destination": "/api/marketplace-search"
+      "destination": "/api/marketplace-search?route=presets"
+    },
+    {
+      "source": "/api/marketplace/search/collections",
+      "destination": "/api/marketplace-search?route=collections"
+    },
+    {
+      "source": "/api/marketplace/search/creators",
+      "destination": "/api/marketplace-search?route=creators"
+    },
+    {
+      "source": "/api/marketplace/me/likes",
+      "destination": "/api/marketplace-like?route=mine"
+    },
+    {
+      "source": "/api/marketplace/reports",
+      "destination": "/api/marketplace-moderation?route=reports"
+    },
+    {
+      "source": "/api/marketplace/infringement-notices",
+      "destination": "/api/marketplace-moderation?route=notice"
+    },
+    {
+      "source": "/api/marketplace/me/moderation",
+      "destination": "/api/marketplace-moderation?route=mine"
+    },
+    {
+      "source": "/api/marketplace/moderation/appeals",
+      "destination": "/api/marketplace-moderation?route=appeals"
+    },
+    {
+      "source": "/api/marketplace/admin/moderation/queue",
+      "destination": "/api/marketplace-moderation?route=queue"
+    },
+    {
+      "source": "/api/marketplace/admin/moderation/actions",
+      "destination": "/api/marketplace-moderation?route=actions"
+    },
+    {
+      "source": "/api/marketplace/admin/moderation/appeals",
+      "destination": "/api/marketplace-moderation?route=admin-appeals"
+    },
+    {
+      "source": "/api/marketplace/admin/moderation/audit",
+      "destination": "/api/marketplace-moderation?route=audit"
+    },
+    {
+      "source": "/api/marketplace/popular/presets",
+      "destination": "/api/marketplace-like?route=popular-presets"
+    },
+    {
+      "source": "/api/marketplace/popular/collections",
+      "destination": "/api/marketplace-like?route=popular-collections"
+    },
+    {
+      "source": "/api/marketplace/trending/presets",
+      "destination": "/api/marketplace-like?route=trending-presets"
+    },
+    {
+      "source": "/api/marketplace/trending/collections",
+      "destination": "/api/marketplace-like?route=trending-collections"
+    },
+    {
+      "source": "/api/internal/marketplace/rebuild-trending",
+      "destination": "/api/marketplace-trending-rebuild"
+    },
+    {
+      "source": "/api/marketplace/likes/presets/:id",
+      "destination": "/api/marketplace-like?route=like-preset&id=:id"
+    },
+    {
+      "source": "/api/marketplace/likes/collections/:id",
+      "destination": "/api/marketplace-like?route=like-collection&id=:id"
     },
     {
       "source": "/api/marketplace/presets",

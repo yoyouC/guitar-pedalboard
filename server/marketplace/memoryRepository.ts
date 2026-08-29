@@ -38,6 +38,10 @@ export function createMemoryPublishedPresetRepository(
 ): PublishedPresetRepository & PublishedPresetPublicationRepository & PublishedPresetManagementRepository & {
   findRevisionReference: PublishedPresetRevisionReferenceRepository['findRevisionReference'];
   count(): Promise<number>;
+  setModerationVisibility(
+    presetId: string,
+    visibility: PublishedPreset['visibility'],
+  ): Promise<void>;
 } & PublishedPresetSearchRepository {
   const presetsById = new Map(presets.map((preset) => [preset.id, preset]));
   const tagsById = new Map(tags.map(({ aliases: _aliases, ...tag }) => [tag.id, tag]));
@@ -352,6 +356,12 @@ export function createMemoryPublishedPresetRepository(
 
     async count() {
       return presetsById.size;
+    },
+
+    async setModerationVisibility(presetId, visibility) {
+      const preset = presetsById.get(presetId);
+      if (!preset) throw new PublishedPresetAccessError();
+      preset.visibility = visibility;
     },
   };
 }

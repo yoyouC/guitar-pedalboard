@@ -410,3 +410,191 @@ test('official client sends structured preset search and validates the public re
     (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
   );
 });
+
+test('official client keeps collection and creator discovery cursors on independent endpoints', async () => {
+  const collectionPage = {
+    items: [{
+      id: 'collection-rock',
+      title: 'Rock Stage',
+      description: 'Stage tones',
+      creator: demoPublishedPreset.creator,
+      tags: demoPublishedPreset.tags,
+      url: '/marketplace/collections/collection-rock',
+      createdAt: demoPublishedPreset.createdAt,
+      updatedAt: demoPublishedPreset.updatedAt,
+    }],
+    nextCursor: 'collection-next',
+  };
+  const creatorPage = {
+    items: [{
+      id: demoPublishedPreset.creator.id,
+      handle: demoPublishedPreset.creator.handle,
+      displayName: demoPublishedPreset.creator.displayName,
+      bio: 'Guitar tones',
+      avatarUrl: null,
+      url: `/creators/id/${demoPublishedPreset.creator.id}`,
+      createdAt: demoPublishedPreset.createdAt,
+    }],
+    nextCursor: 'creator-next',
+  };
+  const calls: string[] = [];
+  const client = createMarketplaceClient(async (input) => {
+    calls.push(String(input));
+    return Response.json(String(input).includes('/collections?') ? collectionPage : creatorPage);
+  });
+
+  assert.deepEqual(await client.searchPresetCollections({
+    text: 'rock', limit: 8, cursor: 'collection-current',
+  }), collectionPage);
+  assert.deepEqual(await client.searchCreators({
+    text: 'ada', limit: 6, cursor: 'creator-current',
+  }), creatorPage);
+  assert.deepEqual(calls, [
+    '/api/marketplace/search/collections?q=rock&limit=8&cursor=collection-current',
+    '/api/marketplace/search/creators?q=ada&limit=6&cursor=creator-current',
+  ]);
+
+  const leaked = createMarketplaceClient(async () => Response.json({
+    ...collectionPage,
+    items: [{ ...collectionPage.items[0], items: [{ title: 'private body' }] }],
+  }));
+  await assert.rejects(
+    () => leaked.searchPresetCollections({ text: 'rock' }),
+    (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
+  );
+});
+
+test('official client reads and mutates likes without accepting private trajectory drift', async () => {
+  const calls: Array<{ path: string; method?: string }> = [];
+  const summary = {
+    id: demoPublishedPreset.id,
+    title: demoPublishedPreset.title,
+    creator: demoPublishedPreset.creator,
+    likeCount: 3,
+  };
+  const client = createMarketplaceClient(async (input, init) => {
+    const path = String(input);
+    calls.push({ path, method: init?.method });
+    if (path === '/api/marketplace/me/likes') {
+      return Response.json({
+        likes: { presets: [{ ...summary, likedAt: demoPublishedPreset.updatedAt }], collections: [] },
+      });
+    }
+    if (path.startsWith('/api/marketplace/popular/') || path.startsWith('/api/marketplace/trending/')) {
+      return Response.json({ items: [summary], nextCursor: 'popular-next' });
+    }
+    return Response.json({ state: { liked: init?.method !== 'DELETE', canLike: true, likeCount: 3 } });
+  });
+
+  assert.equal((await client.getLikeState('preset', demoPublishedPreset.id)).likeCount, 3);
+  assert.equal((await client.setLike('preset', demoPublishedPreset.id, true)).liked, true);
+  assert.equal((await client.setLike('preset', demoPublishedPreset.id, false)).liked, false);
+  assert.deepEqual((await client.getMyLikes()).presets.map((item) => item.id), [demoPublishedPreset.id]);
+  assert.deepEqual((await client.listPopular('preset', { limit: 1, cursor: 'current' })).items, [summary]);
+  assert.deepEqual((await client.listTrending('collection', { limit: 2 })).items, [summary]);
+  assert.deepEqual(calls, [
+    { path: `/api/marketplace/likes/presets/${demoPublishedPreset.id}`, method: 'GET' },
+    { path: `/api/marketplace/likes/presets/${demoPublishedPreset.id}`, method: 'PUT' },
+    { path: `/api/marketplace/likes/presets/${demoPublishedPreset.id}`, method: 'DELETE' },
+    { path: '/api/marketplace/me/likes', method: undefined },
+    { path: '/api/marketplace/popular/presets?limit=1&cursor=current', method: undefined },
+    { path: '/api/marketplace/trending/collections?limit=2', method: undefined },
+  ]);
+
+  const leaked = createMarketplaceClient(async () => Response.json({
+    items: [{ ...summary, likedAt: demoPublishedPreset.updatedAt }], nextCursor: null,
+  }));
+  await assert.rejects(
+    () => leaked.listTrending('preset'),
+    (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
+  );
+});
+
+test('official client submits moderation requests, validates author cases, and preserves governance errors', async () => {
+  const calls: Array<{ path: string; method?: string; body?: unknown }> = [];
+  const moderationCase = {
+    actionId: 'action-hide-1',
+    targetKind: 'preset',
+    targetId: demoPublishedPreset.id,
+    action: 'hide',
+    reason: 'Confirmed impersonation.',
+    createdAt: '2026-08-29T14:00:00.000Z',
+    appeal: null,
+  } as const;
+  const client = createMarketplaceClient(async (input, init) => {
+    calls.push({
+      path: String(input),
+      method: init?.method,
+      ...(typeof init?.body === 'string' ? { body: JSON.parse(init.body) } : {}),
+    });
+    if (String(input) === '/api/marketplace/me/moderation') {
+      return Response.json({ cases: [moderationCase] });
+    }
+    return new Response(null, { status: 201 });
+  });
+
+  await client.submitReport({
+    targetKind: 'preset', targetId: demoPublishedPreset.id,
+    reason: 'impersonation', details: 'The author identity is misleading.',
+  });
+  await client.submitInfringementNotice({
+    claimantName: 'Rights Holder', claimantEmail: 'rights@example.test',
+    targetKind: 'preset', targetId: demoPublishedPreset.id,
+    rightsStatement: 'I own the identified work and request its review.', goodFaith: true,
+  });
+  assert.deepEqual(await client.getMyModerationCases(), [moderationCase]);
+  await client.submitModerationAppeal('action-hide-1', 'The attribution is accurate.');
+  assert.deepEqual(calls, [
+    {
+      path: '/api/marketplace/reports', method: 'POST',
+      body: {
+        targetKind: 'preset', targetId: demoPublishedPreset.id,
+        reason: 'impersonation', details: 'The author identity is misleading.',
+      },
+    },
+    {
+      path: '/api/marketplace/infringement-notices', method: 'POST',
+      body: {
+        claimantName: 'Rights Holder', claimantEmail: 'rights@example.test',
+        targetKind: 'preset', targetId: demoPublishedPreset.id,
+        rightsStatement: 'I own the identified work and request its review.', goodFaith: true,
+      },
+    },
+    { path: '/api/marketplace/me/moderation', method: undefined },
+    {
+      path: '/api/marketplace/moderation/appeals', method: 'POST',
+      body: { actionId: 'action-hide-1', statement: 'The attribution is accurate.' },
+    },
+  ]);
+
+  const malformed = createMarketplaceClient(async () => Response.json({
+    cases: [{ ...moderationCase, actorAuthUserId: 'auth-admin' }],
+  }));
+  await assert.rejects(
+    () => malformed.getMyModerationCases(),
+    (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
+  );
+
+  const duplicate = createMarketplaceClient(async () => Response.json({
+    error: { code: 'duplicate_report', message: 'duplicate' },
+  }, { status: 409 }));
+  await assert.rejects(
+    () => duplicate.submitReport({
+      targetKind: 'preset', targetId: demoPublishedPreset.id,
+      reason: 'spam', details: 'Already reported.',
+    }),
+    (error) => error instanceof MarketplaceClientError
+      && error.code === 'invalid_update'
+      && error.message === '你已经举报过这个内容。',
+  );
+
+  const banned = createMarketplaceClient(async () => Response.json({
+    error: { code: 'member_banned', message: 'banned' },
+  }, { status: 403 }));
+  await assert.rejects(
+    () => banned.submitModerationAppeal('action-hide-1', 'Please review.'),
+    (error) => error instanceof MarketplaceClientError
+      && error.code === 'forbidden'
+      && error.message === '账号已被禁止执行社区写操作。',
+  );
+});

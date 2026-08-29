@@ -94,6 +94,85 @@ export interface PublishedPresetSearchPage {
   nextCursor: string | null;
 }
 
+export interface PresetCollectionSearchItem {
+  id: string;
+  title: string;
+  description: string;
+  creator: MarketplaceMemberSummary;
+  tags: MarketplaceTag[];
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicCreatorSearchItem {
+  id: string;
+  handle: string;
+  displayName: string;
+  bio: string;
+  avatarUrl: string | null;
+  url: string;
+  createdAt: string;
+}
+
+export interface MarketplaceSearchPage<Item> {
+  items: Item[];
+  nextCursor: string | null;
+}
+
+export interface MarketplaceDiscoverySearchRequest {
+  text?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export type MarketplaceLikeTargetKind = 'preset' | 'collection';
+
+export interface MarketplaceLikeState {
+  liked: boolean;
+  canLike: boolean;
+  likeCount: number;
+}
+
+export interface MarketplaceLikeTargetSummary {
+  id: string;
+  title: string;
+  creator: MarketplaceMemberSummary;
+  likeCount: number;
+}
+
+export interface MarketplaceLikedTargetSummary extends MarketplaceLikeTargetSummary {
+  likedAt: string;
+}
+
+export interface MarketplaceMyLikes {
+  presets: MarketplaceLikedTargetSummary[];
+  collections: MarketplaceLikedTargetSummary[];
+}
+
+export interface MarketplaceRankingPage {
+  items: MarketplaceLikeTargetSummary[];
+  nextCursor: string | null;
+}
+
+export type MarketplaceModerationTargetKind = 'preset' | 'collection';
+export type MarketplaceModerationReportReason =
+  | 'copyright' | 'spam' | 'impersonation' | 'inappropriate';
+
+export interface MarketplaceAuthorModerationCase {
+  actionId: string;
+  targetKind: MarketplaceModerationTargetKind;
+  targetId: string;
+  action: 'hide';
+  reason: string;
+  createdAt: string;
+  appeal: null | {
+    id: string;
+    status: 'pending' | 'upheld' | 'rejected';
+    statement: string;
+  };
+}
+
 export interface PublishedPresetSearchRequest {
   text?: string;
   tagIds?: string[];

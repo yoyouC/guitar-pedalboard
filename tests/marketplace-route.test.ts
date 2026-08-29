@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { canonicalMarketplacePath, publishedPresetIdFromPath, publishedPresetRouteFromPath, tonePath, toneRevisionPath } from '../src/marketplace/route.ts';
-import { creatorHandleFromPath } from '../src/marketplace/route.ts';
+import { creatorHandleFromPath, creatorRouteFromPath } from '../src/marketplace/route.ts';
 import { presetCollectionIdFromPath } from '../src/marketplace/route.ts';
 
 test('published preset detail paths carry stable identity without relying on a slug', () => {
@@ -46,6 +46,16 @@ test('creator profile paths resolve a stable handle', () => {
   assert.equal(creatorHandleFromPath('/creators/ada-tones/'), 'ada-tones');
   assert.equal(creatorHandleFromPath('/creators/ada%20tones'), 'ada tones');
   assert.equal(creatorHandleFromPath('/marketplace/creators/ada-tones'), null);
+});
+
+test('creator canonical paths carry immutable member identity with legacy handle fallback', () => {
+  assert.deepEqual(creatorRouteFromPath('/creators/id/member-ada'), {
+    memberId: 'member-ada', handle: null,
+  });
+  assert.deepEqual(creatorRouteFromPath('/creators/ada-tones'), {
+    memberId: null, handle: 'ada-tones',
+  });
+  assert.equal(creatorRouteFromPath('/creators/id'), null);
 });
 
 test('preset collection paths carry one stable collection identity', () => {

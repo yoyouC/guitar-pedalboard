@@ -2,6 +2,7 @@ import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
 import { isReadyForPublicAttribution } from '../members/repository.ts';
 import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
+import { communityWriteDenied } from '../members/communityWriteApi.ts';
 import {
   PresetCollectionAccessError,
   PresetCollectionConflictError,
@@ -72,6 +73,10 @@ export function createPresetCollectionApi(input: {
           if (request.method === 'GET' && url.pathname === MY_COLLECTIONS_PATH) {
             const collections = await input.management.repository.listManagedByCreator(member.id);
             return Response.json({ collections });
+          }
+          if (request.method !== 'GET') {
+            const denied = communityWriteDenied(member);
+            if (denied) return denied;
           }
           if (request.method === 'POST') {
             if (!isReadyForPublicAttribution(member, CURRENT_MEMBER_TERMS_VERSION)) {

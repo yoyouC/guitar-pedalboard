@@ -14,7 +14,14 @@ import { createMemoryPublicCreatorWorks } from './server/members/works.ts'
 import { createPresetCollectionApi } from './server/collections/api.ts'
 import { createMemoryPresetCollectionRepository } from './server/collections/memoryRepository.ts'
 import type { MarketplaceTag, PresetCollection } from './shared/marketplace.ts'
-import { createPublishedPresetSearchApi } from './server/search/api.ts'
+import { createMarketplaceSearchApi } from './server/search/api.ts'
+import { createMemoryMarketplaceDiscoveryRepository } from './server/search/memoryRepository.ts'
+import { createMarketplaceLikesApi } from './server/likes/api.ts'
+import { createMemoryMarketplaceLikeRepository } from './server/likes/memoryRepository.ts'
+import { DEFAULT_MARKETPLACE_TRENDING_POLICY } from './server/trending/policy.ts'
+import { createMemoryMarketplaceTrendingRepository } from './server/trending/memoryRepository.ts'
+import { createMarketplaceModerationApi } from './server/moderation/api.ts'
+import { createMemoryMarketplaceModerationRepository } from './server/moderation/memoryRepository.ts'
 
 // 本地评估模型(models-local/,git-ignored,许可不允许公开分发):
 // 仅开发期经此中间件提供;/models-local/** 不进入 dist,也不会被部署。
@@ -138,10 +145,80 @@ function serveMarketplaceApi(): Plugin {
       createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
     },
   })
-  const searchApi = createPublishedPresetSearchApi({ presets: publications })
+  const searchApi = createMarketplaceSearchApi({
+    presets: publications,
+    discovery: createMemoryMarketplaceDiscoveryRepository({
+      collections: () => collections.listForDiscovery(),
+      members: () => members.listForDiscovery(),
+    }),
+  })
+  const bannedMemberIds = new Set<string>()
+  const likes = createMemoryMarketplaceLikeRepository({
+    presets: [demoPublishedPreset],
+    collections: [demoCollection],
+    bannedMemberIds,
+  })
+  const trending = createMemoryMarketplaceTrendingRepository({
+    presets: [demoPublishedPreset],
+    collections: [demoCollection],
+    likes,
+    bannedMemberIds,
+  })
+  const rebuildTrending = () => trending.rebuild({
+    now: new Date(), policy: DEFAULT_MARKETPLACE_TRENDING_POLICY,
+  })
+  void rebuildTrending()
+  const likesApi = createMarketplaceLikesApi({
+    repository: likes,
+    trending,
+    sessions,
+    members,
+    now: () => new Date(),
+    createMemberId: () => crypto.randomUUID(),
+    createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+  })
+  const moderationApi = createMarketplaceModerationApi({
+    repository: createMemoryMarketplaceModerationRepository({
+      targets: [
+        {
+          kind: 'preset', id: demoPublishedPreset.id,
+          creatorId: demoPublishedPreset.creator.id, visibility: demoPublishedPreset.visibility,
+        },
+        {
+          kind: 'collection', id: demoCollection.id,
+          creatorId: demoCollection.creator.id, visibility: demoCollection.visibility,
+        },
+      ],
+      setMemberStatus: async (memberId, status) => {
+        await members.setCommunityStatus(memberId, status)
+        if (status === 'banned') bannedMemberIds.add(memberId)
+        else bannedMemberIds.delete(memberId)
+      },
+      setTargetVisibility: async (kind, targetId, visibility) => {
+        if (kind === 'preset') await publications.setModerationVisibility(targetId, visibility)
+        else await collections.setModerationVisibility(targetId, visibility)
+        await likes.setTargetVisibility(kind, targetId, visibility)
+      },
+      standingChanged: async () => {
+        await likes.rebuildCounts()
+        await rebuildTrending()
+      },
+    }),
+    sessions,
+    members,
+    adminAuthUserIds: new Set(
+      (process.env.VITE_DEV_ADMIN_AUTH_USER_IDS ?? '').split(',').map((value) => value.trim()).filter(Boolean),
+    ),
+    now: () => new Date(),
+    createId: () => crypto.randomUUID(),
+    createMemberId: () => crypto.randomUUID(),
+    createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+  })
   return {
     name: 'serve-marketplace-api',
     configureServer(server) {
+      const trendingInterval = setInterval(() => void rebuildTrending(), 5 * 60_000)
+      server.httpServer?.once('close', () => clearInterval(trendingInterval))
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith('/api/marketplace/') && !req.url?.startsWith('/api/auth/')) {
           return next()
@@ -168,12 +245,23 @@ function serveMarketplaceApi(): Plugin {
           })
           const response = req.url.startsWith('/api/auth/')
             ? await auth.handler(request)
+            : req.url.startsWith('/api/marketplace/reports')
+              || req.url.startsWith('/api/marketplace/infringement-notices')
+              || req.url.startsWith('/api/marketplace/me/moderation')
+              || req.url.startsWith('/api/marketplace/moderation/')
+              || req.url.startsWith('/api/marketplace/admin/moderation/')
+              ? await moderationApi.fetch(request)
+            : req.url.startsWith('/api/marketplace/likes/')
+              || req.url.startsWith('/api/marketplace/popular/')
+              || req.url.startsWith('/api/marketplace/trending/')
+              || req.url.startsWith('/api/marketplace/me/likes')
+              ? await likesApi.fetch(request)
             : req.url.startsWith('/api/marketplace/me')
               || req.url.startsWith('/api/marketplace/creators/')
               ? await memberApi.fetch(request)
               : req.url.startsWith('/api/marketplace/collections')
                 ? await collectionApi.fetch(request)
-              : req.url.startsWith('/api/marketplace/search/presets')
+              : req.url.startsWith('/api/marketplace/search/')
                 ? await searchApi.fetch(request)
               : await presetApi.fetch(request)
           res.statusCode = response.status

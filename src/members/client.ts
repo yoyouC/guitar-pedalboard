@@ -138,7 +138,24 @@ export async function fetchPublicCreator(
   handle: string,
   fetch: FetchLike = globalThis.fetch,
 ): Promise<PublicCreatorProfile> {
-  const response = await fetch(`/api/marketplace/creators/${encodeURIComponent(handle)}`, {
+  return fetchPublicCreatorAt(`/api/marketplace/creators/${encodeURIComponent(handle)}`, fetch);
+}
+
+export async function fetchPublicCreatorById(
+  memberId: string,
+  fetch: FetchLike = globalThis.fetch,
+): Promise<PublicCreatorProfile> {
+  return fetchPublicCreatorAt(
+    `/api/marketplace/creators/id/${encodeURIComponent(memberId)}`,
+    fetch,
+  );
+}
+
+async function fetchPublicCreatorAt(
+  path: string,
+  fetch: FetchLike,
+): Promise<PublicCreatorProfile> {
+  const response = await fetch(path, {
     headers: { accept: 'application/json' },
   });
   if (!response.ok) throw await responseError(response, 'creator_unavailable');
@@ -165,10 +182,27 @@ export async function fetchPublicCreatorWorks(
   handle: string,
   fetch: FetchLike = globalThis.fetch,
 ): Promise<PublicCreatorWorkSummary[]> {
-  const response = await fetch(
+  return fetchPublicCreatorWorksAt(
     `/api/marketplace/creators/${encodeURIComponent(handle)}/presets`,
-    { headers: { accept: 'application/json' } },
+    fetch,
   );
+}
+
+export async function fetchPublicCreatorWorksById(
+  memberId: string,
+  fetch: FetchLike = globalThis.fetch,
+): Promise<PublicCreatorWorkSummary[]> {
+  return fetchPublicCreatorWorksAt(
+    `/api/marketplace/creators/id/${encodeURIComponent(memberId)}/presets`,
+    fetch,
+  );
+}
+
+async function fetchPublicCreatorWorksAt(
+  path: string,
+  fetch: FetchLike,
+): Promise<PublicCreatorWorkSummary[]> {
+  const response = await fetch(path, { headers: { accept: 'application/json' } });
   if (!response.ok) throw await responseError(response, 'creator_unavailable');
   const body = await response.json() as { presets?: unknown };
   if (!Array.isArray(body.presets) || body.presets.some((preset) => {

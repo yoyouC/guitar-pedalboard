@@ -25,6 +25,7 @@ interface MemberRow extends QueryResultRow {
   public_profile_completed_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
+  community_status: 'active' | 'banned';
 }
 
 function date(value: Date | string): Date {
@@ -46,6 +47,7 @@ function record(row: MemberRow): MemberRecord {
       : null,
     createdAt: date(row.created_at),
     updatedAt: date(row.updated_at),
+    communityStatus: row.community_status,
   };
 }
 
@@ -68,12 +70,21 @@ const MEMBER_SELECT = `SELECT
   member.terms_accepted_version,
   member.public_profile_completed_at,
   member.created_at,
-  member.updated_at
+  member.updated_at,
+  member.community_status
 FROM marketplace_members AS member
 LEFT JOIN marketplace_member_auth_identities AS identity ON identity.member_id = member.id`;
 
 export function createPostgresMemberRepository(pool: Pool): MemberRepository {
   return {
+    async findById(memberId) {
+      const result = await pool.query<MemberRow>(
+        `${MEMBER_SELECT} WHERE member.id = $1 LIMIT 1`,
+        [memberId],
+      );
+      return result.rows[0] ? record(result.rows[0]) : null;
+    },
+
     async findOrCreateForIdentity(input: CreateMemberInput) {
       const client = await pool.connect();
       try {
@@ -116,6 +127,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
           publicProfileCompletedAt: null,
           createdAt: input.now,
           updatedAt: input.now,
+          communityStatus: 'active',
         };
       } catch (cause) {
         await rollback(client);
@@ -189,7 +201,7 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
            RETURNING member.id, identity.auth_user_id, member.handle, member.display_name,
              member.bio, member.avatar_url, member.handle_changed_at,
              member.terms_accepted_version, member.public_profile_completed_at,
-             member.created_at, member.updated_at`,
+             member.created_at, member.updated_at, member.community_status`,
           [
             memberId,
             changesHandle ? update.handle : current.handle,

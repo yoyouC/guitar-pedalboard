@@ -3,8 +3,11 @@ import type { PresetCollection } from '../../shared/marketplace';
 import { collectionQueue } from '../marketplace/collectionQueueSession';
 import { marketplaceClient } from '../marketplace/client';
 import { presetCollectionIdFromPath, toneRevisionPath } from '../marketplace/route';
+import { useMarketplacePageMetadata } from '../marketplace/pageMetadata';
 import { useToneSession } from '../marketplace/toneSession';
 import { rigStore } from '../state/useRig';
+import { MarketplaceLikeButton } from './MarketplaceLikeButton';
+import { MarketplaceReportForm } from './MarketplaceReportForm';
 
 interface PresetCollectionRouteProps {
   pathname: string;
@@ -47,26 +50,13 @@ export function PresetCollectionRoute({ pathname, onClose, onNavigate }: PresetC
     return () => { active = false; };
   }, [collectionId, attempt]);
 
-  useEffect(() => {
-    if (!collectionId || state.status !== 'ready') return;
-    const previousTitle = document.title;
-    document.title = `${state.collection.title} · Guitar Pedalboard`;
-    let robots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
-    const previousRobots = robots?.content ?? null;
-    if (state.collection.visibility !== 'public') {
-      if (!robots) {
-        robots = document.createElement('meta');
-        robots.name = 'robots';
-        document.head.append(robots);
-      }
-      robots.content = 'noindex,nofollow';
-    }
-    return () => {
-      document.title = previousTitle;
-      if (previousRobots === null) robots?.remove();
-      else if (robots) robots.content = previousRobots;
-    };
-  }, [collectionId, state]);
+  useMarketplacePageMetadata(state.status === 'ready' ? {
+    kind: 'collection',
+    id: state.collection.id,
+    title: state.collection.title,
+    description: state.collection.description,
+    visibility: state.collection.visibility === 'hidden' ? 'withdrawn' : state.collection.visibility,
+  } : null);
 
   const launchCollection = async (collection: PresetCollection) => {
     if (startPosition === null) return;
@@ -93,7 +83,9 @@ export function PresetCollectionRoute({ pathname, onClose, onNavigate }: PresetC
       <div className="marketplace-detail__topline"><span className="marketplace-detail__eyebrow">Tone Market · Preset Collection</span><button className="marketplace-detail__close" type="button" onClick={onClose}>返回效果器</button></div>
       {state.status === 'idle' || state.status === 'loading' ? <p>正在读取合集…</p> : state.status === 'error' ? <div className="marketplace-detail__error" role="alert"><strong>未能打开这个合集</strong><p>{state.message}</p><button type="button" onClick={() => setAttempt((current) => current + 1)}>重试</button></div> : <div className="marketplace-detail__content">
         <h2>{state.collection.title}</h2><p>{state.collection.description || '作者没有填写介绍。'}</p><p className="marketplace-detail__byline">@{state.collection.creator.handle}</p><p className="marketplace-detail__tags">{state.collection.tags.map((tag) => tag.nameZh).join(' · ')}</p>
-        {state.collection.visibility === 'unlisted' && <p className="marketplace-detail__warning">Unlisted：仅持有直接链接的人可访问。</p>}
+        {state.collection.visibility !== 'withdrawn' && <MarketplaceLikeButton kind="collection" targetId={state.collection.id} />}
+        {(state.collection.visibility === 'public' || state.collection.visibility === 'unlisted') && <MarketplaceReportForm kind="collection" targetId={state.collection.id} onNavigate={onNavigate} />}
+        {state.collection.visibility !== 'public' && <p className="marketplace-detail__warning">{state.collection.visibility === 'unlisted' ? 'Unlisted：仅持有直接链接的人可访问。' : '合集已撤回，只有作者可管理。'}</p>}
         <section className="collection-use-panel" aria-label="Collection queue preview">
           <div><h3>Choose a starting Tone</h3><p>队列只保存在当前浏览器会话；不可用位置会保留并在前后切换时跳过。</p></div>
           <ol className="collection-detail__items">{state.collection.items.map((item) => {

@@ -1,8 +1,9 @@
 import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { createPublishedPresetSearchApi } from '../server/search/api.ts';
+import { createMarketplaceSearchApi } from '../server/search/api.ts';
 import { createPostgresPublishedPresetSearchRepository } from '../server/search/postgresRepository.ts';
+import { createPostgresMarketplaceDiscoveryRepository } from '../server/search/postgresDiscoveryRepository.ts';
 
-let searchApi: ReturnType<typeof createPublishedPresetSearchApi> | null = null;
+let searchApi: ReturnType<typeof createMarketplaceSearchApi> | null = null;
 
 function unavailable(): Response {
   return Response.json(
@@ -15,10 +16,16 @@ export default {
   async fetch(request: Request): Promise<Response> {
     if (!marketplacePool) return unavailable();
     const requestUrl = new URL(request.url);
-    requestUrl.pathname = '/api/marketplace/search/presets';
+    const route = requestUrl.searchParams.get('route') ?? 'presets';
+    requestUrl.searchParams.delete('route');
+    if (!['presets', 'collections', 'creators'].includes(route)) {
+      return new Response(null, { status: 404 });
+    }
+    requestUrl.pathname = `/api/marketplace/search/${route}`;
     try {
-      searchApi ??= createPublishedPresetSearchApi({
+      searchApi ??= createMarketplaceSearchApi({
         presets: createPostgresPublishedPresetSearchRepository(marketplacePool),
+        discovery: createPostgresMarketplaceDiscoveryRepository(marketplacePool),
       });
       return searchApi.fetch(new Request(requestUrl, request));
     } catch {
