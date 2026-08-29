@@ -22,6 +22,10 @@
       "destination": "/api/marketplace-member?route=profile"
     },
     {
+      "source": "/api/marketplace/health",
+      "destination": "/api/marketplace-health"
+    },
+    {
       "source": "/api/marketplace/me/export",
       "destination": "/api/marketplace-account?route=export"
     },

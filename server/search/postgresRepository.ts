@@ -15,7 +15,7 @@ import type {
   PublishedPresetSearchInput,
   PublishedPresetSearchRepository,
 } from './repository.ts';
-import { matchesSearchText } from './text.ts';
+import { matchesSearchText, searchCandidateToken } from './text.ts';
 
 interface SearchTag extends MarketplaceTag {
   aliases: string[];
@@ -71,6 +71,7 @@ function itemFromRow(row: SearchRow): PublishedPresetSearchItem {
 }
 
 function buildWhere(input: PublishedPresetSearchInput): {
+  candidateCte: string;
   clauses: string[];
   values: unknown[];
 } {
@@ -80,6 +81,39 @@ function buildWhere(input: PublishedPresetSearchInput): {
     values.push(value);
     return `$${values.length}`;
   };
+  const candidate = searchCandidateToken(input.text);
+  let candidateCte = '';
+  if (candidate) {
+    const token = parameter(candidate);
+    candidateCte = `WITH search_settings AS MATERIALIZED (
+      SELECT set_config('pg_trgm.word_similarity_threshold', '0.3', true)
+    ), candidate_presets AS MATERIALIZED (
+      SELECT id AS preset_id FROM marketplace_published_presets CROSS JOIN search_settings
+      WHERE ${token}::text OPERATOR(public.<%) lower(title)
+      UNION
+      SELECT id FROM marketplace_published_presets CROSS JOIN search_settings
+      WHERE ${token}::text OPERATOR(public.<%) lower(description)
+      UNION
+      SELECT candidate_preset.id
+      FROM marketplace_members AS candidate_creator
+      JOIN marketplace_published_presets AS candidate_preset
+        ON candidate_preset.creator_id = candidate_creator.id
+      CROSS JOIN search_settings
+      WHERE ${token}::text OPERATOR(public.<%) lower(candidate_creator.handle)
+         OR ${token}::text OPERATOR(public.<%) lower(candidate_creator.display_name)
+      UNION
+      SELECT candidate_preset_tag.preset_id
+      FROM marketplace_published_preset_tags AS candidate_preset_tag
+      JOIN marketplace_tags AS candidate_tag ON candidate_tag.id = candidate_preset_tag.tag_id
+      CROSS JOIN search_settings
+      WHERE ${token}::text OPERATOR(public.<%) lower(candidate_tag.name_zh)
+         OR ${token}::text OPERATOR(public.<%) lower(candidate_tag.name_en)
+         OR EXISTS (
+           SELECT 1 FROM jsonb_array_elements_text(candidate_tag.aliases) AS alias(value)
+           WHERE ${token}::text OPERATOR(public.<%) lower(alias.value)
+         )
+    )`;
+  }
   if (input.tagIds.length > 0) {
     const token = parameter(input.tagIds);
     clauses.push(
@@ -118,7 +152,7 @@ function buildWhere(input: PublishedPresetSearchInput): {
   if (input.publishedBefore) {
     clauses.push(`preset.created_at <= ${parameter(input.publishedBefore)}::timestamptz`);
   }
-  return { clauses, values };
+  return { candidateCte, clauses, values };
 }
 
 async function fetchRows(
@@ -128,7 +162,7 @@ async function fetchRows(
   after: SearchBoundary | null,
   limit: number,
 ): Promise<SearchRow[]> {
-  const { clauses, values } = buildWhere(input);
+  const { candidateCte, clauses, values } = buildWhere(input);
   const parameter = (value: unknown): string => {
     values.push(value);
     return `$${values.length}`;
@@ -145,7 +179,8 @@ async function fetchRows(
   }
   const rowLimit = parameter(limit);
   const result = await database.query<SearchRow>(
-    `SELECT
+    `${candidateCte}
+     SELECT
        preset.id,
        preset.title,
        preset.description,
@@ -183,6 +218,7 @@ async function fetchRows(
        preset.updated_at
      FROM marketplace_published_presets AS preset
      JOIN marketplace_members AS creator ON creator.id = preset.creator_id
+     ${candidateCte ? 'JOIN candidate_presets AS candidate ON candidate.preset_id = preset.id' : ''}
      JOIN marketplace_published_preset_search_projection AS projection
        ON projection.preset_id = preset.id
      WHERE ${clauses.join(' AND ')}
@@ -248,7 +284,21 @@ export async function rebuildPublishedPresetSearchProjection(
   const database = await pool.connect();
   try {
     await database.query('BEGIN');
-    await database.query(
+    await rebuildPublishedPresetSearchProjectionInTransaction(database, now);
+    await database.query('COMMIT');
+  } catch (cause) {
+    try { await database.query('ROLLBACK'); } catch { /* preserve original error */ }
+    throw cause;
+  } finally {
+    database.release();
+  }
+}
+
+export async function rebuildPublishedPresetSearchProjectionInTransaction(
+  database: PostgresQueryable,
+  now: Date,
+): Promise<void> {
+  await database.query(
       `INSERT INTO marketplace_published_preset_search_projection
          (preset_id, pedal_ids, amp_id, amp_model_key, cab_id, resource_kinds,
           resource_dependency_keys, projected_at)
@@ -272,20 +322,13 @@ export async function rebuildPublishedPresetSearchProjection(
          resource_kinds = EXCLUDED.resource_kinds,
          resource_dependency_keys = EXCLUDED.resource_dependency_keys,
          projected_at = EXCLUDED.projected_at`,
-      [now],
-    );
-    await database.query(
+    [now],
+  );
+  await database.query(
       `DELETE FROM marketplace_published_preset_search_projection AS projection
        WHERE NOT EXISTS (
          SELECT 1 FROM marketplace_published_presets AS preset
          WHERE preset.id = projection.preset_id
        )`,
-    );
-    await database.query('COMMIT');
-  } catch (cause) {
-    try { await database.query('ROLLBACK'); } catch { /* preserve original error */ }
-    throw cause;
-  } finally {
-    database.release();
-  }
+  );
 }

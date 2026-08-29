@@ -1,0 +1,33 @@
+{
+  "scope": "local representative verification",
+  "environment": {
+    "postgresql": "17-alpine",
+    "datasetGenerator": "scripts/marketplace-prepare-benchmark.ts"
+  },
+  "passed": true,
+  "dataset": {
+    "members": 10000,
+    "publicPresets": 100000
+  },
+  "samples": {
+    "list": 20,
+    "detail": 20,
+    "search": 20,
+    "revision": 20
+  },
+  "p95Ms": {
+    "list": 3.175875000000019,
+    "detail": 1.7335840000000644,
+    "search": 61.02699999999999,
+    "revision": 6.1752500000000055
+  },
+  "searchConvergenceMs": 102.93795900000009,
+  "targets": {
+    "readP95Ms": 500,
+    "revisionP95Ms": 2000,
+    "searchConvergenceMs": 60000
+  },
+  "failures": [],
+  "convergenceObserved": true,
+  "measuredAt": "2026-08-29T12:48:47.222Z"
+}

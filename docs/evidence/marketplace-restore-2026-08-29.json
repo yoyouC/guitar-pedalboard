@@ -1,0 +1,24 @@
+{
+  "scope": "local representative recovery drill",
+  "environment": {
+    "postgresql": "17-alpine",
+    "target": "new disposable database"
+  },
+  "passed": true,
+  "archiveSha256": "6ca4b6229fb04e33fcac79fa9a792a4f452ae15722257a9d481804e010468d9b",
+  "backupCompletedAt": "2026-08-29T12:50:57.935Z",
+  "drillStartedAt": "2026-08-29T12:51:10.920Z",
+  "drillCompletedAt": "2026-08-29T12:51:19.928Z",
+  "rpoHours": 0.0036069444444444443,
+  "rtoHours": 0.002502222222222222,
+  "targets": {
+    "rpoHours": 24,
+    "rtoHours": 8
+  },
+  "facts": {
+    "members": 10000,
+    "presets": 100000,
+    "revisions": 100020,
+    "collections": 0
+  }
+}

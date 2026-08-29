@@ -69,6 +69,7 @@ test('PostgreSQL search uses live public facts, stable cursors, and a rebuildabl
       '0006_preset_remix_provenance.sql',
       '0007_preset_collections.sql',
       '0008_preset_search_indexes.sql',
+      '0015_marketplace_text_search.sql',
     ];
     for (const migration of migrations) {
       await client.query(await readFile(

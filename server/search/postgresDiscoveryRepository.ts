@@ -15,7 +15,11 @@ import type {
   MarketplaceDiscoverySearchInput,
 } from './repository.ts';
 import type { SearchBoundary } from './cursor.ts';
-import { marketplaceTagSearchFields, matchesSearchText } from './text.ts';
+import {
+  marketplaceTagSearchFields,
+  matchesSearchText,
+  searchCandidateToken,
+} from './text.ts';
 
 interface CollectionSearchTag extends MarketplaceTag {
   aliases: string[];
@@ -109,15 +113,47 @@ function pagingWhere(
 
 async function collectionRows(
   database: PostgresQueryable,
+  text: string,
   snapshot: SearchBoundary | null,
   after: SearchBoundary | null,
   limit: number,
 ): Promise<CollectionSearchRow[]> {
   const values: unknown[] = [];
   const clauses = [`subject.visibility = 'public'`, ...pagingWhere(snapshot, after, values)];
+  const candidate = searchCandidateToken(text);
+  const settingsCte = candidate
+    ? `WITH search_settings AS MATERIALIZED (
+         SELECT set_config('pg_trgm.word_similarity_threshold', '0.3', true)
+       )`
+    : '';
+  if (candidate) {
+    values.push(candidate);
+    const token = `$${values.length}`;
+    clauses.push(`(
+      ${token}::text OPERATOR(public.<%) lower(subject.title)
+      OR ${token}::text OPERATOR(public.<%) lower(subject.description)
+      OR ${token}::text OPERATOR(public.<%) lower(creator.handle)
+      OR ${token}::text OPERATOR(public.<%) lower(creator.display_name)
+      OR EXISTS (
+        SELECT 1
+        FROM marketplace_preset_collection_tags AS candidate_collection_tag
+        JOIN marketplace_tags AS candidate_tag ON candidate_tag.id = candidate_collection_tag.tag_id
+        WHERE candidate_collection_tag.collection_id = subject.id
+          AND (
+            ${token}::text OPERATOR(public.<%) lower(candidate_tag.name_zh)
+            OR ${token}::text OPERATOR(public.<%) lower(candidate_tag.name_en)
+            OR EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(candidate_tag.aliases) AS alias(value)
+              WHERE ${token}::text OPERATOR(public.<%) lower(alias.value)
+            )
+          )
+      )
+    )`);
+  }
   values.push(limit);
   const result = await database.query<CollectionSearchRow>(
-    `SELECT
+    `${settingsCte}
+     SELECT
        subject.id, subject.title, subject.description,
        creator.id AS creator_id,
        creator.handle AS creator_handle,
@@ -146,6 +182,7 @@ async function collectionRows(
        subject.created_at, subject.updated_at
      FROM marketplace_preset_collections AS subject
      JOIN marketplace_members AS creator ON creator.id = subject.creator_id
+     ${candidate ? 'CROSS JOIN search_settings' : ''}
      WHERE ${clauses.join(' AND ')}
      ORDER BY subject.created_at DESC, subject.id DESC
      LIMIT $${values.length}`,
@@ -156,17 +193,31 @@ async function collectionRows(
 
 async function creatorRows(
   database: PostgresQueryable,
+  text: string,
   snapshot: SearchBoundary | null,
   after: SearchBoundary | null,
   limit: number,
 ): Promise<CreatorSearchRow[]> {
   const values: unknown[] = [];
   const clauses = ["subject.account_status = 'active'", ...pagingWhere(snapshot, after, values)];
+  const candidate = searchCandidateToken(text);
+  const settingsCte = candidate
+    ? `WITH search_settings AS MATERIALIZED (
+         SELECT set_config('pg_trgm.word_similarity_threshold', '0.3', true)
+       )`
+    : '';
+  if (candidate) {
+    values.push(candidate);
+    const token = `$${values.length}`;
+    clauses.push(`(${token}::text OPERATOR(public.<%) lower(subject.handle) OR ${token}::text OPERATOR(public.<%) lower(subject.display_name))`);
+  }
   values.push(limit);
   const result = await database.query<CreatorSearchRow>(
-    `SELECT subject.id, subject.handle, subject.display_name, subject.bio,
+    `${settingsCte}
+     SELECT subject.id, subject.handle, subject.display_name, subject.bio,
             subject.avatar_url, subject.created_at
      FROM marketplace_members AS subject
+     ${candidate ? 'CROSS JOIN search_settings' : ''}
      ${clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : ''}
      ORDER BY subject.created_at DESC, subject.id DESC
      LIMIT $${values.length}`,
@@ -217,7 +268,9 @@ export function createPostgresMarketplaceDiscoveryRepository(
       return search<CollectionSearchRow, PresetCollectionSearchItem>({
         kind: 'collections',
         request,
-        fetchRows: (snapshot, after, limit) => collectionRows(database, snapshot, after, limit),
+        fetchRows: (snapshot, after, limit) => collectionRows(
+          database, request.text, snapshot, after, limit,
+        ),
         matches: (row) => matchesSearchText(request.text, [
           row.title,
           row.description,
@@ -233,7 +286,9 @@ export function createPostgresMarketplaceDiscoveryRepository(
       return search<CreatorSearchRow, PublicCreatorSearchItem>({
         kind: 'creators',
         request,
-        fetchRows: (snapshot, after, limit) => creatorRows(database, snapshot, after, limit),
+        fetchRows: (snapshot, after, limit) => creatorRows(
+          database, request.text, snapshot, after, limit,
+        ),
         matches: (row) => matchesSearchText(request.text, [row.handle, row.display_name]),
         project: creatorFromRow,
       });

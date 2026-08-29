@@ -9,6 +9,17 @@ export function normalizeSearchText(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
+/**
+ * Returns the most selective token that PostgreSQL can use to build a superset
+ * of the exact application-level matches. Short tokens deliberately skip the
+ * database prefilter because trigram matching cannot safely preserve prefixes.
+ */
+export function searchCandidateToken(value: string): string | null {
+  const tokens = normalizeSearchText(value).split(' ').filter(Boolean);
+  const longest = tokens.sort((left, right) => right.length - left.length)[0];
+  return longest && longest.length >= 4 ? longest : null;
+}
+
 function isWithinOneEdit(left: string, right: string): boolean {
   if (Math.abs(left.length - right.length) > 1) return false;
   let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
