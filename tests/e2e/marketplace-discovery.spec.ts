@@ -53,7 +53,7 @@ test('legacy handle resolves to the id canonical page and Unlisted stays out of 
   await expect(page).toHaveURL('/creators/id/member-system');
   await expect(page.getByRole('heading', { name: 'Guitar Pedalboard', exact: true })).toBeVisible();
 
-  await page.goto('/marketplace/presets/preset-demo-unlisted');
+  await page.goto('/marketplace/tones/preset-demo-unlisted');
   await expect(page.getByRole('heading', { name: 'Secret Demo Tone' })).toBeVisible();
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(

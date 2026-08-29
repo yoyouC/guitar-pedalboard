@@ -12,9 +12,13 @@ export interface CollectionQueueState {
   queue: null | {
     collectionId: string;
     collectionTitle: string;
-    items: PresetCollectionItem[];
+    items: CollectionQueueItem[];
     currentPosition: number;
   };
+}
+
+export interface CollectionQueueItem extends PresetCollectionItem {
+  skipReason?: string;
 }
 
 interface PersistedQueue extends NonNullable<CollectionQueueState['queue']> {
@@ -36,7 +40,11 @@ interface ToneApplicator {
 }
 
 export interface CollectionQueueSession {
-  start(collection: PresetCollection, position: number): Promise<LoadPresetResult>;
+  start(
+    collection: PresetCollection,
+    position: number,
+    blockedReasons?: Readonly<Record<number, string>>,
+  ): Promise<LoadPresetResult>;
   switchTo(position: number): Promise<LoadPresetResult>;
   previousPosition(): number | null;
   nextPosition(): number | null;
@@ -45,9 +53,9 @@ export interface CollectionQueueSession {
   subscribe(listener: () => void): () => void;
 }
 
-function validItem(value: unknown, position: number): value is PresetCollectionItem {
+function validItem(value: unknown, position: number): value is CollectionQueueItem {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const item = value as Partial<PresetCollectionItem>;
+  const item = value as Partial<CollectionQueueItem>;
   return item.position === position
     && typeof item.presetId === 'string'
     && typeof item.revisionId === 'string'
@@ -56,7 +64,8 @@ function validItem(value: unknown, position: number): value is PresetCollectionI
     && Boolean(item.creator)
     && typeof item.creator?.id === 'string'
     && typeof item.creator?.handle === 'string'
-    && typeof item.creator?.displayName === 'string';
+    && typeof item.creator?.displayName === 'string'
+    && (!('skipReason' in item) || typeof item.skipReason === 'string');
 }
 
 function loadPersisted(storage?: SessionStorageLike): PersistedQueue | null {
@@ -116,7 +125,7 @@ export function createCollectionQueueSession(
   ): Promise<LoadPresetResult> => {
     const item = collection.items[position];
     if (!item || item.availability !== 'available') {
-      return { ok: false, message: '这个合集位置当前不可用。' };
+      return { ok: false, message: item?.skipReason ?? '这个合集位置当前不可用。' };
     }
     try {
       const revision = await revisions.getPublishedPresetRevision(item.presetId, item.revisionId);
@@ -147,11 +156,16 @@ export function createCollectionQueueSession(
   };
 
   return {
-    start(collection, position) {
+    start(collection, position, blockedReasons = {}) {
       return activate({
         collectionId: collection.id,
         collectionTitle: collection.title,
-        items: structuredClone(collection.items),
+        items: structuredClone(collection.items).map((item) => {
+          const skipReason = blockedReasons[item.position];
+          return skipReason
+            ? { ...item, availability: 'unavailable' as const, skipReason }
+            : item;
+        }),
       }, position);
     },
     switchTo(position) {

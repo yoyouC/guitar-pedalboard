@@ -1,21 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  PublishedPresetRevisionCompatibility,
   PublishedPreset,
   PublishedPresetRevision,
   PublishedPresetRevisionView,
   RigDerivedAttributes,
   RigResourceDependency,
 } from '../../shared/marketplace';
-import { isPublishedPresetRevisionCompatible } from '../../shared/marketplaceValidation';
 import { MarketplaceClientError, marketplaceClient } from '../marketplace/client';
+import {
+  compatibilityBlockerMessage,
+  resolvePublishedRevisionCompatibility,
+} from '../marketplace/revisionCompatibility';
+import { browserTone3000Compatibility } from '../marketplace/revisionCompatibilityBrowser';
+import { browserPedalboardCapability } from '../marketplace/pedalboardCapability';
+import {
+  peekMarketplaceToneApplyIntent,
+  popMarketplaceToneApplyIntent,
+  stashMarketplaceToneApplyIntent,
+} from '../marketplace/marketplaceToneIntent';
+import { repairProvenanceFromPublishedPreset } from '../marketplace/publishRig';
 import { useMarketplacePageMetadata } from '../marketplace/pageMetadata';
 import { publishedPresetRouteFromPath, tonePath, toneRevisionPath } from '../marketplace/route';
 import { toneSession } from '../marketplace/toneSession';
 import { collectionQueue } from '../marketplace/collectionQueueSession';
+import { loginTone3000 } from '../tone3000/instance';
+import { encodeShareState } from '../state/share';
+import { rigToShareState } from '../state/rigStore';
+import { rigStore } from '../state/useRig';
 import { AddToCollectionDialog } from './AddToCollectionDialog';
 import { PublishedPresetManager } from './PublishedPresetManager';
 import { MarketplaceLikeButton } from './MarketplaceLikeButton';
 import { MarketplaceReportForm } from './MarketplaceReportForm';
+import { ShareLinkFallback } from './ShareLinkFallback';
 
 interface DisplayedPreset {
   id: string;
@@ -30,7 +47,6 @@ interface DisplayedPreset {
   updatedAt: string;
   source: PublishedPreset['source'];
   fixedRevision: boolean;
-  compatible: boolean;
 }
 
 type LoadState =
@@ -38,6 +54,12 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; displayed: DisplayedPreset; managedPreset: PublishedPreset | null }
   | { status: 'error'; kind: 'not-found' | 'unavailable'; message: string };
+
+type CompatibilityState =
+  | { status: 'idle' }
+  | { status: 'checking' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; value: PublishedPresetRevisionCompatibility };
 
 function currentDisplay(preset: PublishedPreset): DisplayedPreset {
   return {
@@ -53,7 +75,6 @@ function currentDisplay(preset: PublishedPreset): DisplayedPreset {
     updatedAt: preset.updatedAt,
     source: preset.source,
     fixedRevision: false,
-    compatible: isPublishedPresetRevisionCompatible(preset.currentRevision),
   };
 }
 
@@ -71,7 +92,6 @@ function revisionDisplay(preset: PublishedPresetRevisionView): DisplayedPreset {
     updatedAt: preset.updatedAt,
     source: preset.source,
     fixedRevision: true,
-    compatible: isPublishedPresetRevisionCompatible(preset.revision),
   };
 }
 
@@ -95,6 +115,26 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
   const [actionMessage, setActionMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [showCollectionDialog, setShowCollectionDialog] = useState(false);
+  const [compatibility, setCompatibility] = useState<CompatibilityState>({ status: 'idle' });
+  const capability = useMemo(browserPedalboardCapability, []);
+  const compactViewport = useMemo(() => window.matchMedia('(max-width: 720px)').matches, []);
+  const resumedIntentRef = useRef('');
+
+  const applyToPedalboard = useCallback(async (displayed: DisplayedPreset) => {
+    setBusy(true);
+    const result = await toneSession.apply({
+      id: displayed.id,
+      title: displayed.title,
+      creator: displayed.creator,
+      updatedAt: displayed.updatedAt,
+      currentRevision: displayed.revision,
+    });
+    setBusy(false);
+    if (result.ok) {
+      collectionQueue.clear();
+      onNavigate('/');
+    } else setActionMessage(result.message ?? '应用失败。');
+  }, [onNavigate]);
 
   useEffect(() => {
     if (!presetId) return;
@@ -145,6 +185,41 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
     return () => { active = false; };
   }, [presetId, revisionId, attempt]);
 
+  useEffect(() => {
+    if (loadState.status !== 'ready') return;
+    let active = true;
+    setCompatibility({ status: 'checking' });
+    void resolvePublishedRevisionCompatibility(
+      loadState.displayed.revision,
+      browserTone3000Compatibility,
+    ).then((value) => {
+      if (active) setCompatibility({ status: 'ready', value });
+    }, (cause: unknown) => {
+      if (active) setCompatibility({
+        status: 'error',
+        message: cause instanceof Error ? cause.message : '兼容性检查暂时不可用。',
+      });
+    });
+    return () => { active = false; };
+  }, [loadState]);
+
+  useEffect(() => {
+    if (loadState.status !== 'ready' || compatibility.status !== 'ready') return;
+    const intent = peekMarketplaceToneApplyIntent(window.localStorage);
+    if (!intent
+      || intent.presetId !== loadState.displayed.id
+      || intent.revisionId !== loadState.displayed.revision.id) return;
+    const key = `${intent.presetId}:${intent.revisionId}`;
+    if (resumedIntentRef.current === key || !browserTone3000Compatibility.isAuthenticated()) return;
+    resumedIntentRef.current = key;
+    if (compatibility.value.status === 'compatible' && capability.supported) {
+      popMarketplaceToneApplyIntent(window.localStorage);
+      void applyToPedalboard(loadState.displayed);
+    } else if (compatibility.value.status === 'incompatible') {
+      popMarketplaceToneApplyIntent(window.localStorage);
+    }
+  }, [applyToPedalboard, capability.supported, compatibility, loadState]);
+
   useMarketplacePageMetadata(loadState.status === 'ready' ? {
     kind: 'preset',
     id: loadState.displayed.id,
@@ -156,21 +231,57 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
 
   if (!route) return null;
 
-  const apply = async (displayed: DisplayedPreset) => {
+  const connectAndContinue = async (displayed: DisplayedPreset) => {
+    const intent = {
+      presetId: displayed.id,
+      revisionId: displayed.revision.id,
+      returnPath: pathname.replace(/\/$/, '') || '/',
+    };
+    stashMarketplaceToneApplyIntent(intent, window.localStorage);
     setBusy(true);
-    const result = await toneSession.apply({
+    let redirecting = false;
+    const authenticated = await loginTone3000(
+      () => encodeShareState(rigToShareState(rigStore.getState())),
+      () => { redirecting = true; },
+    );
+    if (!authenticated) {
+      setBusy(false);
+      if (!redirecting) {
+        popMarketplaceToneApplyIntent(window.localStorage);
+        setActionMessage('TONE3000 连接未完成，当前 Rig 未改变。');
+      }
+      return;
+    }
+    const next = await resolvePublishedRevisionCompatibility(
+      displayed.revision,
+      browserTone3000Compatibility,
+    );
+    setCompatibility({ status: 'ready', value: next });
+    if (next.status === 'compatible' && capability.supported) {
+      popMarketplaceToneApplyIntent(window.localStorage);
+      await applyToPedalboard(displayed);
+    } else {
+      popMarketplaceToneApplyIntent(window.localStorage);
+      setBusy(false);
+      setActionMessage('连接已完成，但仍有阻塞项；没有应用部分 Rig。');
+    }
+  };
+
+  const beginManualRepair = (displayed: DisplayedPreset) => {
+    rigStore.recordPublishedProvenance(repairProvenanceFromPublishedPreset({
       id: displayed.id,
       title: displayed.title,
+      description: displayed.description,
+      visibility: displayed.visibility === 'withdrawn' ? 'unlisted' : displayed.visibility,
       creator: displayed.creator,
+      tags: displayed.tags,
+      revision: displayed.revision,
+      currentRevisionId: displayed.currentRevisionId,
+      createdAt: displayed.revision.createdAt,
       updatedAt: displayed.updatedAt,
-      currentRevision: displayed.revision,
-    });
-    setBusy(false);
-    if (result.ok) {
-      collectionQueue.clear();
-      onNavigate('/');
-    }
-    else setActionMessage(result.message ?? '应用失败。');
+      ...(displayed.source ? { source: displayed.source } : {}),
+    }));
+    onNavigate('/');
   };
 
   return (
@@ -243,11 +354,29 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
               )}
             </p>
           )}
-          {!loadState.displayed.compatible && (
-            <p className="marketplace-detail__warning">
-              当前客户端无法忠实应用这个历史声音；原始修订仍被保留，请升级后再试。
-            </p>
-          )}
+          <section className="marketplace-compatibility" aria-label="Tone compatibility">
+            {compatibility.status === 'checking' || compatibility.status === 'idle' ? (
+              <p>正在检查当前设备、器材目录与外部资源…</p>
+            ) : compatibility.status === 'error' ? (
+              <p className="marketplace-detail__warning">{compatibility.message} 未应用任何 Rig。</p>
+            ) : <>
+              <strong data-status={compatibility.value.status}>
+                {compatibility.value.status === 'compatible'
+                  ? '完全兼容'
+                  : compatibility.value.status === 'authorization-required'
+                    ? '需要 TONE3000 授权'
+                    : '无法忠实应用'}
+              </strong>
+              {compatibility.value.blockers.length > 0 && (
+                <ul>{compatibility.value.blockers.map((blocker, index) => (
+                  <li key={`${blocker.kind}-${index}`}>{compatibilityBlockerMessage(blocker)}</li>
+                ))}</ul>
+              )}
+              {compatibility.value.status === 'incompatible' && (
+                <p>原始修订仍可查看且不会被改写。你可以从当前 Rig 手动替换器材后，发布为新 Revision 或 Remix。</p>
+              )}
+            </>}
+          </section>
 
           <dl className="marketplace-rig-summary">
             <div><dt>Pedals</dt><dd>{loadState.displayed.derivedAttributes.pedalIds.join('、') || 'None'}</dd></div>
@@ -256,7 +385,7 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
             <div><dt>Resources</dt><dd>{loadState.displayed.revision.resourceDependencies.map(dependencyLabel).join('、')}</dd></div>
           </dl>
 
-          {loadState.displayed.compatible && loadState.displayed.revision.payloadKind === 'canonical-rig' && (
+          {loadState.displayed.revision.payloadKind === 'canonical-rig' && (
             <details className="marketplace-rig-detail">
               <summary>查看完整 Rig 配置</summary>
               <h3>Pedal chain</h3>
@@ -283,9 +412,19 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
 
           {loadState.displayed.visibility !== 'withdrawn' && (
             <div className="marketplace-detail__actions">
-              {loadState.displayed.compatible && (
-                <button type="button" disabled={busy} onClick={() => void apply(loadState.displayed)}>
+              {compatibility.status === 'ready' && compatibility.value.status === 'compatible' && (
+                <button type="button" disabled={busy || !capability.supported} onClick={() => void applyToPedalboard(loadState.displayed)}>
                   {busy ? '处理中…' : 'Use in Pedalboard'}
+                </button>
+              )}
+              {compatibility.status === 'ready' && compatibility.value.status === 'authorization-required' && (
+                <button type="button" disabled={busy || !capability.supported} onClick={() => void connectAndContinue(loadState.displayed)}>
+                  {busy ? '正在连接…' : 'Connect & Continue'}
+                </button>
+              )}
+              {compatibility.status === 'ready' && compatibility.value.status === 'incompatible' && (
+                <button type="button" disabled={busy} onClick={() => beginManualRepair(loadState.displayed)}>
+                  Start Manual Repair
                 </button>
               )}
               <button type="button" disabled={busy} onClick={() => setShowCollectionDialog(true)}>
@@ -293,6 +432,19 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
               </button>
               {actionMessage && <span>{actionMessage}</span>}
             </div>
+          )}
+
+          {!capability.supported && (
+            <div className="marketplace-detail__warning">
+              <strong>此浏览器不支持 Pedalboard 音频运行时</strong>
+              <span>缺少：{capability.missing.join('、')}。Use in Pedalboard 已禁用。</span>
+              <ShareLinkFallback
+                pathname={toneRevisionPath(loadState.displayed.id, loadState.displayed.revision.id)}
+              />
+            </div>
+          )}
+          {capability.supported && compactViewport && (
+            <p className="marketplace-device-hint">此设备具备所需音频能力，可以继续；Pedalboard 的完整控制面在桌面或平板横屏上体验更佳。</p>
           )}
 
           {loadState.managedPreset && !loadState.displayed.fixedRevision && (

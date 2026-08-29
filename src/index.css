@@ -3580,6 +3580,26 @@ body.midi-learn-mode input:disabled {
 .marketplace-detail__actions { justify-content: flex-start; }
 .marketplace-detail__actions span { color: #8fd3a8; font-size: 13px; }
 .marketplace-detail__tags { color: #d4a95f; font-size: 13px; }
+.marketplace-compatibility {
+  display: grid;
+  gap: 9px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: rgba(8, 12, 17, 0.45);
+}
+.marketplace-compatibility p,
+.marketplace-compatibility ul { margin: 0; }
+.marketplace-compatibility strong { color: #8fd3a8; }
+.marketplace-compatibility strong[data-status='authorization-required'] { color: #8dc7ff; }
+.marketplace-compatibility strong[data-status='incompatible'] { color: #f0bd55; }
+.marketplace-compatibility li { margin-block: 4px; overflow-wrap: anywhere; }
+.marketplace-link-fallback { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 14px; }
+.marketplace-link-fallback img { grid-row: 1 / span 3; width: 132px; height: 132px; border-radius: 7px; background: #fff; }
+.marketplace-link-fallback button,
+.marketplace-link-fallback small { grid-column: 2; }
+.marketplace-device-hint { padding: 10px 12px; border-left: 3px solid #8dc7ff; color: #aab8c7; }
 
 .preset-manager {
   display: grid;
@@ -3860,4 +3880,18 @@ body.midi-learn-mode input:disabled {
   .settings-page__section { grid-template-columns: 1fr; gap: 18px; padding: 18px; }
   .marketplace-detail { margin-inline: 10px; }
   .marketplace-rig-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .marketplace-detail__actions { align-items: stretch; }
+  .marketplace-detail__actions > button { flex: 1 1 180px; min-height: 44px; }
+  .marketplace-search__tabs button,
+  .marketplace-like button,
+  .collection-use-panel > button,
+  .settings-account__actions button { min-height: 44px; }
+  .collection-detail__items { padding-left: 0; list-style: none; }
+  .collection-detail__items li { align-items: flex-start; }
+  .collection-detail__items input { width: 22px; height: 22px; }
+  .marketplace-link-fallback { grid-template-columns: 1fr; }
+  .marketplace-link-fallback img,
+  .marketplace-link-fallback button,
+  .marketplace-link-fallback small { grid-column: 1; grid-row: auto; }
+  .marketplace-link-fallback img { width: min(176px, 100%); height: auto; }
 }
