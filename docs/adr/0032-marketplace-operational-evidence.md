@@ -10,7 +10,7 @@
 
 可用性使用版本化路由范围、去重的生产请求和固定间隔合成探针计算；探针按时间槽聚合，同槽任一失败使该槽失败。健康探针读取 Marketplace 作品/修订 schema 并设置响应超时。TONE3000 是外部依赖，不进入本站 Marketplace API 的分子或分母。
 
-恢复基线采用每小时 catch-up、UTC 日幂等且持 PostgreSQL session advisory mutex 的 PostgreSQL 自定义格式逻辑备份、SHA-256 manifest 和一次性数据库恢复演练。archive 与事实指纹来自同一个 exported snapshot；mutex 由专用数据库 session 持有，进程崩溃或连接断开会由 PostgreSQL 原子释放，不需要通过文件路径执行 stale-owner 接管。runner 在发布前于同一 session 重入 mutex 形成 publication fence，只有仍持 mutex 时才把包含匹配 archive/manifest 的完整目录作为一个原子 bundle 发布，完成后再解锁。完成状态与恢复共同使用严格 manifest 和 archive 摘要校验。事实摘要固定使用 UTC 序列化；恢复必须比对事实计数/校验摘要、以单事务遇错退出，并检查作品当前修订不变量。逻辑备份不是 PITR；部署仍应启用数据库提供商的 PITR 作为额外保护。
+恢复基线采用每小时 catch-up、UTC 日幂等、PostgreSQL session advisory mutex 与 durable-store fencing token 的 PostgreSQL 自定义格式逻辑备份、SHA-256 manifest 和一次性数据库恢复演练。archive 与事实指纹来自同一个 exported snapshot；advisory mutex 避免正常重叠并在进程崩溃或连接断开时由 PostgreSQL 原子释放。由于数据库 session 不能原子约束文件系统 rename，最终 publication fence 位于 durable store：runner 以 `O_EXCL` 创建单调递增 claim，并把 bundle 发布到 token 隔离路径；完成状态和恢复只承认最高 claim 对应且通过严格 manifest/archive 摘要校验的 bundle。失去数据库连接的旧 runner 即使晚到发布低 token bundle，也不能覆盖或被读取为当前备份。事实摘要固定使用 UTC 序列化；恢复必须比对事实计数/校验摘要、以单事务遇错退出，并检查作品当前修订不变量。逻辑备份不是 PITR；部署仍应启用数据库提供商的 PITR 作为额外保护。
 
 ## 后果
 

@@ -28,6 +28,7 @@ import {
   evaluateMarketplaceBackupFreshness,
   isMarketplaceBackupManifest,
   marketplaceBackupArtifactPaths,
+  readCurrentMarketplaceBackup,
   readMarketplaceBackupFacts,
   runDailyMarketplaceBackup,
   type MarketplaceBackupFacts,
@@ -63,9 +64,6 @@ function createTestBackupMutex(): MarketplaceBackupMutex {
       held = true;
       let released = false;
       return {
-        async fence() {
-          if (released || !held) throw new Error('Marketplace backup lost its publication mutex');
-        },
         async release() {
           if (released) return;
           released = true;
@@ -343,7 +341,10 @@ test('daily backup uses one UTC artifact, rejects overlap, and retries cleanly a
       /already in progress/,
     );
     release();
-    assert.equal((await first).status, 'completed');
+    const firstResult = await first;
+    assert.equal(firstResult.status, 'completed');
+    assert.equal(firstResult.paths.fencingToken, '1');
+    assert.equal(firstResult.paths.bundlePath.endsWith('.fence-1.backup'), true);
     let repeated = false;
     const skipped = await runDailyMarketplaceBackup(
       { directory, now, processId: 9999, mutex },
@@ -403,33 +404,74 @@ test('backup manifest requires a restorable source and a real SHA-256 digest', (
   assert.equal(isMarketplaceBackupManifest({ ...valid, sha256: 'not-a-digest' }), false);
 });
 
-test('backup publication is fenced when the owner loses its mutex', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'marketplace-backup-fencing-'));
+test('a disconnected backup owner cannot replace a successor with a newer fencing token', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'marketplace-backup-token-fencing-'));
   const now = new Date('2026-08-29T01:00:00.000Z');
-  const paths = marketplaceBackupArtifactPaths(directory, now, 1234);
-  let released = false;
+  let heldToken: string | null = null;
+  let nextToken = 0;
   const mutex: MarketplaceBackupMutex = {
     async tryAcquire() {
+      if (heldToken) return null;
+      const fencingToken = String(++nextToken);
+      heldToken = fencingToken;
       return {
-        async fence() { throw new Error('Marketplace backup lost its publication mutex'); },
-        async release() { released = true; },
+        async release() {
+          if (heldToken === fencingToken) heldToken = null;
+        },
       };
     },
   };
+  const disconnectOwner = () => { heldToken = null; };
+  let resumeOwner: () => void = () => undefined;
+  let markOwnerReady: () => void = () => undefined;
+  const ownerReady = new Promise<void>((resolve) => { markOwnerReady = resolve; });
+  const ownerHeld = new Promise<void>((resolve) => { resumeOwner = resolve; });
+  let resumeSuccessor: () => void = () => undefined;
+  let markSuccessorReady: () => void = () => undefined;
+  const successorReady = new Promise<void>((resolve) => { markSuccessorReady = resolve; });
+  const successorHeld = new Promise<void>((resolve) => { resumeSuccessor = resolve; });
   try {
-    await assert.rejects(() => runDailyMarketplaceBackup(
-      { directory, now, processId: 1234, mutex },
+    const owner = runDailyMarketplaceBackup(
+      { directory, now, processId: 1001, mutex },
       async (owned) => {
-        await writeFile(owned.partialArchivePath, 'archive');
+        await writeFile(owned.partialArchivePath, 'old archive');
         await writeFile(owned.partialManifestPath, testBackupManifest(
-          owned.archivePath, now,
+          owned.archivePath, now, 'old archive',
         ));
+        markOwnerReady();
+        await ownerHeld;
       },
-    ), /lost its publication mutex/);
-    assert.equal(released, true);
-    await assert.rejects(() => readFile(paths.archivePath), /ENOENT/);
-    await assert.rejects(() => readFile(paths.manifestPath), /ENOENT/);
+    );
+    await ownerReady;
+    disconnectOwner();
+    const successor = runDailyMarketplaceBackup(
+      { directory, now, processId: 1002, mutex },
+      async (owned) => {
+        await writeFile(owned.partialArchivePath, 'new archive');
+        await writeFile(owned.partialManifestPath, testBackupManifest(
+          owned.archivePath, now, 'new archive',
+        ));
+        markSuccessorReady();
+        await successorHeld;
+      },
+    );
+    await successorReady;
+    resumeOwner();
+    assert.equal((await owner).status, 'completed');
+    assert.equal(await readCurrentMarketplaceBackup(directory, '2026-08-29'), null);
+    resumeSuccessor();
+    assert.equal((await successor).status, 'completed');
+
+    let repeated = false;
+    const current = await runDailyMarketplaceBackup(
+      { directory, now, processId: 1003, mutex },
+      async () => { repeated = true; },
+    );
+    assert.equal(repeated, false);
+    assert.equal(await readFile(current.paths.archivePath, 'utf8'), 'new archive');
   } finally {
+    resumeOwner();
+    resumeSuccessor();
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -513,7 +555,6 @@ test('PostgreSQL backup mutex keeps takeover fenced until the publication owner 
     const owner = await mutex.tryAcquire('2026-08-29');
     assert.ok(owner);
     assert.equal(await mutex.tryAcquire('2026-08-29'), null);
-    await owner.fence();
     assert.equal(await mutex.tryAcquire('2026-08-29'), null);
     await owner.release();
 

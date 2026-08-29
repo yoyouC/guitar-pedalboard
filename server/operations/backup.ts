@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
+import { access, mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import type { QueryResultRow } from 'pg';
 import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
@@ -25,6 +25,8 @@ export interface MarketplaceBackupFacts {
 
 export interface MarketplaceBackupArtifactPaths {
   dayKey: string;
+  fencingToken: string | null;
+  fencePath: string | null;
   bundlePath: string;
   archivePath: string;
   manifestPath: string;
@@ -45,7 +47,6 @@ export interface MarketplaceBackupManifest {
 }
 
 export interface MarketplaceBackupMutexLease {
-  fence(): Promise<void>;
   release(): Promise<void>;
 }
 
@@ -78,34 +79,19 @@ export function createPostgresMarketplaceBackupMutex(database: {
         throw cause;
       }
 
-      let holdCount = 1;
       let released = false;
       return {
-        async fence() {
-          if (released) throw new Error('Marketplace backup mutex was already released');
-          const fenced = await client.query<{ acquired: boolean }>(
-            `SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS acquired`,
-            [key],
-          );
-          if (!fenced.rows[0]?.acquired) {
-            throw new Error('Marketplace backup lost its publication mutex');
-          }
-          holdCount += 1;
-        },
         async release() {
           if (released) return;
           released = true;
           let destroy = false;
           try {
-            while (holdCount > 0) {
-              const unlocked = await client.query<{ unlocked: boolean }>(
-                `SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked`,
-                [key],
-              );
-              if (!unlocked.rows[0]?.unlocked) {
-                throw new Error('Marketplace backup publication mutex was not held');
-              }
-              holdCount -= 1;
+            const unlocked = await client.query<{ unlocked: boolean }>(
+              `SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS unlocked`,
+              [key],
+            );
+            if (!unlocked.rows[0]?.unlocked) {
+              throw new Error('Marketplace backup publication mutex was not held');
             }
           } catch (cause) {
             destroy = true;
@@ -141,16 +127,36 @@ export function marketplaceBackupArtifactPaths(
   directory: string,
   now: Date,
   processId: number,
+  fencingToken: string | null = null,
+): MarketplaceBackupArtifactPaths {
+  const dayKey = now.toISOString().slice(0, 10);
+  return marketplaceBackupArtifactPathsForDay(
+    directory, dayKey, processId, fencingToken,
+  );
+}
+
+function marketplaceBackupArtifactPathsForDay(
+  directory: string,
+  dayKey: string,
+  processId: number,
+  fencingToken: string | null,
 ): MarketplaceBackupArtifactPaths {
   const root = resolve(directory);
-  const dayKey = now.toISOString().slice(0, 10);
-  const bundlePath = resolve(root, `marketplace-${dayKey}.backup`);
-  const partialBundlePath = resolve(root, `.marketplace-${dayKey}.${processId}.backup.partial`);
+  const artifactStem = fencingToken
+    ? `marketplace-${dayKey}.fence-${fencingToken}`
+    : `marketplace-${dayKey}`;
+  const bundlePath = resolve(root, `${artifactStem}.backup`);
+  const partialBundlePath = resolve(
+    root,
+    `.${artifactStem}.${processId}.backup.partial`,
+  );
   const archiveName = `marketplace-${dayKey}.dump`;
   const archivePath = resolve(bundlePath, archiveName);
   const manifestPath = `${archivePath}.json`;
   return {
     dayKey,
+    fencingToken,
+    fencePath: fencingToken ? resolve(root, `${artifactStem}.claim`) : null,
     bundlePath,
     archivePath,
     manifestPath,
@@ -170,13 +176,18 @@ export async function runDailyMarketplaceBackup(
   action: (paths: MarketplaceBackupArtifactPaths) => Promise<void>,
 ): Promise<{ status: 'completed' | 'skipped'; paths: MarketplaceBackupArtifactPaths }> {
   await mkdir(resolve(input.directory), { recursive: true });
-  const paths = marketplaceBackupArtifactPaths(input.directory, input.now, input.processId);
-  if (await isCompletedBackup(paths)) return { status: 'skipped', paths };
-  const lease = await input.mutex.tryAcquire(paths.dayKey);
+  const dayKey = input.now.toISOString().slice(0, 10);
+  const completed = await readCurrentMarketplaceBackup(input.directory, dayKey);
+  if (completed) return { status: 'skipped', paths: completed.paths };
+  const lease = await input.mutex.tryAcquire(dayKey);
   if (!lease) throw new Error('Marketplace backup is already in progress');
   try {
-    if (await isCompletedBackup(paths)) return { status: 'skipped', paths };
-    await rm(paths.bundlePath, { recursive: true, force: true });
+    const completedAfterLock = await readCurrentMarketplaceBackup(input.directory, dayKey);
+    if (completedAfterLock) return { status: 'skipped', paths: completedAfterLock.paths };
+    const fencingToken = await claimNextMarketplaceBackupFence(input.directory, dayKey);
+    const paths = marketplaceBackupArtifactPaths(
+      input.directory, input.now, input.processId, fencingToken,
+    );
     await rm(paths.partialBundlePath, { recursive: true, force: true });
     await mkdir(paths.partialBundlePath, { recursive: false, mode: 0o700 });
     try {
@@ -185,7 +196,6 @@ export async function runDailyMarketplaceBackup(
       await assertCompleteMarketplaceBackup(
         paths.partialArchivePath, manifest, basename(paths.archivePath),
       );
-      await lease.fence();
       await rename(paths.partialBundlePath, paths.bundlePath);
       return { status: 'completed', paths };
     } finally {
@@ -196,20 +206,83 @@ export async function runDailyMarketplaceBackup(
   }
 }
 
+export async function readCurrentMarketplaceBackup(
+  directory: string,
+  dayKey: string,
+): Promise<{ paths: MarketplaceBackupArtifactPaths; manifest: MarketplaceBackupManifest } | null> {
+  const fencingToken = await highestMarketplaceBackupFence(directory, dayKey);
+  const paths = marketplaceBackupArtifactPathsForDay(directory, dayKey, 0, fencingToken);
+  try {
+    const manifest = await readMarketplaceBackupManifest(paths.manifestPath);
+    await assertCompleteMarketplaceBackup(
+      paths.archivePath, manifest, basename(paths.archivePath),
+    );
+    return { paths, manifest };
+  } catch {
+    return null;
+  }
+}
+
+async function claimNextMarketplaceBackupFence(
+  directory: string,
+  dayKey: string,
+): Promise<string> {
+  const root = resolve(directory);
+  for (;;) {
+    const highest = await highestMarketplaceBackupFence(directory, dayKey);
+    const next = highest === null ? 1n : BigInt(highest) + 1n;
+    const token = next.toString();
+    const claimPath = marketplaceBackupArtifactPathsForDay(root, dayKey, 0, token).fencePath;
+    if (!claimPath) throw new Error('Marketplace backup fencing claim path is unavailable');
+    try {
+      const claim = await open(claimPath, 'wx', 0o600);
+      try {
+        await claim.sync();
+      } finally {
+        await claim.close();
+      }
+      return token;
+    } catch (cause) {
+      if (!isAlreadyExists(cause)) throw cause;
+    }
+  }
+}
+
+async function highestMarketplaceBackupFence(
+  directory: string,
+  dayKey: string,
+): Promise<string | null> {
+  let names: string[];
+  try {
+    names = await readdir(resolve(directory));
+  } catch (cause) {
+    if (isNoEntry(cause)) return null;
+    throw cause;
+  }
+  const escapedDayKey = dayKey.replaceAll('-', '\\-');
+  const pattern = new RegExp(`^marketplace-${escapedDayKey}\\.fence-(\\d+)\\.claim$`);
+  let highest: bigint | null = null;
+  for (const name of names) {
+    const match = pattern.exec(name);
+    if (!match) continue;
+    const token = BigInt(match[1]);
+    if (highest === null || token > highest) highest = token;
+  }
+  return highest?.toString() ?? null;
+}
+
 async function releaseLease(
   lease: MarketplaceBackupMutexLease,
 ): Promise<void> {
   await lease.release();
 }
 
-async function isCompletedBackup(paths: MarketplaceBackupArtifactPaths): Promise<boolean> {
-  try {
-    const manifest = await readMarketplaceBackupManifest(paths.manifestPath);
-    await assertCompleteMarketplaceBackup(paths.archivePath, manifest, basename(paths.archivePath));
-    return true;
-  } catch {
-    return false;
-  }
+function isAlreadyExists(cause: unknown): boolean {
+  return Boolean(cause && typeof cause === 'object' && 'code' in cause && cause.code === 'EEXIST');
+}
+
+function isNoEntry(cause: unknown): boolean {
+  return Boolean(cause && typeof cause === 'object' && 'code' in cause && cause.code === 'ENOENT');
 }
 
 export function isMarketplaceBackupManifest(value: unknown): value is MarketplaceBackupManifest {
