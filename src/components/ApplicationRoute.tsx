@@ -33,11 +33,11 @@ const PLACEHOLDER_COPY = {
 } as const;
 
 export function ApplicationRoute(props: ApplicationRouteProps) {
-  const { route, pathname, onNavigate } = props;
+  const { route, pathname, search, onNavigate } = props;
   const close = () => onNavigate('/');
   switch (route.kind) {
     case 'marketplace-search':
-      return <PublishedPresetSearchRoute pathname={pathname} onClose={close} onNavigate={onNavigate} />;
+      return <PublishedPresetSearchRoute pathname={pathname} search={search} onClose={close} onNavigate={onNavigate} />;
     case 'published-preset':
       return <PublishedPresetRoute pathname={pathname} onClose={close} onNavigate={onNavigate} />;
     case 'preset-collection':
@@ -67,7 +67,7 @@ export function ApplicationRoute(props: ApplicationRouteProps) {
           <p>The address does not match a Pedalboard or Tone Market page.</p>
           <div className="app-route-placeholder__actions">
             <button type="button" onClick={close}>Open Pedalboard</button>
-            <button type="button" onClick={() => onNavigate('/marketplace/search')}>Explore Tone Market</button>
+            <button type="button" onClick={() => onNavigate('/marketplace')}>Explore Tone Market</button>
           </div>
         </section>
       );

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   PublishedPreset,
   PublishedPresetRevision,
@@ -7,10 +7,9 @@ import type {
   RigResourceDependency,
 } from '../../shared/marketplace';
 import { isPublishedPresetRevisionCompatible } from '../../shared/marketplaceValidation';
-import { createPublishedPresetRigSession } from '../marketplace/applyPublishedPreset';
-import { marketplaceClient } from '../marketplace/client';
-import { publishedPresetRouteFromPath } from '../marketplace/route';
-import { rigStore } from '../state/useRig';
+import { MarketplaceClientError, marketplaceClient } from '../marketplace/client';
+import { publishedPresetRouteFromPath, tonePath, toneRevisionPath } from '../marketplace/route';
+import { toneSession } from '../marketplace/toneSession';
 import { PublishedPresetManager } from './PublishedPresetManager';
 
 interface DisplayedPreset {
@@ -33,7 +32,7 @@ type LoadState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ready'; displayed: DisplayedPreset; managedPreset: PublishedPreset | null }
-  | { status: 'error'; message: string };
+  | { status: 'error'; kind: 'not-found' | 'unavailable'; message: string };
 
 function currentDisplay(preset: PublishedPreset): DisplayedPreset {
   return {
@@ -90,9 +89,6 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
   const [loadState, setLoadState] = useState<LoadState>({ status: 'idle' });
   const [actionMessage, setActionMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const rigSessionRef = useRef<ReturnType<typeof createPublishedPresetRigSession> | null>(null);
-  const rigSession = rigSessionRef.current ?? createPublishedPresetRigSession(rigStore);
-  rigSessionRef.current = rigSession;
 
   useEffect(() => {
     if (!presetId) return;
@@ -132,6 +128,9 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
         if (active) {
           setLoadState({
             status: 'error',
+            kind: error instanceof MarketplaceClientError && error.code === 'not_found'
+              ? 'not-found'
+              : 'unavailable',
             message: error instanceof Error ? error.message : '音色广场暂时不可用。',
           });
         }
@@ -165,7 +164,7 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
 
   const apply = async (displayed: DisplayedPreset) => {
     setBusy(true);
-    const result = await rigSession.apply({
+    const result = await toneSession.apply({
       id: displayed.id,
       title: displayed.title,
       creator: displayed.creator,
@@ -173,20 +172,14 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
       currentRevision: displayed.revision,
     });
     setBusy(false);
-    setActionMessage(result.ok ? '已应用到当前 Rig。你可以在本次会话中撤销。' : (result.message ?? '应用失败。'));
-  };
-
-  const undo = async () => {
-    setBusy(true);
-    const result = await rigSession.undo();
-    setBusy(false);
-    setActionMessage(result.ok ? '已恢复应用前的 Rig。' : (result.message ?? '撤销失败。'));
+    if (result.ok) onNavigate('/');
+    else setActionMessage(result.message ?? '应用失败。');
   };
 
   return (
     <section className="marketplace-detail" aria-live="polite">
       <div className="marketplace-detail__topline">
-        <span className="marketplace-detail__eyebrow">音色广场 · Published Preset</span>
+        <span className="marketplace-detail__eyebrow">Tone Market · Tone detail</span>
         <button className="marketplace-detail__close" type="button" onClick={onClose}>返回效果器</button>
       </div>
 
@@ -194,7 +187,7 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
         <p>正在读取音色…</p>
       ) : loadState.status === 'error' ? (
         <div className="marketplace-detail__error" role="alert">
-          <strong>未能打开这个音色</strong>
+          <strong>{loadState.kind === 'not-found' ? 'Tone Not Found' : 'Tone Market 暂时不可用'}</strong>
           <p>{loadState.message}</p>
           <button type="button" onClick={() => setAttempt((value) => value + 1)}>重试</button>
           <small>下方本地 Rig、Preset、Snapshot、分享和音频功能不受影响。</small>
@@ -212,8 +205,7 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
                 Remix 来源：
                 {loadState.displayed.source.availability === 'available' ? (
                   <button type="button" onClick={() => onNavigate(
-                    `/marketplace/presets/${encodeURIComponent(loadState.displayed.source!.presetId)}`
-                    + `/revisions/${encodeURIComponent(loadState.displayed.source!.revisionId)}`
+                    toneRevisionPath(loadState.displayed.source!.presetId, loadState.displayed.source!.revisionId)
                   )}>
                     {loadState.displayed.source.title}
                   </button>
@@ -238,7 +230,7 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
               这是固定修订永久链接，不会跟随当前声音变化。
               {loadState.displayed.revision.id !== loadState.displayed.currentRevisionId && (
                 <button type="button" onClick={() => onNavigate(
-                  `/marketplace/presets/${encodeURIComponent(loadState.displayed.id)}`
+                  tonePath(loadState.displayed.id)
                 )}>查看当前修订</button>
               )}
             </p>
@@ -256,6 +248,27 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
             <div><dt>Resources</dt><dd>{loadState.displayed.revision.resourceDependencies.map(dependencyLabel).join('、')}</dd></div>
           </dl>
 
+          {loadState.displayed.compatible && loadState.displayed.revision.payloadKind === 'canonical-rig' && (
+            <details className="marketplace-rig-detail">
+              <summary>查看完整 Rig 配置</summary>
+              <h3>Pedal chain</h3>
+              {loadState.displayed.revision.rig.chain.length === 0 ? <p>没有 Pedal。</p> : (
+                <ol>{loadState.displayed.revision.rig.chain.map((pedal, index) => (
+                  <li key={`${pedal.effectId}-${index}`}>
+                    <strong>{pedal.effectId}</strong> · {pedal.enabled ? 'On' : 'Bypassed'} · {pedal.post ? 'Post amp' : 'Pre amp'}
+                    <small>{Object.entries(pedal.values).map(([key, value]) => `${key} ${value}`).join(' · ')}</small>
+                  </li>
+                ))}</ol>
+              )}
+              <h3>Amp</h3>
+              <p>{loadState.displayed.revision.rig.amp.categoryId} / {loadState.displayed.revision.rig.amp.modelKey} · {loadState.displayed.revision.rig.amp.enabled ? 'On' : 'Bypassed'} · {Object.entries(loadState.displayed.revision.rig.amp.values).map(([key, value]) => `${key} ${value}`).join(' · ')}</p>
+              <h3>Cab</h3>
+              <p>{loadState.displayed.revision.rig.cab.id} · {loadState.displayed.revision.rig.cab.enabled ? 'On' : 'Bypassed'} · {Object.entries(loadState.displayed.revision.rig.cab.values).map(([key, value]) => `${key} ${value}`).join(' · ')}</p>
+              <h3>Global and pre-amp EQ</h3>
+              <p>Input {loadState.displayed.revision.rig.globals.inputGain} · Master {loadState.displayed.revision.rig.globals.masterVolume} · Global bypass {String(loadState.displayed.revision.rig.globals.bypass)} · EQ {loadState.displayed.revision.rig.preAmpEq.enabled ? 'On' : 'Off'}</p>
+            </details>
+          )}
+
           {loadState.displayed.revision.resourceDependencies.some((item) => item.kind === 'tone3000') && (
             <p className="marketplace-detail__warning">此音色依赖 TONE3000；外部资源不可用时会明确提示，不会替换原始修订。</p>
           )}
@@ -263,11 +276,8 @@ export function PublishedPresetRoute({ pathname, onClose, onNavigate }: Publishe
           {loadState.displayed.visibility !== 'withdrawn' && loadState.displayed.compatible && (
             <div className="marketplace-detail__actions">
               <button type="button" disabled={busy} onClick={() => void apply(loadState.displayed)}>
-                {busy ? '处理中…' : '应用到当前 Rig'}
+                {busy ? '处理中…' : 'Use in Pedalboard'}
               </button>
-              {rigSession.canUndo() && (
-                <button type="button" disabled={busy} onClick={() => void undo()}>撤销应用</button>
-              )}
               {actionMessage && <span>{actionMessage}</span>}
             </div>
           )}

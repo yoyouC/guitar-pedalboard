@@ -83,6 +83,8 @@ export interface PublishedPresetSearchItem {
   creator: MarketplaceMemberSummary;
   tags: MarketplaceTag[];
   derivedAttributes: RigDerivedAttributes;
+  resourceDependencies: RigResourceDependency[];
+  isRemix: boolean;
   createdAt: string;
   updatedAt: string;
 }

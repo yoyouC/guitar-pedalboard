@@ -2,6 +2,23 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build && node scripts/check-publish-models.mjs",
   "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/marketplace/presets/:id/revisions/:revisionId",
+      "destination": "/marketplace/tones/:id/revisions/:revisionId",
+      "permanent": true
+    },
+    {
+      "source": "/marketplace/presets/:id",
+      "destination": "/marketplace/tones/:id",
+      "permanent": true
+    },
+    {
+      "source": "/marketplace/search",
+      "destination": "/marketplace",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/auth/:path*",

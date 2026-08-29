@@ -3,10 +3,12 @@ export interface PublishedPresetRouteIdentity {
   revisionId: string | null;
 }
 
+const TONE_ROUTE = /^\/marketplace\/(?:tones|presets)\/([^/]+)(?:\/revisions\/([^/]+))?\/?$/;
+
 export function publishedPresetRouteFromPath(
   pathname: string,
 ): PublishedPresetRouteIdentity | null {
-  const match = /^\/marketplace\/presets\/([^/]+)(?:\/revisions\/([^/]+))?\/?$/.exec(pathname);
+  const match = TONE_ROUTE.exec(pathname);
   if (!match) return null;
   try {
     return {
@@ -16,6 +18,24 @@ export function publishedPresetRouteFromPath(
   } catch {
     return null;
   }
+}
+
+export function tonePath(presetId: string): string {
+  return `/marketplace/tones/${encodeURIComponent(presetId)}`;
+}
+
+export function toneRevisionPath(presetId: string, revisionId: string): string {
+  return `${tonePath(presetId)}/revisions/${encodeURIComponent(revisionId)}`;
+}
+
+export function canonicalMarketplacePath(pathname: string): string | null {
+  if (pathname === '/marketplace/search' || pathname === '/marketplace/search/') return '/marketplace';
+  if (!/^\/marketplace\/presets\//.test(pathname)) return null;
+  const route = publishedPresetRouteFromPath(pathname);
+  if (!route) return null;
+  return route.revisionId
+    ? toneRevisionPath(route.presetId, route.revisionId)
+    : tonePath(route.presetId);
 }
 
 export function publishedPresetIdFromPath(pathname: string): string | null {

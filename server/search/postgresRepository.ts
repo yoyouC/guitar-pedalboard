@@ -3,6 +3,7 @@ import type {
   MarketplaceTag,
   PublishedPresetSearchItem,
   RigDerivedAttributes,
+  RigResourceDependency,
   RigResourceDependencyKey,
 } from '../../shared/marketplace.ts';
 import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
@@ -35,6 +36,8 @@ interface SearchRow extends QueryResultRow {
   cab_id: string;
   resource_kinds: RigDerivedAttributes['resourceKinds'];
   resource_dependency_keys: RigResourceDependencyKey[];
+  resource_dependencies: RigResourceDependency[];
+  is_remix: boolean;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -65,6 +68,8 @@ function itemFromRow(row: SearchRow): PublishedPresetSearchItem {
       cabId: row.cab_id,
       resourceKinds: row.resource_kinds,
     },
+    resourceDependencies: row.resource_dependencies,
+    isRemix: row.is_remix,
     createdAt: isoTimestamp(row.created_at),
     updatedAt: isoTimestamp(row.updated_at),
   };
@@ -167,12 +172,16 @@ async function fetchRows(
        projection.cab_id,
        projection.resource_kinds,
        projection.resource_dependency_keys,
+       revision.resource_dependencies,
+       (preset.source_preset_id IS NOT NULL) AS is_remix,
        preset.created_at,
        preset.updated_at
      FROM marketplace_published_presets AS preset
      JOIN marketplace_members AS creator ON creator.id = preset.creator_id
      JOIN marketplace_published_preset_search_projection AS projection
        ON projection.preset_id = preset.id
+     JOIN marketplace_published_preset_revisions AS revision
+       ON revision.preset_id = preset.id AND revision.id = preset.current_revision_id
      WHERE ${clauses.join(' AND ')}
      ORDER BY preset.created_at DESC, preset.id DESC
      LIMIT ${rowLimit}`,

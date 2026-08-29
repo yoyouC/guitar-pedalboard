@@ -99,7 +99,7 @@ export function PublishPresetDialog({
         request,
         provenance,
       });
-      onPublished(`/marketplace/presets/${encodeURIComponent(preset.id)}`, preset);
+      onPublished(`/marketplace/tones/${encodeURIComponent(preset.id)}`, preset);
     } catch (cause) {
       if (cause instanceof MarketplaceClientError && cause.fields) {
         setMessage(Object.values(cause.fields).join('；'));

@@ -164,7 +164,7 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
             <li key={revision.id}>
               <span>{revision.id}{revision.isCurrent ? '（当前）' : ''}</span>
               <button type="button" onClick={() => onNavigate(
-                `/marketplace/presets/${encodeURIComponent(preset.id)}/revisions/${encodeURIComponent(revision.id)}`
+                `/marketplace/tones/${encodeURIComponent(preset.id)}/revisions/${encodeURIComponent(revision.id)}`
               )}>永久链接</button>
               {!revision.isCurrent && (
                 <button type="button" disabled={busy} onClick={() => restore(revision.id)}>复制并回退</button>

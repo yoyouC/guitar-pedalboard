@@ -153,6 +153,8 @@ export function createMemoryPublishedPresetRepository(
           creator: clone(preset.creator),
           tags: clone(preset.tags),
           derivedAttributes: clone(preset.derivedAttributes),
+          resourceDependencies: clone(preset.currentRevision.resourceDependencies),
+          isRemix: Boolean(preset.source),
           createdAt: preset.createdAt,
           updatedAt: preset.updatedAt,
         }));

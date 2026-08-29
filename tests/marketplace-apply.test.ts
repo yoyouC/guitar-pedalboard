@@ -17,6 +17,15 @@ function installLocalStorage() {
   });
 }
 
+function memorySessionStorage() {
+  const data = new Map<string, string>();
+  return {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => void data.set(key, String(value)),
+    removeItem: (key: string) => void data.delete(key),
+  };
+}
+
 function createStubEngine(): RigEngine {
   const ignore = () => undefined;
   return {
@@ -99,6 +108,52 @@ test('published provenance survives editing and local Preset round-trips until a
   assert.deepEqual(await store.startFromBlankRig(), { ok: true });
   assert.equal(store.getState().chain.length, 0);
   assert.equal(store.getState().provenance, null);
+});
+
+test('consecutive Tone comparisons preserve the first My Original Rig and expose Modified state', async () => {
+  const store = createRigStore(createStubEngine());
+  store.setAmpParam('gain', 17);
+  const original = rigToApplyState(store.getState());
+  const session = createPublishedPresetRigSession(store, memorySessionStorage());
+  const secondTone = structuredClone(demoPublishedPreset);
+  secondTone.id = 'preset-second-tone';
+  secondTone.title = 'Second Tone';
+  secondTone.currentRevision.id = 'revision-second-tone-1';
+  secondTone.currentRevision.rig.amp.values.gain = 83;
+
+  assert.deepEqual(await session.apply(demoPublishedPreset), { ok: true });
+  assert.equal(session.getState().modified, false);
+  store.setAmpParam('gain', 72);
+  assert.equal(session.getState().modified, true);
+  assert.deepEqual(await session.apply(secondTone), { ok: true });
+  assert.equal(session.getState().tone?.id, secondTone.id);
+  assert.equal(session.getState().modified, false);
+  assert.equal(store.getState().ampValues.gain, 83);
+
+  assert.deepEqual(await session.backToOriginal(), { ok: true });
+  assert.deepEqual(rigToApplyState(store.getState()), original);
+  assert.deepEqual(session.getState(), {
+    tone: null,
+    modified: false,
+    canReturnToOriginal: false,
+  });
+  session.dispose();
+});
+
+test('Tone comparison restore point survives route remounts in browser-session storage', async () => {
+  const store = createRigStore(createStubEngine());
+  store.setAmpParam('gain', 19);
+  const original = rigToApplyState(store.getState());
+  const storage = memorySessionStorage();
+  const firstRouteSession = createPublishedPresetRigSession(store, storage);
+  assert.deepEqual(await firstRouteSession.apply(demoPublishedPreset), { ok: true });
+  firstRouteSession.dispose();
+
+  const remountedSession = createPublishedPresetRigSession(store, storage);
+  assert.equal(remountedSession.getState().tone?.id, demoPublishedPreset.id);
+  assert.deepEqual(await remountedSession.backToOriginal(), { ok: true });
+  assert.deepEqual(rigToApplyState(store.getState()), original);
+  remountedSession.dispose();
 });
 
 test('a future Rig schema is rejected without changing the local Rig', async () => {

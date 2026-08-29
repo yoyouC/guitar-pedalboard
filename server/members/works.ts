@@ -17,7 +17,7 @@ export function createMemoryPublicCreatorWorks(
         .map((preset) => ({
           id: preset.id,
           title: preset.title,
-          url: `/marketplace/presets/${encodeURIComponent(preset.id)}`,
+          url: `/marketplace/tones/${encodeURIComponent(preset.id)}`,
         }));
     },
   };
@@ -42,7 +42,7 @@ export function createPostgresPublicCreatorWorks(pool: Pool): PublicCreatorWorks
       return result.rows.map((row) => ({
         id: row.id,
         title: row.title,
-        url: `/marketplace/presets/${encodeURIComponent(row.id)}`,
+        url: `/marketplace/tones/${encodeURIComponent(row.id)}`,
       }));
     },
   };

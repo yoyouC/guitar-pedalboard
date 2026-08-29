@@ -80,7 +80,7 @@ export function ApplicationHeader({
         </AppLink>
         <AppLink
           active={section === 'marketplace'}
-          href="/marketplace/search"
+          href="/marketplace"
           onNavigate={onNavigate}
         >
           {locale === 'zh-CN' ? '音色市场' : 'Tone Market'}

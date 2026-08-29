@@ -333,7 +333,7 @@ export function parsePublishedPresetSearchPage(value: unknown): PublishedPresetS
       || !isRecord(item.creator)
       || !hasOnlyKeys(item, [
         'id', 'title', 'description', 'creator', 'tags', 'derivedAttributes',
-        'createdAt', 'updatedAt',
+        'resourceDependencies', 'isRemix', 'createdAt', 'updatedAt',
       ])
       || typeof item.id !== 'string'
       || !item.id
@@ -351,6 +351,9 @@ export function parsePublishedPresetSearchPage(value: unknown): PublishedPresetS
       || item.tags.length > 5
       || !item.tags.every(isMarketplaceTag)
       || !isDerivedAttributes(item.derivedAttributes)
+      || !Array.isArray(item.resourceDependencies)
+      || !item.resourceDependencies.every(isResourceDependency)
+      || typeof item.isRemix !== 'boolean'
       || typeof item.createdAt !== 'string'
       || typeof item.updatedAt !== 'string'
     ) return null;

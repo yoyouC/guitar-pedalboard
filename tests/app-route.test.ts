@@ -11,6 +11,10 @@ test('the root and TONE3000 callback keep the Pedalboard surface', () => {
 });
 
 test('marketplace routes select independent marketplace pages', () => {
+  assert.deepEqual(resolveAppRoute('/marketplace'), {
+    kind: 'marketplace-search',
+    section: 'marketplace',
+  });
   assert.deepEqual(resolveAppRoute('/marketplace/search'), {
     kind: 'marketplace-search',
     section: 'marketplace',
@@ -20,6 +24,10 @@ test('marketplace routes select independent marketplace pages', () => {
     section: 'marketplace',
   });
   assert.deepEqual(resolveAppRoute('/marketplace/presets/preset-demo/revisions/rev-1'), {
+    kind: 'published-preset',
+    section: 'marketplace',
+  });
+  assert.deepEqual(resolveAppRoute('/marketplace/tones/preset-demo/revisions/rev-1'), {
     kind: 'published-preset',
     section: 'marketplace',
   });
@@ -45,4 +53,3 @@ test('unknown paths never fall through to the instrument surface', () => {
     section: 'unknown',
   });
 });
-

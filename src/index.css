@@ -3662,6 +3662,15 @@ body.midi-learn-mode input:disabled {
 .marketplace-search__results article { display: grid; gap: 7px; padding: 13px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 9px; background: #20252c; }
 .marketplace-search__results article button { padding: 0; border: 0; background: none; color: #8dc7ff; font-size: 16px; text-align: left; }
 .marketplace-search__results article p { margin: 0; }
+.marketplace-search__empty { padding: 18px; border: 1px dashed rgba(255, 255, 255, 0.2); border-radius: 9px; text-align: center; }
+.marketplace-rig-detail { padding: 12px 15px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 9px; background: rgba(0, 0, 0, 0.16); }
+.marketplace-rig-detail summary { cursor: pointer; color: #8dc7ff; font-weight: 700; }
+.marketplace-rig-detail li { margin: 8px 0; }
+.marketplace-rig-detail li small { display: block; margin-top: 3px; }
+.tone-session-bar { position: relative; z-index: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 10px auto; padding: 10px 14px; width: min(1100px, calc(100% - 24px)); border: 1px solid rgba(141, 199, 255, 0.35); border-radius: 10px; background: rgba(17, 26, 36, 0.94); }
+.tone-session-bar > div { display: grid; margin-right: auto; }
+.tone-session-bar > div span { color: #aab8c7; font-size: 12px; }
+.tone-session-bar__modified { padding: 3px 7px; border-radius: 999px; background: #77521d; color: #ffd28b; font-size: 12px; font-weight: 700; }
 
 .publish-dialog__backdrop {
   position: fixed;

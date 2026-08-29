@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { publishedPresetIdFromPath, publishedPresetRouteFromPath } from '../src/marketplace/route.ts';
+import { canonicalMarketplacePath, publishedPresetIdFromPath, publishedPresetRouteFromPath, tonePath, toneRevisionPath } from '../src/marketplace/route.ts';
 import { creatorHandleFromPath } from '../src/marketplace/route.ts';
 import { presetCollectionIdFromPath } from '../src/marketplace/route.ts';
 
@@ -19,6 +19,10 @@ test('published preset detail paths carry stable identity without relying on a s
 
 test('preset revision paths preserve both stable identities', () => {
   assert.deepEqual(
+    publishedPresetRouteFromPath('/marketplace/tones/preset-a/revisions/revision-1'),
+    { presetId: 'preset-a', revisionId: 'revision-1' },
+  );
+  assert.deepEqual(
     publishedPresetRouteFromPath('/marketplace/presets/preset-a/revisions/revision-1'),
     { presetId: 'preset-a', revisionId: 'revision-1' },
   );
@@ -26,6 +30,15 @@ test('preset revision paths preserve both stable identities', () => {
     publishedPresetRouteFromPath('/marketplace/presets/preset%20a/revisions/revision%201/'),
     { presetId: 'preset a', revisionId: 'revision 1' },
   );
+});
+
+test('canonical tone paths and legacy marketplace redirects preserve identity', () => {
+  assert.equal(tonePath('preset a'), '/marketplace/tones/preset%20a');
+  assert.equal(toneRevisionPath('preset a', 'revision 1'), '/marketplace/tones/preset%20a/revisions/revision%201');
+  assert.equal(canonicalMarketplacePath('/marketplace/search'), '/marketplace');
+  assert.equal(canonicalMarketplacePath('/marketplace/presets/preset-a'), '/marketplace/tones/preset-a');
+  assert.equal(canonicalMarketplacePath('/marketplace/presets/preset-a/revisions/rev-1'), '/marketplace/tones/preset-a/revisions/rev-1');
+  assert.equal(canonicalMarketplacePath('/marketplace/tones/preset-a'), null);
 });
 
 test('creator profile paths resolve a stable handle', () => {

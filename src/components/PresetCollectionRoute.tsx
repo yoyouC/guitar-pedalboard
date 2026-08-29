@@ -103,7 +103,7 @@ export function PresetCollectionRoute({ pathname, onClose, onNavigate }: PresetC
                 <div>
                   {item.availability === 'available' ? (
                     <button type="button" onClick={() => onNavigate(
-                      `/marketplace/presets/${encodeURIComponent(item.presetId)}`
+                      `/marketplace/tones/${encodeURIComponent(item.presetId)}`
                       + `/revisions/${encodeURIComponent(item.revisionId)}`
                     )}>{item.title}</button>
                   ) : <strong>原作当前不可用</strong>}

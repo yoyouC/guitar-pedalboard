@@ -45,6 +45,8 @@ import {
   type BackgroundTheme,
 } from './app/preferences.ts';
 import { memberSession } from './members/session.ts';
+import { canonicalMarketplacePath } from './marketplace/route.ts';
+import { ToneSessionBar } from './components/ToneSessionBar.tsx';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -102,6 +104,13 @@ export default function App() {
     window.addEventListener('popstate', syncPathname);
     return () => window.removeEventListener('popstate', syncPathname);
   }, []);
+
+  useEffect(() => {
+    const canonical = canonicalMarketplacePath(pathname);
+    if (!canonical) return;
+    window.history.replaceState(null, '', `${canonical}${search}${window.location.hash}`);
+    setPathname(canonical);
+  }, [pathname, search]);
 
   const navigate = useCallback((nextPathname: string) => {
     const next = new URL(nextPathname, window.location.origin);
@@ -434,6 +443,7 @@ export default function App() {
             <Tuner analyser={engineReady ? audioEngine.inputAnalyser : null} />
           )}
 
+          <ToneSessionBar />
           <PresetBar onNavigate={navigate} />
 
           <main className="board">

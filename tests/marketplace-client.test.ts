@@ -348,6 +348,8 @@ test('official client sends structured preset search and validates the public re
       creator: demoPublishedPreset.creator,
       tags: demoPublishedPreset.tags,
       derivedAttributes: demoPublishedPreset.derivedAttributes,
+      resourceDependencies: demoPublishedPreset.currentRevision.resourceDependencies,
+      isRemix: false,
       createdAt: demoPublishedPreset.createdAt,
       updatedAt: demoPublishedPreset.updatedAt,
     }],

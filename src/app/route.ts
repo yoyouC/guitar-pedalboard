@@ -34,7 +34,7 @@ export function resolveAppRoute(pathname: string): AppRoute {
   if (exactPath(pathname, '/tone3000/callback')) {
     return { kind: 'pedalboard', section: 'pedalboard' };
   }
-  if (exactPath(pathname, '/marketplace/search')) {
+  if (exactPath(pathname, '/marketplace') || exactPath(pathname, '/marketplace/search')) {
     return { kind: 'marketplace-search', section: 'marketplace' };
   }
   if (publishedPresetRouteFromPath(pathname)) {
@@ -51,4 +51,3 @@ export function resolveAppRoute(pathname: string): AppRoute {
   if (exactPath(pathname, '/settings')) return { kind: 'settings', section: 'account' };
   return { kind: 'not-found', section: 'unknown' };
 }
-
