@@ -91,3 +91,26 @@ test('collection queue never activates an unavailable position', async () => {
   assert.equal(result.ok, false);
   assert.equal(queue.getState().queue, null);
 });
+
+test('collection queue persists compatibility placeholders and explains why navigation skipped them', async () => {
+  const storage = new MemoryStorage();
+  const queue = createCollectionQueueSession({
+    async getPublishedPresetRevision(id, revisionId) { return revisionView(id, revisionId); },
+  }, {
+    async apply() { return { ok: true }; },
+  }, storage);
+
+  assert.deepEqual(await queue.start(collection, 0, {
+    2: 'Amp builtin:retired 已不在当前器材目录中',
+  }), { ok: true });
+  assert.equal(queue.nextPosition(), null);
+  assert.equal(queue.getState().queue?.items[2].availability, 'unavailable');
+  assert.match(queue.getState().queue?.items[2].skipReason ?? '', /retired/);
+
+  const restored = createCollectionQueueSession({
+    async getPublishedPresetRevision(id, revisionId) { return revisionView(id, revisionId); },
+  }, {
+    async apply() { return { ok: true }; },
+  }, storage);
+  assert.match(restored.getState().queue?.items[2].skipReason ?? '', /retired/);
+});

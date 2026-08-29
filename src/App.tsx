@@ -48,7 +48,8 @@ import { memberSession } from './members/session.ts';
 import { canonicalMarketplacePath } from './marketplace/route.ts';
 import { ToneSessionBar } from './components/ToneSessionBar.tsx';
 
-const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
+const outputSelectSupported = typeof globalThis.AudioContext === 'function'
+  && 'setSinkId' in globalThis.AudioContext.prototype;
 
 /** 背景主题:Meddle(水下之耳,默认)/ 棱镜(Pink Floyd)/ 流体,点击循环切换 */
 const BG_THEME_LABEL: Record<BackgroundTheme, string> = {

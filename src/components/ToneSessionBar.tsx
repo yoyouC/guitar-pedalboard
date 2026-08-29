@@ -62,7 +62,7 @@ export function ToneSessionBar() {
       <button type="button" onClick={exit}>Exit Session</button>
       {message && <span role="alert">{message}</span>}
 
-      {queue && showQueue && <ol className="tone-session-bar__queue">{queue.items.map((item) => <li key={`${item.position}-${item.presetId}-${item.revisionId}`} className={item.position === queue.currentPosition ? 'current' : ''}><span>{item.position + 1}</span>{item.availability === 'available' ? <button type="button" disabled={busy || item.position === queue.currentPosition} onClick={() => requestSwitch(item.position)}>{item.title}<small>@{item.creator.handle} · revision {item.revisionId}</small></button> : <div><strong>Unavailable Tone</strong><small>@{item.creator.handle} · fixed placeholder</small></div>}</li>)}</ol>}
+      {queue && showQueue && <ol className="tone-session-bar__queue">{queue.items.map((item) => <li key={`${item.position}-${item.presetId}-${item.revisionId}`} className={item.position === queue.currentPosition ? 'current' : ''}><span>{item.position + 1}</span>{item.availability === 'available' ? <button type="button" disabled={busy || item.position === queue.currentPosition} onClick={() => requestSwitch(item.position)}>{item.title}<small>@{item.creator.handle} · revision {item.revisionId}</small></button> : <div><strong>Skipped Tone</strong><small>{item.skipReason ?? `@${item.creator.handle} · fixed placeholder unavailable`}</small></div>}</li>)}</ol>}
 
       {pendingPosition !== null && <div className="tone-session-bar__decision" role="dialog" aria-modal="true" aria-label="当前 Tone 已修改">
         <strong>当前 Tone 已修改</strong><p>切换会丢弃这些改动。请选择保存为 Local Preset、丢弃并继续，或取消。</p>

@@ -11,7 +11,7 @@ test('unified discovery exposes three tabs with canonical creator navigation', a
   await page.getByRole('button', { name: 'Demo Crunch' }).click();
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    'http://127.0.0.1:4174/marketplace/presets/preset-demo-crunch',
+    'http://127.0.0.1:4174/marketplace/tones/preset-demo-crunch',
   );
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
@@ -53,12 +53,12 @@ test('legacy handle resolves to the id canonical page and Unlisted stays out of 
   await expect(page).toHaveURL('/creators/id/member-system');
   await expect(page.getByRole('heading', { name: 'Guitar Pedalboard', exact: true })).toBeVisible();
 
-  await page.goto('/marketplace/presets/preset-demo-unlisted');
+  await page.goto('/marketplace/tones/preset-demo-unlisted');
   await expect(page.getByRole('heading', { name: 'Secret Demo Tone' })).toBeVisible();
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex,nofollow');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     'href',
-    'http://127.0.0.1:4174/marketplace/presets/preset-demo-unlisted',
+    'http://127.0.0.1:4174/marketplace/tones/preset-demo-unlisted',
   );
 
   await page.goto('/marketplace/search');

@@ -153,10 +153,14 @@ export async function browseTone3000(
  * 纯登录(standard 流程,不选模型):用于失效目标的"登录 TONE3000"——
  * 登录成功后由调用方重试原模型,不强迫用户重选。
  */
-export async function loginTone3000(getEncodedRig: () => string): Promise<boolean> {
+export async function loginTone3000(
+  getEncodedRig: () => string,
+  onRedirect?: () => void,
+): Promise<boolean> {
   const { url } = await tone3000.buildAuthorizeUrl();
   const outcome = await openOAuthPopup(url);
   if (outcome.kind === 'blocked') {
+    onRedirect?.();
     fallbackToRedirect(getEncodedRig(), url);
     return false;
   }

@@ -14,6 +14,7 @@ import { rigStore } from './state/useRig.ts'
 import { rigFromShare } from './state/rigStore.ts'
 import { decodeShareState } from './state/share.ts'
 import { tone3000Rig } from './tone3000/useTone3000Rig.ts'
+import { peekMarketplaceToneApplyIntent } from './marketplace/marketplaceToneIntent.ts'
 
 // OAuth 回调着陆(ADR-0007)分两种:
 // 1) popup 流程(默认):回调在弹窗内着陆,把参数 postMessage 回 opener 后关窗,
@@ -47,7 +48,12 @@ if (relay && window.opener) {
     },
   }).then((handled) => {
     if (handled) {
-      history.replaceState(null, '', window.location.pathname.replace('/tone3000/callback', '') || '/')
+      const marketplaceIntent = peekMarketplaceToneApplyIntent(window.localStorage)
+      const returnPath = marketplaceIntent?.returnPath
+        ?? window.location.pathname.replace('/tone3000/callback', '')
+        ?? '/'
+      history.replaceState(null, '', returnPath || '/')
+      window.dispatchEvent(new PopStateEvent('popstate'))
     }
   })
 }
