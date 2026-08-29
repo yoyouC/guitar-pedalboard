@@ -9,6 +9,7 @@ import type {
   PublishedPresetManagementRepository,
   PublishedPresetPublicationRepository,
   PublishedPresetRepository,
+  PublishedPresetRevisionReferenceRepository,
 } from './repository.ts';
 import {
   PublishedPresetAccessError,
@@ -23,6 +24,7 @@ export function createMemoryPublishedPresetRepository(
   presets: readonly PublishedPreset[] = [],
   tags: readonly MarketplaceTag[] = [],
 ): PublishedPresetRepository & PublishedPresetPublicationRepository & PublishedPresetManagementRepository & {
+  findRevisionReference: PublishedPresetRevisionReferenceRepository['findRevisionReference'];
   count(): Promise<number>;
 } {
   const presetsById = new Map(presets.map((preset) => [preset.id, preset]));
@@ -89,6 +91,19 @@ export function createMemoryPublishedPresetRepository(
   }
 
   return {
+    async findRevisionReference(presetId, revisionId) {
+      const preset = presetsById.get(presetId);
+      const revision = revisionsByPresetId.get(presetId)?.get(revisionId);
+      if (!preset || !revision) return null;
+      return clone({
+        presetId,
+        revisionId,
+        title: preset.title,
+        visibility: preset.visibility,
+        creator: preset.creator,
+      });
+    },
+
     async findVisibleById(id) {
       const preset = presetsById.get(id);
       return preset && (preset.visibility === 'public' || preset.visibility === 'unlisted')

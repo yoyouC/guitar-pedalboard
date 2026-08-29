@@ -23,6 +23,21 @@ export interface PublishedPresetRepository {
   ): Promise<PublishedPresetRevisionView | null>;
 }
 
+export interface PublishedPresetRevisionReference {
+  presetId: string;
+  revisionId: string;
+  title: string;
+  visibility: PublishedPresetVisibility;
+  creator: MarketplaceMemberSummary;
+}
+
+export interface PublishedPresetRevisionReferenceRepository {
+  findRevisionReference(
+    presetId: string,
+    revisionId: string,
+  ): Promise<PublishedPresetRevisionReference | null>;
+}
+
 export interface CreatePublishedPresetInput {
   id: string;
   revisionId: string;

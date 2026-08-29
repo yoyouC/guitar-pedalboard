@@ -29,6 +29,53 @@ export interface PublishedPresetSource extends PublishedPresetSourceReference {
   title: string | null;
 }
 
+export type PresetCollectionVisibility = PublishedPresetVisibility;
+
+export interface PresetCollectionItem {
+  position: number;
+  presetId: string;
+  revisionId: string;
+  availability: 'available' | 'unavailable';
+  title: string | null;
+  creator: MarketplaceMemberSummary;
+}
+
+export interface PresetCollection {
+  id: string;
+  title: string;
+  description: string;
+  visibility: PresetCollectionVisibility;
+  creator: MarketplaceMemberSummary;
+  tags: MarketplaceTag[];
+  items: PresetCollectionItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PresetCollectionReference {
+  presetId: string;
+  revisionId: string;
+}
+
+export interface CreatePresetCollectionRequest {
+  title: string;
+  description: string;
+  tagIds: string[];
+  visibility: 'public' | 'unlisted';
+}
+
+export interface UpdatePresetCollectionRequest
+  extends Omit<CreatePresetCollectionRequest, 'visibility'> {
+  visibility: 'public' | 'unlisted' | 'withdrawn';
+  items: PresetCollectionReference[];
+  expectedUpdatedAt: string;
+}
+
+export interface PresetCollectionConcurrencyState {
+  updatedAt: string;
+  visibility: PresetCollectionVisibility;
+}
+
 export type RigResourceDependency =
   | { kind: 'builtin' }
   | { kind: 'tone3000'; toneId: string; modelId?: string };

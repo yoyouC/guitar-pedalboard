@@ -38,6 +38,7 @@ import type { AudioDiagnosticsSnapshot } from './audio/audioDiagnostics';
 import { PublishedPresetRoute } from './components/PublishedPresetRoute';
 import { MemberPanel } from './components/MemberPanel';
 import { CreatorProfileRoute } from './components/CreatorProfileRoute';
+import { PresetCollectionRoute } from './components/PresetCollectionRoute';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
@@ -385,6 +386,13 @@ export default function App() {
         >
           音色广场 Demo
         </button>
+        <button
+          className="marketplace-demo-link"
+          type="button"
+          onClick={() => navigate('/marketplace/collections/collection-demo-stage-tones')}
+        >
+          合集 Demo
+        </button>
         <MemberPanel onNavigate={navigate} />
       </header>
 
@@ -394,6 +402,11 @@ export default function App() {
         onNavigate={navigate}
       />
       <CreatorProfileRoute pathname={pathname} onClose={() => navigate('/')} onNavigate={navigate} />
+      <PresetCollectionRoute
+        pathname={pathname}
+        onClose={() => navigate('/')}
+        onNavigate={navigate}
+      />
 
       <TopBar
         inputType={inputType}

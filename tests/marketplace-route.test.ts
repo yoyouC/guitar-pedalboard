@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { publishedPresetIdFromPath, publishedPresetRouteFromPath } from '../src/marketplace/route.ts';
 import { creatorHandleFromPath } from '../src/marketplace/route.ts';
+import { presetCollectionIdFromPath } from '../src/marketplace/route.ts';
 
 test('published preset detail paths carry stable identity without relying on a slug', () => {
   assert.equal(
@@ -32,4 +33,16 @@ test('creator profile paths resolve a stable handle', () => {
   assert.equal(creatorHandleFromPath('/creators/ada-tones/'), 'ada-tones');
   assert.equal(creatorHandleFromPath('/creators/ada%20tones'), 'ada tones');
   assert.equal(creatorHandleFromPath('/marketplace/creators/ada-tones'), null);
+});
+
+test('preset collection paths carry one stable collection identity', () => {
+  assert.equal(
+    presetCollectionIdFromPath('/marketplace/collections/collection-stage-tones'),
+    'collection-stage-tones',
+  );
+  assert.equal(
+    presetCollectionIdFromPath('/marketplace/collections/collection%20one/'),
+    'collection one',
+  );
+  assert.equal(presetCollectionIdFromPath('/marketplace/collections'), null);
 });

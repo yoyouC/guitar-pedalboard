@@ -59,6 +59,18 @@
       "source": "/api/marketplace/presets/:id",
       "destination": "/api/marketplace-preset?route=preset&id=:id"
     },
+    {
+      "source": "/api/marketplace/collections",
+      "destination": "/api/marketplace-collection?route=collections"
+    },
+    {
+      "source": "/api/marketplace/collections/:id/manage",
+      "destination": "/api/marketplace-collection?route=manage&id=:id"
+    },
+    {
+      "source": "/api/marketplace/collections/:id",
+      "destination": "/api/marketplace-collection?route=collection&id=:id"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

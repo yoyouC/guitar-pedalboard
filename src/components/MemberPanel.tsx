@@ -8,6 +8,7 @@ import {
   signOut,
   updateMemberProfile,
 } from '../members/client.ts';
+import { CreatePresetCollectionForm } from './CreatePresetCollectionForm.tsx';
 
 interface MemberPanelProps {
   onNavigate(pathname: string): void;
@@ -23,6 +24,7 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [message, setMessage] = useState('');
+  const [creatingCollection, setCreatingCollection] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -133,6 +135,16 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
           )}
           {member && !loading && (
             <>
+              {creatingCollection ? (
+                <CreatePresetCollectionForm
+                  onCancel={() => setCreatingCollection(false)}
+                  onCreated={(pathname) => {
+                    onNavigate(pathname);
+                    setCreatingCollection(false);
+                    setOpen(false);
+                  }}
+                />
+              ) : (
               <form onSubmit={saveProfile}>
                 <label>
                   Handle
@@ -149,7 +161,13 @@ export function MemberPanel({ onNavigate }: MemberPanelProps) {
                 </label>
                 <button type="submit">保存资料</button>
               </form>
+              )}
               <div className="member-panel__actions">
+                {!creatingCollection && (
+                  <button type="button" onClick={() => setCreatingCollection(true)}>
+                    创建预设合集
+                  </button>
+                )}
                 <button type="button" onClick={() => {
                   onNavigate(`/creators/${encodeURIComponent(member.handle)}`);
                   setOpen(false);

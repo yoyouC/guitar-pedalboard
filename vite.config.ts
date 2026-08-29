@@ -11,6 +11,9 @@ import { createBetterAuthSessionVerifier } from './server/auth/betterAuthSession
 import { createMemberApi } from './server/members/api.ts'
 import { createMemoryMemberRepository } from './server/members/memoryRepository.ts'
 import { createMemoryPublicCreatorWorks } from './server/members/works.ts'
+import { createPresetCollectionApi } from './server/collections/api.ts'
+import { createMemoryPresetCollectionRepository } from './server/collections/memoryRepository.ts'
+import type { MarketplaceTag, PresetCollection } from './shared/marketplace.ts'
 
 // 本地评估模型(models-local/,git-ignored,许可不允许公开分发):
 // 仅开发期经此中间件提供;/models-local/** 不进入 dist,也不会被部署。
@@ -64,7 +67,7 @@ function serveMarketplaceApi(): Plugin {
     createdAt: demoCreatedAt,
     updatedAt: demoCreatedAt,
   }])
-  const publications = createMemoryPublishedPresetRepository([demoPublishedPreset], [
+  const marketplaceTags: MarketplaceTag[] = [
     { id: 'tone-clean', dimension: 'tone', nameZh: '清音', nameEn: 'Clean' },
     { id: 'tone-crunch', dimension: 'tone', nameZh: 'Crunch', nameEn: 'Crunch' },
     { id: 'tone-high-gain', dimension: 'tone', nameZh: '高增益', nameEn: 'High Gain' },
@@ -72,7 +75,8 @@ function serveMarketplaceApi(): Plugin {
     { id: 'genre-rock', dimension: 'genre', nameZh: '摇滚', nameEn: 'Rock' },
     { id: 'use-live', dimension: 'use', nameZh: '现场', nameEn: 'Live' },
     { id: 'use-recording', dimension: 'use', nameZh: '录音', nameEn: 'Recording' },
-  ])
+  ]
+  const publications = createMemoryPublishedPresetRepository([demoPublishedPreset], marketplaceTags)
   const sessions = createBetterAuthSessionVerifier(auth.api)
   const presetApi = createMarketplaceApi({
     publishedPresets: publications,
@@ -95,6 +99,41 @@ function serveMarketplaceApi(): Plugin {
     createId: () => crypto.randomUUID(),
     createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
     publicWorks: createMemoryPublicCreatorWorks([demoPublishedPreset]),
+  })
+  const demoCollection: PresetCollection = {
+    id: 'collection-demo-stage-tones',
+    title: 'Demo Stage Tones',
+    description: 'A fixed-revision collection for local development.',
+    visibility: 'public',
+    creator: demoPublishedPreset.creator,
+    tags: demoPublishedPreset.tags,
+    items: [{
+      position: 0,
+      presetId: demoPublishedPreset.id,
+      revisionId: demoPublishedPreset.currentRevision.id,
+      availability: 'available',
+      title: demoPublishedPreset.title,
+      creator: demoPublishedPreset.creator,
+    }],
+    createdAt: demoPublishedPreset.createdAt,
+    updatedAt: demoPublishedPreset.updatedAt,
+  }
+  const collections = createMemoryPresetCollectionRepository(
+    [demoCollection],
+    publications,
+    marketplaceTags,
+  )
+  const collectionApi = createPresetCollectionApi({
+    collections,
+    management: {
+      repository: collections,
+      sessions,
+      members,
+      now: () => new Date(),
+      createCollectionId: () => `collection-${crypto.randomUUID()}`,
+      createMemberId: () => crypto.randomUUID(),
+      createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
+    },
   })
   return {
     name: 'serve-marketplace-api',
@@ -128,6 +167,8 @@ function serveMarketplaceApi(): Plugin {
             : req.url.startsWith('/api/marketplace/me')
               || req.url.startsWith('/api/marketplace/creators/')
               ? await memberApi.fetch(request)
+              : req.url.startsWith('/api/marketplace/collections')
+                ? await collectionApi.fetch(request)
               : await presetApi.fetch(request)
           res.statusCode = response.status
           response.headers.forEach((value, key) => res.setHeader(key, value))

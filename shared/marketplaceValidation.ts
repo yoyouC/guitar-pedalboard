@@ -1,5 +1,6 @@
 import type {
   CanonicalPublishedPresetRevision,
+  PresetCollection,
   PublishedPreset,
   PublishedPresetRevision,
   PublishedPresetRevisionView,
@@ -255,4 +256,65 @@ export function parsePublishedPresetRevisionView(
     || (value.source !== undefined && !isPublishedPresetSource(value.source))
   ) return null;
   return value as unknown as PublishedPresetRevisionView;
+}
+
+export function parsePresetCollection(
+  value: unknown,
+  expectedId?: string,
+  allowWithdrawn = false,
+): PresetCollection | null {
+  if (!isRecord(value) || !isRecord(value.creator)) return null;
+  if (
+    !hasOnlyKeys(value, [
+      'id', 'title', 'description', 'visibility', 'creator', 'tags', 'items',
+      'createdAt', 'updatedAt',
+    ])
+    || typeof value.id !== 'string'
+    || !value.id
+    || (expectedId !== undefined && value.id !== expectedId)
+    || typeof value.title !== 'string'
+    || textLength(value.title) < 1
+    || textLength(value.title) > 80
+    || typeof value.description !== 'string'
+    || textLength(value.description) > 2_000
+    || !(
+      value.visibility === 'public'
+      || value.visibility === 'unlisted'
+      || (allowWithdrawn && value.visibility === 'withdrawn')
+    )
+    || !hasOnlyKeys(value.creator, ['id', 'handle', 'displayName'])
+    || typeof value.creator.id !== 'string'
+    || typeof value.creator.handle !== 'string'
+    || typeof value.creator.displayName !== 'string'
+    || !Array.isArray(value.tags)
+    || value.tags.length < 1
+    || value.tags.length > 5
+    || !value.tags.every(isMarketplaceTag)
+    || !Array.isArray(value.items)
+    || typeof value.createdAt !== 'string'
+    || typeof value.updatedAt !== 'string'
+  ) return null;
+  for (const [position, item] of value.items.entries()) {
+    if (
+      !isRecord(item)
+      || !isRecord(item.creator)
+      || !hasOnlyKeys(item, [
+        'position', 'presetId', 'revisionId', 'availability', 'title', 'creator',
+      ])
+      || item.position !== position
+      || typeof item.presetId !== 'string'
+      || !item.presetId
+      || typeof item.revisionId !== 'string'
+      || !item.revisionId
+      || (item.availability !== 'available' && item.availability !== 'unavailable')
+      || (item.availability === 'available'
+        ? typeof item.title !== 'string' || !item.title
+        : item.title !== null)
+      || !hasOnlyKeys(item.creator, ['id', 'handle', 'displayName'])
+      || typeof item.creator.id !== 'string'
+      || typeof item.creator.handle !== 'string'
+      || typeof item.creator.displayName !== 'string'
+    ) return null;
+  }
+  return value as unknown as PresetCollection;
 }

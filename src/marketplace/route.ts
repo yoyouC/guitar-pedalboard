@@ -32,3 +32,13 @@ export function creatorHandleFromPath(pathname: string): string | null {
     return null;
   }
 }
+
+export function presetCollectionIdFromPath(pathname: string): string | null {
+  const match = /^\/marketplace\/collections\/([^/]+)\/?$/.exec(pathname);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}

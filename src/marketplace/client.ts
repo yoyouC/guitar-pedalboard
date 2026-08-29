@@ -1,6 +1,9 @@
 import type {
   AppendPublishedPresetRevisionRequest,
+  CreatePresetCollectionRequest,
   MarketplaceTag,
+  PresetCollection,
+  PresetCollectionConcurrencyState,
   PublishedPreset,
   PublishedPresetConcurrencyState,
   PublishedPresetRevisionSummary,
@@ -9,9 +12,11 @@ import type {
   RestorePublishedPresetRevisionRequest,
   UpdatePublishedPresetMetadataRequest,
   UpdatePublishedPresetVisibilityRequest,
+  UpdatePresetCollectionRequest,
 } from '../../shared/marketplace';
 import {
   parseManagedPublishedPreset,
+  parsePresetCollection,
   parsePublicPublishedPreset,
   parsePublishedPresetRevisionView,
 } from '../../shared/marketplaceValidation';
@@ -30,18 +35,21 @@ export class MarketplaceClientError extends Error {
   readonly code: MarketplaceClientErrorCode;
   readonly fields?: Record<string, string>;
   readonly current?: PublishedPresetConcurrencyState;
+  readonly collectionCurrent?: PresetCollectionConcurrencyState;
 
   constructor(
     code: MarketplaceClientErrorCode,
     message: string,
     fields?: Record<string, string>,
     current?: PublishedPresetConcurrencyState,
+    collectionCurrent?: PresetCollectionConcurrencyState,
   ) {
     super(message);
     this.name = 'MarketplaceClientError';
     this.code = code;
     this.fields = fields;
     this.current = current;
+    this.collectionCurrent = collectionCurrent;
   }
 }
 
@@ -69,6 +77,13 @@ export interface MarketplaceClient {
     id: string,
     request: UpdatePublishedPresetVisibilityRequest,
   ): Promise<PublishedPreset>;
+  getPresetCollection(id: string): Promise<PresetCollection>;
+  getManagedPresetCollection(id: string): Promise<PresetCollection>;
+  createPresetCollection(request: CreatePresetCollectionRequest): Promise<PresetCollection>;
+  updatePresetCollection(
+    id: string,
+    request: UpdatePresetCollectionRequest,
+  ): Promise<PresetCollection>;
 }
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -101,6 +116,31 @@ async function publicationError(response: Response): Promise<MarketplaceClientEr
       }
       if (error.code === 'invalid_preset_update') {
         return new MarketplaceClientError('invalid_update', '修改内容需要修正。', fields);
+      }
+      if (error.code === 'invalid_collection') {
+        return new MarketplaceClientError('invalid_update', '合集内容需要修正。', fields);
+      }
+      if (error.code === 'invalid_collection_reference') {
+        return new MarketplaceClientError(
+          'invalid_update',
+          '合集包含不可访问的音色修订。',
+          { items: '请选择允许收录的固定修订' },
+        );
+      }
+      if (error.code === 'collection_update_conflict' && isRecord(error.current)) {
+        const current = error.current;
+        if (
+          typeof current.updatedAt === 'string'
+          && ['public', 'unlisted', 'withdrawn', 'hidden'].includes(String(current.visibility))
+        ) {
+          return new MarketplaceClientError(
+            'update_conflict',
+            '合集已在别处更新，请重新载入后再试。',
+            fields,
+            undefined,
+            current as unknown as PresetCollectionConcurrencyState,
+          );
+        }
       }
       if (error.code === 'preset_update_conflict' && isRecord(error.current)) {
         const current = error.current;
@@ -169,6 +209,29 @@ async function managedMutation(
   const preset = parseManagedPublishedPreset(body.preset);
   if (!preset) throw new MarketplaceClientError('invalid_response', '作品管理响应无效。');
   return preset;
+}
+
+async function collectionMutation(
+  fetchResponse: Fetch,
+  path: string,
+  method: 'PATCH' | 'POST',
+  request: unknown,
+): Promise<PresetCollection> {
+  let response: Response;
+  try {
+    response = await fetchResponse(path, {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new MarketplaceClientError('network', '无法连接音色广场。');
+  }
+  if (!response.ok) throw await publicationError(response);
+  const body = await response.json() as { collection?: unknown };
+  const collection = parsePresetCollection(body.collection, undefined, true);
+  if (!collection) throw new MarketplaceClientError('invalid_response', '合集响应格式无效。');
+  return collection;
 }
 
 export function createMarketplaceClient(fetchResponse: Fetch = fetch): MarketplaceClient {
@@ -336,6 +399,57 @@ export function createMarketplaceClient(fetchResponse: Fetch = fetch): Marketpla
       return managedMutation(
         fetchResponse,
         `/api/marketplace/presets/${encodeURIComponent(id)}/visibility`,
+        'PATCH',
+        request,
+      );
+    },
+
+    async getPresetCollection(id) {
+      let response: Response;
+      try {
+        response = await fetchResponse(
+          `/api/marketplace/collections/${encodeURIComponent(id)}`,
+        );
+      } catch {
+        throw new MarketplaceClientError('network', '无法连接音色广场。');
+      }
+      if (response.status === 404) {
+        throw new MarketplaceClientError('not_found', '找不到这个预设合集。');
+      }
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { collection?: unknown };
+      const collection = parsePresetCollection(body.collection, id);
+      if (!collection) throw new MarketplaceClientError('invalid_response', '合集响应格式无效。');
+      return collection;
+    },
+
+    async getManagedPresetCollection(id) {
+      let response: Response;
+      try {
+        response = await fetchResponse(
+          `/api/marketplace/collections/${encodeURIComponent(id)}/manage`,
+        );
+      } catch {
+        throw new MarketplaceClientError('network', '无法连接音色广场。');
+      }
+      if (response.status === 404) {
+        throw new MarketplaceClientError('not_found', '找不到可管理的合集。');
+      }
+      if (!response.ok) throw await publicationError(response);
+      const body = await response.json() as { collection?: unknown };
+      const collection = parsePresetCollection(body.collection, id, true);
+      if (!collection) throw new MarketplaceClientError('invalid_response', '合集管理响应无效。');
+      return collection;
+    },
+
+    createPresetCollection(request) {
+      return collectionMutation(fetchResponse, '/api/marketplace/collections', 'POST', request);
+    },
+
+    updatePresetCollection(id, request) {
+      return collectionMutation(
+        fetchResponse,
+        `/api/marketplace/collections/${encodeURIComponent(id)}`,
         'PATCH',
         request,
       );

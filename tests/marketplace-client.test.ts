@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { demoPublishedPreset } from '../server/marketplace/demoPreset.ts';
+import type { PresetCollection } from '../shared/marketplace.ts';
 import {
   MarketplaceClientError,
   createMarketplaceClient,
@@ -258,5 +259,82 @@ test('official client exposes recoverable preset concurrency state', async () =>
     (error) => error instanceof MarketplaceClientError
       && error.code === 'update_conflict'
       && error.current?.currentRevisionId === demoPublishedPreset.currentRevision.id,
+  );
+});
+
+test('official client reads, creates, manages, and updates fixed-revision collections', async () => {
+  const collection: PresetCollection = {
+    id: 'collection-stage-tones',
+    title: 'Stage Tones',
+    description: '',
+    visibility: 'public',
+    creator: demoPublishedPreset.creator,
+    tags: demoPublishedPreset.tags,
+    items: [{
+      position: 0,
+      presetId: demoPublishedPreset.id,
+      revisionId: demoPublishedPreset.currentRevision.id,
+      availability: 'available',
+      title: demoPublishedPreset.title,
+      creator: demoPublishedPreset.creator,
+    }],
+    createdAt: demoPublishedPreset.createdAt,
+    updatedAt: demoPublishedPreset.updatedAt,
+  };
+  const calls: Array<{ input: string; init?: RequestInit }> = [];
+  const client = createMarketplaceClient(async (input, init) => {
+    calls.push({ input: String(input), init });
+    return Response.json({ collection }, { status: init?.method === 'POST' ? 201 : 200 });
+  });
+
+  assert.deepEqual(await client.getPresetCollection(collection.id), collection);
+  assert.deepEqual(await client.getManagedPresetCollection(collection.id), collection);
+  await client.createPresetCollection({
+    title: collection.title,
+    description: collection.description,
+    tagIds: collection.tags.map((tag) => tag.id),
+    visibility: 'public',
+  });
+  await client.updatePresetCollection(collection.id, {
+    title: collection.title,
+    description: collection.description,
+    tagIds: collection.tags.map((tag) => tag.id),
+    visibility: 'public',
+    items: collection.items.map(({ presetId, revisionId }) => ({ presetId, revisionId })),
+    expectedUpdatedAt: collection.updatedAt,
+  });
+
+  assert.deepEqual(calls.map(({ input, init }) => [input, init?.method]), [
+    [`/api/marketplace/collections/${collection.id}`, undefined],
+    [`/api/marketplace/collections/${collection.id}/manage`, undefined],
+    ['/api/marketplace/collections', 'POST'],
+    [`/api/marketplace/collections/${collection.id}`, 'PATCH'],
+  ]);
+});
+
+test('official client rejects a collection response that leaks unavailable item content', async () => {
+  const leaked = {
+    id: 'collection-leaked',
+    title: 'Leaked',
+    description: '',
+    visibility: 'public',
+    creator: demoPublishedPreset.creator,
+    tags: demoPublishedPreset.tags,
+    items: [{
+      position: 0,
+      presetId: demoPublishedPreset.id,
+      revisionId: demoPublishedPreset.currentRevision.id,
+      availability: 'unavailable',
+      title: demoPublishedPreset.title,
+      creator: demoPublishedPreset.creator,
+      rig: demoPublishedPreset.currentRevision.rig,
+    }],
+    createdAt: demoPublishedPreset.createdAt,
+    updatedAt: demoPublishedPreset.updatedAt,
+  };
+  const client = createMarketplaceClient(async () => Response.json({ collection: leaked }));
+  await assert.rejects(
+    () => client.getPresetCollection(leaked.id),
+    (error) => error instanceof MarketplaceClientError && error.code === 'invalid_response',
   );
 });
