@@ -159,7 +159,7 @@ test('health endpoint probes only first-party marketplace storage and never cach
           release(destroy = false) { releases.push(destroy); },
         };
       },
-    }, 1),
+    }, 50),
     /statement timeout/,
   );
   assert.equal(releases.at(-1), true);
