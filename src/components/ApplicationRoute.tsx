@@ -3,32 +3,37 @@ import { CreatorProfileRoute } from './CreatorProfileRoute.tsx';
 import { PresetCollectionRoute } from './PresetCollectionRoute.tsx';
 import { PublishedPresetRoute } from './PublishedPresetRoute.tsx';
 import { PublishedPresetSearchRoute } from './PublishedPresetSearchRoute.tsx';
+import { LoginPage } from './LoginPage.tsx';
+import { SettingsPage } from './SettingsPage.tsx';
+import type { AppPreferences } from '../app/preferences.ts';
+import type { AudioDiagnosticsSnapshot } from '../audio/audioDiagnostics.ts';
+import type { MidiState } from '../midi/useMidi.ts';
+import type { MidiBinding } from '../midi/midiLearn.ts';
 
 interface ApplicationRouteProps {
   route: Exclude<AppRoute, { kind: 'pedalboard' }>;
   pathname: string;
+  search: string;
   onNavigate(pathname: string): void;
+  preferences: AppPreferences;
+  onPreferencesChange(preferences: AppPreferences): void;
+  diagnostics: AudioDiagnosticsSnapshot;
+  engineReady: boolean;
+  midi: MidiState;
+  midiBindings: MidiBinding[];
+  onClearMidiBindings(): void;
 }
 
 const PLACEHOLDER_COPY = {
-  login: {
-    eyebrow: 'Member access',
-    title: 'Login is moving here',
-    description: 'For now, use the member menu in the header. The dedicated sign-in flow arrives in the next member-experience slice.',
-  },
   library: {
     eyebrow: 'Member workspace',
     title: 'My Library is being prepared',
     description: 'Published Tone, Collections and Likes will live here without mixing them with browser-local Presets.',
   },
-  settings: {
-    eyebrow: 'Persistent preferences',
-    title: 'Settings is being prepared',
-    description: 'Audio, MIDI, appearance and account preferences will move here while performance controls remain on the Pedalboard.',
-  },
 } as const;
 
-export function ApplicationRoute({ route, pathname, onNavigate }: ApplicationRouteProps) {
+export function ApplicationRoute(props: ApplicationRouteProps) {
+  const { route, pathname, onNavigate } = props;
   const close = () => onNavigate('/');
   switch (route.kind) {
     case 'marketplace-search':
@@ -40,8 +45,10 @@ export function ApplicationRoute({ route, pathname, onNavigate }: ApplicationRou
     case 'creator-profile':
       return <CreatorProfileRoute pathname={pathname} onClose={close} onNavigate={onNavigate} />;
     case 'login':
-    case 'library':
-    case 'settings': {
+      return <LoginPage locale={props.preferences.locale} search={props.search} onNavigate={onNavigate} />;
+    case 'settings':
+      return <SettingsPage {...props} />;
+    case 'library': {
       const copy = PLACEHOLDER_COPY[route.kind];
       return (
         <section className="app-route-placeholder">
@@ -66,4 +73,3 @@ export function ApplicationRoute({ route, pathname, onNavigate }: ApplicationRou
       );
   }
 }
-

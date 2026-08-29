@@ -24,6 +24,8 @@ const MEMBER_KEYS = [
   'handleChangedAt',
   'id',
   'nextHandleChangeAt',
+  'readyForPublicAttribution',
+  'termsAcceptedVersion',
   'updatedAt',
 ].sort();
 
@@ -43,6 +45,8 @@ function parseMember(value: unknown): MemberProfile | null {
     || !isNullableString(candidate.avatarUrl)
     || !isNullableString(candidate.handleChangedAt)
     || !isNullableString(candidate.nextHandleChangeAt)
+    || !isNullableString(candidate.termsAcceptedVersion)
+    || typeof candidate.readyForPublicAttribution !== 'boolean'
     || typeof candidate.createdAt !== 'string'
     || typeof candidate.updatedAt !== 'string'
   ) return null;
@@ -85,7 +89,13 @@ export async function requestMagicLink(
 }
 
 export async function updateMemberProfile(
-  update: { handle?: string; displayName?: string; bio?: string; expectedUpdatedAt: string },
+  update: {
+    handle?: string;
+    displayName?: string;
+    bio?: string;
+    termsAcceptedVersion?: string;
+    expectedUpdatedAt: string;
+  },
   fetch: FetchLike = globalThis.fetch,
 ): Promise<MemberProfile> {
   const response = await fetch('/api/marketplace/me/profile', {

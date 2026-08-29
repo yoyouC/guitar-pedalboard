@@ -15,6 +15,8 @@ const member = {
   avatarUrl: null,
   handleChangedAt: null,
   nextHandleChangeAt: null,
+  termsAcceptedVersion: '2026-08-29',
+  readyForPublicAttribution: true,
   createdAt: '2026-08-29T00:00:00.000Z',
   updatedAt: '2026-08-29T00:00:00.000Z',
 };

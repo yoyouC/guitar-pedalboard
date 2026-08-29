@@ -2,6 +2,7 @@ import type { MouseEvent, ReactNode } from 'react';
 import type { InputSourceType } from '../audio/AudioEngine.ts';
 import type { AppSection } from '../app/route.ts';
 import { MemberPanel } from './MemberPanel.tsx';
+import type { AppLocale } from '../app/preferences.ts';
 
 interface AppLinkProps {
   active: boolean;
@@ -45,6 +46,7 @@ const INPUT_LABEL: Record<InputSourceType, string> = {
 
 interface ApplicationHeaderProps {
   section: AppSection;
+  locale: AppLocale;
   engineReady: boolean;
   inputType: InputSourceType | null;
   onNavigate(pathname: string): void;
@@ -53,6 +55,7 @@ interface ApplicationHeaderProps {
 
 export function ApplicationHeader({
   section,
+  locale,
   engineReady,
   inputType,
   onNavigate,
@@ -73,14 +76,14 @@ export function ApplicationHeader({
       </AppLink>
       <nav className="app-header__nav" aria-label="Primary navigation">
         <AppLink active={section === 'pedalboard'} href="/" onNavigate={onNavigate}>
-          Pedalboard
+          {locale === 'zh-CN' ? '效果器' : 'Pedalboard'}
         </AppLink>
         <AppLink
           active={section === 'marketplace'}
           href="/marketplace/search"
           onNavigate={onNavigate}
         >
-          Tone Market
+          {locale === 'zh-CN' ? '音色市场' : 'Tone Market'}
         </AppLink>
       </nav>
       <div className="app-header__actions">
@@ -88,13 +91,13 @@ export function ApplicationHeader({
           <div className="app-audio-status" role="status" aria-label="Audio input is active">
             <span className="app-audio-status__light" aria-hidden="true" />
             <span>
-              <strong>Audio active</strong>
+              <strong>{locale === 'zh-CN' ? '音频运行中' : 'Audio active'}</strong>
               <small>{INPUT_LABEL[inputType]}</small>
             </span>
-            <button type="button" onClick={onStopInput}>Stop</button>
+            <button type="button" onClick={onStopInput}>{locale === 'zh-CN' ? '停止' : 'Stop'}</button>
           </div>
         )}
-        <MemberPanel onNavigate={onNavigate} />
+        <MemberPanel locale={locale} onNavigate={onNavigate} />
       </div>
     </header>
   );

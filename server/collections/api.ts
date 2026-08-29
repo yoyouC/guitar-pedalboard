@@ -1,5 +1,7 @@
 import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRepository } from '../members/repository.ts';
+import { isReadyForPublicAttribution } from '../members/repository.ts';
+import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
 import {
   PresetCollectionAccessError,
   PresetCollectionConflictError,
@@ -66,6 +68,15 @@ export function createPresetCollectionApi(input: {
             now,
           });
           if (request.method === 'POST') {
+            if (!isReadyForPublicAttribution(member, CURRENT_MEMBER_TERMS_VERSION)) {
+              return Response.json({
+                error: {
+                  code: 'public_profile_required',
+                  message: 'Complete your public profile first',
+                  requiredTermsVersion: CURRENT_MEMBER_TERMS_VERSION,
+                },
+              }, { status: 409 });
+            }
             const tags = await input.management.repository.listAvailableTags();
             const validation = validateCreatePresetCollection(
               await jsonBody(request),

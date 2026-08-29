@@ -50,7 +50,19 @@ function createFixture(identity: AuthenticatedIdentity | null = adaIdentity) {
     management: {
       repository: collections,
       sessions: session(identity),
-      members: createMemoryMemberRepository(),
+      members: createMemoryMemberRepository(identity ? [{
+        id: 'member-ada',
+        authUserId: identity.authUserId,
+        handle: 'ada',
+        displayName: identity.displayName,
+        bio: '',
+        avatarUrl: null,
+        handleChangedAt: null,
+        termsAcceptedVersion: '2026-08-29',
+        publicProfileCompletedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }] : []),
       now: () => now,
       createCollectionId: () => 'collection-ada-live',
       createMemberId: () => 'member-ada',
@@ -94,6 +106,26 @@ test('authenticated member creates one owned collection with controlled tags', a
   const anonymous = createFixture(null);
   const rejected = await createCollection(anonymous.api);
   assert.equal(rejected.status, 401);
+});
+
+test('creating a collection requires explicit public attribution setup', async () => {
+  const presets = createMemoryPublishedPresetRepository([], tags);
+  const collections = createMemoryPresetCollectionRepository([], presets, tags);
+  const api = createPresetCollectionApi({
+    collections,
+    management: {
+      repository: collections,
+      sessions: session(adaIdentity),
+      members: createMemoryMemberRepository(),
+      now: () => now,
+      createCollectionId: () => 'collection-should-not-exist',
+      createMemberId: () => 'member-ada',
+      createHandleSuffix: () => '4f82a1',
+    },
+  });
+  const response = await createCollection(api);
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error.code, 'public_profile_required');
 });
 
 test('owner atomically adds, sorts, removes, and explicitly upgrades fixed revisions', async () => {
@@ -225,7 +257,19 @@ test('server rejects Unlisted leaks, forged ownership, and stale overwrites', as
     management: {
       repository: collections,
       sessions: session({ ...adaIdentity, authUserId: 'auth-eve', email: 'eve@example.test' }),
-      members: createMemoryMemberRepository(),
+      members: createMemoryMemberRepository([{
+        id: 'member-ada',
+        authUserId: adaIdentity.authUserId,
+        handle: 'ada',
+        displayName: 'Ada',
+        bio: '',
+        avatarUrl: null,
+        handleChangedAt: null,
+        termsAcceptedVersion: '2026-08-29',
+        publicProfileCompletedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }]),
       now: () => now,
       createCollectionId: () => 'unused',
       createMemberId: () => 'member-eve',
@@ -282,7 +326,19 @@ test('other creators Unlisted preset is rejected even by an Unlisted collection'
     management: {
       repository: collections,
       sessions: session(adaIdentity),
-      members: createMemoryMemberRepository(),
+      members: createMemoryMemberRepository([{
+        id: 'member-ada',
+        authUserId: adaIdentity.authUserId,
+        handle: 'ada',
+        displayName: 'Ada',
+        bio: '',
+        avatarUrl: null,
+        handleChangedAt: null,
+        termsAcceptedVersion: '2026-08-29',
+        publicProfileCompletedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      }]),
       now: () => now,
       createCollectionId: () => 'collection-private-test',
       createMemberId: () => 'member-ada',

@@ -1,0 +1,2 @@
+export const CURRENT_MEMBER_TERMS_VERSION = '2026-08-29';
+

@@ -98,7 +98,19 @@ function publicationApi(
       publication: {
         repository,
         sessions: { async verify() { return identity; } },
-        members: createMemoryMemberRepository(),
+        members: createMemoryMemberRepository([{
+          id: 'member-ada',
+          authUserId: adaIdentity.authUserId,
+          handle: 'ada',
+          displayName: 'Ada',
+          bio: '',
+          avatarUrl: null,
+          handleChangedAt: null,
+          termsAcceptedVersion: '2026-08-29',
+          publicProfileCompletedAt: new Date('2026-08-29T00:00:00.000Z'),
+          createdAt: new Date('2026-08-29T00:00:00.000Z'),
+          updatedAt: new Date('2026-08-29T00:00:00.000Z'),
+        }]),
         now: () => new Date('2026-08-29T10:00:00.000Z'),
         createPresetId: () => 'preset-ada-crunch',
         createRevisionId: () => 'revision-ada-crunch-1',
@@ -139,6 +151,8 @@ function managementApi(memberId = 'member-ada', sourcePreset: CanonicalPublished
     bio: '',
     avatarUrl: null,
     handleChangedAt: null,
+    termsAcceptedVersion: '2026-08-29',
+    publicProfileCompletedAt: new Date('2026-08-29T00:00:00.000Z'),
     createdAt: new Date('2026-08-29T00:00:00.000Z'),
     updatedAt: new Date('2026-08-29T00:00:00.000Z'),
   }]);
@@ -267,6 +281,33 @@ test('verified member atomically publishes the first immutable revision with ser
   ]);
   assert.deepEqual(body.preset.currentRevision.resourceDependencies, [{ kind: 'builtin' }]);
   assert.equal(await repository.count(), 1);
+});
+
+test('publishing requires public attribution setup but ordinary authentication does not complete it', async () => {
+  const repository = createMemoryPublishedPresetRepository([], controlledTags);
+  const api = createMarketplaceApi({
+    publishedPresets: repository,
+    publication: {
+      repository,
+      sessions: { async verify() { return adaIdentity; } },
+      members: createMemoryMemberRepository(),
+      now: () => new Date('2026-08-29T10:00:00.000Z'),
+      createPresetId: () => 'preset-should-not-exist',
+      createRevisionId: () => 'revision-should-not-exist',
+      createMemberId: () => 'member-ada',
+      createHandleSuffix: () => '4f82a1',
+    },
+  });
+
+  const response = await api.fetch(publishRequest());
+  const body = await response.json();
+  assert.equal(response.status, 409);
+  assert.deepEqual(body.error, {
+    code: 'public_profile_required',
+    message: 'Complete your public profile first',
+    requiredTermsVersion: '2026-08-29',
+  });
+  assert.equal(await repository.findVisibleById('preset-should-not-exist'), null);
 });
 
 test('publication rejects anonymous and forged ownership without leaving a work', async () => {

@@ -10,6 +10,8 @@ export interface MemberRecord {
   bio: string;
   avatarUrl: string | null;
   handleChangedAt: Date | null;
+  termsAcceptedVersion: string | null;
+  publicProfileCompletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +27,7 @@ export interface UpdateMemberProfileInput {
   handle?: string;
   displayName?: string;
   bio?: string;
+  termsAcceptedVersion?: string;
   expectedUpdatedAt: Date;
 }
 
@@ -50,4 +53,12 @@ export interface MemberRepository {
   findOrCreateForIdentity(input: CreateMemberInput): Promise<MemberRecord>;
   resolveHandle(handle: string): Promise<HandleResolution>;
   updateProfile(memberId: string, update: UpdateMemberProfileInput, now: Date): Promise<MemberRecord>;
+}
+
+export function isReadyForPublicAttribution(
+  member: MemberRecord,
+  currentTermsVersion: string,
+): boolean {
+  return member.publicProfileCompletedAt !== null
+    && member.termsAcceptedVersion === currentTermsVersion;
 }

@@ -38,37 +38,23 @@ import type { AudioDiagnosticsSnapshot } from './audio/audioDiagnostics';
 import { resolveAppRoute } from './app/route.ts';
 import { ApplicationHeader } from './components/ApplicationHeader.tsx';
 import { ApplicationRoute } from './components/ApplicationRoute.tsx';
+import {
+  BACKGROUND_THEMES,
+  loadAppPreferences,
+  saveAppPreferences,
+  type BackgroundTheme,
+} from './app/preferences.ts';
+import { memberSession } from './members/session.ts';
 
 const outputSelectSupported = 'setSinkId' in AudioContext.prototype;
 
 /** 背景主题:Meddle(水下之耳,默认)/ 棱镜(Pink Floyd)/ 流体,点击循环切换 */
-const BG_THEMES = ['meddle', 'prism', 'fluid'] as const;
-type BgTheme = (typeof BG_THEMES)[number];
-const BG_THEME_KEY = 'guitar-pedalboard-bg-theme';
-const REDUCE_VISUAL_LOAD_KEY = 'guitar-pedalboard-reduce-visual-load-v1';
-const BG_THEME_LABEL: Record<BgTheme, string> = {
+const BG_THEME_LABEL: Record<BackgroundTheme, string> = {
   meddle: 'Meddle(水下之耳)',
   prism: '棱镜(Pink Floyd)',
   fluid: '流体',
 };
-const BG_THEME_ICON: Record<BgTheme, string> = { meddle: '👂', prism: '🔺', fluid: '🌊' };
-
-function loadBgTheme(): BgTheme {
-  try {
-    const v = localStorage.getItem(BG_THEME_KEY);
-    return (BG_THEMES as readonly string[]).includes(v ?? '') ? (v as BgTheme) : 'meddle';
-  } catch {
-    return 'meddle';
-  }
-}
-
-function loadReduceVisualLoad(): boolean {
-  try {
-    return localStorage.getItem(REDUCE_VISUAL_LOAD_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
+const BG_THEME_ICON: Record<BackgroundTheme, string> = { meddle: '👂', prism: '🔺', fluid: '🌊' };
 
 /**
  * 统一 RigAction 分发器(ADR-0004):MIDI 默认映射 / MIDI Learn / 键盘
@@ -93,6 +79,7 @@ const translateMidiBinding = createBindingTranslator();
  */
 export default function App() {
   const [pathname, setPathname] = useState(window.location.pathname);
+  const [search, setSearch] = useState(window.location.search);
   const route = resolveAppRoute(pathname);
   const isPedalboard = route.kind === 'pedalboard';
   const [inputType, setInputType] = useState<InputSourceType | null>(null);
@@ -100,40 +87,43 @@ export default function App() {
   const [showMeters, setShowMeters] = useState(true);
   const [showTuner, setShowTuner] = useState(false);
   const [ytBgActive, setYtBgActive] = useState(false);
-  const [bgTheme, setBgTheme] = useState<BgTheme>(loadBgTheme);
-  const [reduceVisualLoad, setReduceVisualLoad] = useState(loadReduceVisualLoad);
+  const [preferences, setPreferences] = useState(loadAppPreferences);
+  const bgTheme = preferences.background;
+  const reduceVisualLoad = preferences.reduceVisualLoad;
   const [diagnostics, setDiagnostics] = useState<AudioDiagnosticsSnapshot>(audioEngine.currentDiagnostics);
   const effectiveShowMeters = showMeters && !reduceVisualLoad;
   const effectiveShowTuner = showTuner && !reduceVisualLoad;
 
   useEffect(() => {
-    const syncPathname = () => setPathname(window.location.pathname);
+    const syncPathname = () => {
+      setPathname(window.location.pathname);
+      setSearch(window.location.search);
+    };
     window.addEventListener('popstate', syncPathname);
     return () => window.removeEventListener('popstate', syncPathname);
   }, []);
 
   const navigate = useCallback((nextPathname: string) => {
-    window.history.pushState(null, '', `${nextPathname}${window.location.hash}`);
-    setPathname(nextPathname);
+    const next = new URL(nextPathname, window.location.origin);
+    const returnPathAlreadyCarriesSession = next.pathname === '/login'
+      && next.searchParams.has('return');
+    if (!nextPathname.includes('#') && !returnPathAlreadyCarriesSession) {
+      next.hash = window.location.hash;
+    }
+    window.history.pushState(null, '', `${next.pathname}${next.search}${next.hash}`);
+    setPathname(next.pathname);
+    setSearch(next.search);
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(BG_THEME_KEY, bgTheme);
-    } catch {
-      /* localStorage 不可用时跳过持久化 */
-    }
-  }, [bgTheme]);
+    saveAppPreferences(preferences);
+    document.documentElement.lang = preferences.locale;
+    document.documentElement.classList.toggle('reduced-motion', preferences.reducedMotion);
+  }, [preferences]);
+
+  useEffect(() => { void memberSession.load(); }, []);
 
   useEffect(() => audioEngine.subscribeDiagnostics(setDiagnostics), []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(REDUCE_VISUAL_LOAD_KEY, String(reduceVisualLoad));
-    } catch {
-      /* localStorage 不可用时保持本次会话设置 */
-    }
-  }, [reduceVisualLoad]);
 
   // 图谱重建后 bump:让 render 时读取引擎侧节点引用(preAmpAnalyser)的组件拿到新实例,
   // 同时驱动 Learn 模式的 armed 高亮重扫(data-midi-target 只随结构变化)
@@ -358,7 +348,7 @@ export default function App() {
     <div className={`app ${isPedalboard ? 'app--pedalboard' : 'app--content'}`}>
       <Analytics />
 
-      {isPedalboard && !reduceVisualLoad && !ytBgActive &&
+      {isPedalboard && !reduceVisualLoad && !preferences.reducedMotion && !ytBgActive &&
         (bgTheme === 'prism' ? (
           <PrismBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
         ) : bgTheme === 'fluid' ? (
@@ -367,15 +357,21 @@ export default function App() {
           <MeddleBackground analyser={engineReady ? (audioEngine.preAmpAnalyser ?? audioEngine.outputAnalyser) : null} />
         ))}
       {isPedalboard && (
-        <YouTubeBackground disabled={reduceVisualLoad} onActiveChange={setYtBgActive} />
+        <YouTubeBackground
+          disabled={reduceVisualLoad || preferences.reducedMotion}
+          onActiveChange={setYtBgActive}
+        />
       )}
 
-      {isPedalboard && !reduceVisualLoad && (
+      {isPedalboard && !reduceVisualLoad && !preferences.reducedMotion && (
         <button
           className="bg-theme-toggle"
-          title={`切换背景:${BG_THEME_LABEL[BG_THEMES[(BG_THEMES.indexOf(bgTheme) + 1) % BG_THEMES.length]]}`}
+          title={`切换背景:${BG_THEME_LABEL[BACKGROUND_THEMES[(BACKGROUND_THEMES.indexOf(bgTheme) + 1) % BACKGROUND_THEMES.length]]}`}
           onClick={() =>
-            setBgTheme((t) => BG_THEMES[(BG_THEMES.indexOf(t) + 1) % BG_THEMES.length])
+            setPreferences((current) => ({
+              ...current,
+              background: BACKGROUND_THEMES[(BACKGROUND_THEMES.indexOf(current.background) + 1) % BACKGROUND_THEMES.length],
+            }))
           }
         >
           {BG_THEME_ICON[bgTheme]}
@@ -384,6 +380,7 @@ export default function App() {
 
       <ApplicationHeader
         section={route.section}
+        locale={preferences.locale}
         engineReady={engineReady}
         inputType={inputType}
         onNavigate={navigate}
@@ -427,7 +424,10 @@ export default function App() {
             engineReady={engineReady}
             diagnostics={diagnostics}
             reduceVisualLoad={reduceVisualLoad}
-            onReduceVisualLoadChange={setReduceVisualLoad}
+            onReduceVisualLoadChange={(enabled) => setPreferences((current) => ({
+              ...current,
+              reduceVisualLoad: enabled,
+            }))}
           />
 
           {effectiveShowTuner && (
@@ -445,7 +445,7 @@ export default function App() {
           <AmpPanel showMeters={effectiveShowMeters} engineReady={engineReady} />
           <CabPanel showMeters={effectiveShowMeters} engineReady={engineReady} />
 
-          {!reduceVisualLoad && (
+          {!reduceVisualLoad && !preferences.reducedMotion && (
             <Oscilloscope
               inputAnalyser={engineReady ? audioEngine.inputAnalyser : null}
               outputAnalyser={engineReady ? audioEngine.outputAnalyser : null}
@@ -457,7 +457,19 @@ export default function App() {
         </>
       ) : (
         <main className="app-route" data-route={route.kind}>
-          <ApplicationRoute route={route} pathname={pathname} onNavigate={navigate} />
+          <ApplicationRoute
+            route={route}
+            pathname={pathname}
+            search={search}
+            onNavigate={navigate}
+            preferences={preferences}
+            onPreferencesChange={setPreferences}
+            diagnostics={diagnostics}
+            engineReady={engineReady}
+            midi={midi}
+            midiBindings={midiBindings}
+            onClearMidiBindings={() => setMidiBindings([])}
+          />
         </main>
       )}
 

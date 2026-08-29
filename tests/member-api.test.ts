@@ -57,6 +57,8 @@ test('a verified identity gets one stable member with an automatic handle and pr
       avatarUrl: 'https://images.example.test/ada.png',
       handleChangedAt: null,
       nextHandleChangeAt: null,
+      termsAcceptedVersion: null,
+      readyForPublicAttribution: false,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     },
@@ -90,6 +92,33 @@ test('member can edit public profile without accepting an arbitrary avatar uploa
   assert.equal((await response.json()).error.code, 'invalid_profile');
 });
 
+test('public attribution becomes ready only after profile and current terms are submitted together', async () => {
+  const api = createMemberApi({
+    members: createMemoryMemberRepository(),
+    sessions: session(adaIdentity),
+    now: () => now,
+    createId: () => 'member-ada',
+    createHandleSuffix: () => '4f82a1',
+  });
+  const initial = (await (await api.fetch(
+    new Request('https://pedalboard.test/api/marketplace/me'),
+  )).json()).member;
+  assert.equal(initial.readyForPublicAttribution, false);
+
+  const incomplete = await api.fetch(profilePatch({ termsAcceptedVersion: '2026-08-29' }));
+  assert.equal(incomplete.status, 400);
+
+  const completed = await api.fetch(profilePatch({
+    handle: 'ada-tones',
+    displayName: 'Ada Lovelace',
+    termsAcceptedVersion: '2026-08-29',
+  }));
+  const completedMember = (await completed.json()).member;
+  assert.equal(completed.status, 200);
+  assert.equal(completedMember.termsAcceptedVersion, '2026-08-29');
+  assert.equal(completedMember.readyForPublicAttribution, true);
+});
+
 test('handle is unique, rate-limited for 90 days, and old handles redirect forever', async () => {
   const members = createMemoryMemberRepository([
     {
@@ -100,6 +129,8 @@ test('handle is unique, rate-limited for 90 days, and old handles redirect forev
       bio: '',
       avatarUrl: null,
       handleChangedAt: null,
+      termsAcceptedVersion: null,
+      publicProfileCompletedAt: null,
       createdAt: now,
       updatedAt: now,
     },

@@ -5,6 +5,7 @@ import { writeShareToLocation } from '../state/share';
 import { rigStore, useRig } from '../state/useRig';
 import type { RigPresetState, RigProvenance } from '../state/presetCodec';
 import { PublishPresetDialog } from './PublishPresetDialog';
+import { useMemberSession } from '../members/useMemberSession.ts';
 
 interface PresetBarProps {
   onNavigate(pathname: string): void;
@@ -26,6 +27,19 @@ export function PresetBar({ onNavigate }: PresetBarProps) {
     provenance: RigProvenance | null;
     presetName?: string;
   } | null>(null);
+  const memberSession = useMemberSession();
+
+  const beginPublication = (next: NonNullable<typeof publication>) => {
+    if (memberSession.status !== 'authenticated') {
+      onNavigate(`/login?return=${encodeURIComponent('/')}`);
+      return;
+    }
+    if (!memberSession.member.readyForPublicAttribution) {
+      onNavigate('/settings?section=account');
+      return;
+    }
+    setPublication(next);
+  };
 
   const handleLoad = async (presetName: string) => {
     const result = await rigStore.loadPreset(presetName);
@@ -143,7 +157,7 @@ export function PresetBar({ onNavigate }: PresetBarProps) {
       <button className={shared ? 'active' : ''} title="复制当前配置(链条+箱头+箱体)的分享链接" onClick={handleShare}>
         {shared ? '✓ 已复制' : '🔗 分享'}
       </button>
-      <button onClick={() => setPublication({
+      <button onClick={() => beginPublication({
         rig: rigToPresetState(rigStore.getState()),
         sourceLabel: '当前完整 Rig',
         initialTitle: '',
@@ -151,7 +165,7 @@ export function PresetBar({ onNavigate }: PresetBarProps) {
       })}>发布当前 Rig</button>
       <button disabled={!selected} onClick={() => {
         const preset = presets.find((candidate) => candidate.name === selected);
-        if (preset) setPublication({
+        if (preset) beginPublication({
           rig: preset.rig,
           sourceLabel: `本地 Preset · ${preset.name}`,
           initialTitle: preset.name,

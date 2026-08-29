@@ -6,6 +6,8 @@ export interface MemberProfile {
   avatarUrl: string | null;
   handleChangedAt: string | null;
   nextHandleChangeAt: string | null;
+  termsAcceptedVersion: string | null;
+  readyForPublicAttribution: boolean;
   createdAt: string;
   updatedAt: string;
 }

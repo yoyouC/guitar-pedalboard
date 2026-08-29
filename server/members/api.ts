@@ -2,11 +2,13 @@ import type { MemberProfile, PublicCreatorProfile } from '../../shared/members.t
 import type { SessionVerifier } from '../auth/session.ts';
 import type { MemberRecord, MemberRepository, UpdateMemberProfileInput } from './repository.ts';
 import type { PublicCreatorWorks } from './works.ts';
+import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
 import {
   HANDLE_CHANGE_INTERVAL_MS,
   HandleChangeTooSoonError,
   HandleUnavailableError,
   MemberUpdateConflictError,
+  isReadyForPublicAttribution,
 } from './repository.ts';
 
 const ME_PATH = '/api/marketplace/me';
@@ -44,6 +46,11 @@ function profile(member: MemberRecord): MemberProfile {
     avatarUrl: member.avatarUrl,
     handleChangedAt: member.handleChangedAt?.toISOString() ?? null,
     nextHandleChangeAt,
+    termsAcceptedVersion: member.termsAcceptedVersion,
+    readyForPublicAttribution: isReadyForPublicAttribution(
+      member,
+      CURRENT_MEMBER_TERMS_VERSION,
+    ),
     createdAt: member.createdAt.toISOString(),
     updatedAt: member.updatedAt.toISOString(),
   };
@@ -67,7 +74,13 @@ function parseProfileUpdate(value: unknown): UpdateMemberProfileInput | null {
   if (
     !('expectedUpdatedAt' in input)
     || keys.every((key) => key === 'expectedUpdatedAt')
-    || keys.some((key) => !['handle', 'displayName', 'bio', 'expectedUpdatedAt'].includes(key))
+    || keys.some((key) => ![
+      'handle',
+      'displayName',
+      'bio',
+      'termsAcceptedVersion',
+      'expectedUpdatedAt',
+    ].includes(key))
   ) {
     return null;
   }
@@ -84,10 +97,18 @@ function parseProfileUpdate(value: unknown): UpdateMemberProfileInput | null {
     || input.displayName.trim().length > 80
   )) return null;
   if ('bio' in input && (typeof input.bio !== 'string' || input.bio.length > 500)) return null;
+  if ('termsAcceptedVersion' in input && (
+    input.termsAcceptedVersion !== CURRENT_MEMBER_TERMS_VERSION
+    || typeof input.handle !== 'string'
+    || typeof input.displayName !== 'string'
+  )) return null;
   return {
     ...('handle' in input ? { handle: input.handle as string } : {}),
     ...('displayName' in input ? { displayName: (input.displayName as string).trim() } : {}),
     ...('bio' in input ? { bio: input.bio as string } : {}),
+    ...('termsAcceptedVersion' in input
+      ? { termsAcceptedVersion: input.termsAcceptedVersion as string }
+      : {}),
     expectedUpdatedAt: new Date(input.expectedUpdatedAt),
   };
 }

@@ -8,7 +8,7 @@ import {
   validatePublishPresetRequest,
 } from '../../shared/marketplacePublication.ts';
 import { marketplaceClient, MarketplaceClientError } from '../marketplace/client.ts';
-import { fetchCurrentMember } from '../members/client.ts';
+import { useMemberSession } from '../members/useMemberSession.ts';
 import { publishRigFromLocalSource } from '../marketplace/publishRig.ts';
 import { analyzePublishableRig } from '../../shared/publishableRig.ts';
 
@@ -35,7 +35,8 @@ export function PublishPresetDialog({
   const [tags, setTags] = useState<MarketplaceTag[]>([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const [currentMemberId, setCurrentMemberId] = useState<string | null>(null);
+  const session = useMemberSession();
+  const currentMemberId = session.status === 'authenticated' ? session.member.id : null;
 
   useEffect(() => {
     let active = true;
@@ -43,17 +44,6 @@ export function PublishPresetDialog({
       (next) => { if (active) setTags(next); },
       (cause: unknown) => {
         if (active) setMessage(cause instanceof Error ? cause.message : '无法读取标签');
-      },
-    );
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    void fetchCurrentMember().then(
-      (member) => { if (active) setCurrentMemberId(member.id); },
-      (cause: unknown) => {
-        if (active) setMessage(cause instanceof Error ? cause.message : '请先登录');
       },
     );
     return () => { active = false; };

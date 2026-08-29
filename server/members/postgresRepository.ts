@@ -21,6 +21,8 @@ interface MemberRow extends QueryResultRow {
   bio: string;
   avatar_url: string | null;
   handle_changed_at: Date | string | null;
+  terms_accepted_version: string | null;
+  public_profile_completed_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
 }
@@ -38,6 +40,10 @@ function record(row: MemberRow): MemberRecord {
     bio: row.bio,
     avatarUrl: row.avatar_url,
     handleChangedAt: row.handle_changed_at ? date(row.handle_changed_at) : null,
+    termsAcceptedVersion: row.terms_accepted_version,
+    publicProfileCompletedAt: row.public_profile_completed_at
+      ? date(row.public_profile_completed_at)
+      : null,
     createdAt: date(row.created_at),
     updatedAt: date(row.updated_at),
   };
@@ -59,6 +65,8 @@ const MEMBER_SELECT = `SELECT
   member.bio,
   member.avatar_url,
   member.handle_changed_at,
+  member.terms_accepted_version,
+  member.public_profile_completed_at,
   member.created_at,
   member.updated_at
 FROM marketplace_members AS member
@@ -104,6 +112,8 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
           bio: '',
           avatarUrl: input.identity.avatarUrl,
           handleChangedAt: null,
+          termsAcceptedVersion: null,
+          publicProfileCompletedAt: null,
           createdAt: input.now,
           updatedAt: input.now,
         };
@@ -171,11 +181,14 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
              display_name = $3,
              bio = $4,
              handle_changed_at = $5,
-             updated_at = $6
+             terms_accepted_version = $6,
+             public_profile_completed_at = $7,
+             updated_at = $8
            FROM marketplace_member_auth_identities AS identity
            WHERE member.id = $1 AND identity.member_id = member.id
            RETURNING member.id, identity.auth_user_id, member.handle, member.display_name,
              member.bio, member.avatar_url, member.handle_changed_at,
+             member.terms_accepted_version, member.public_profile_completed_at,
              member.created_at, member.updated_at`,
           [
             memberId,
@@ -183,6 +196,8 @@ export function createPostgresMemberRepository(pool: Pool): MemberRepository {
             update.displayName ?? current.displayName,
             update.bio ?? current.bio,
             changesHandle ? now : current.handleChangedAt,
+            update.termsAcceptedVersion ?? current.termsAcceptedVersion,
+            update.termsAcceptedVersion ? now : current.publicProfileCompletedAt,
             now,
           ],
         );

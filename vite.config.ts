@@ -65,6 +65,8 @@ function serveMarketplaceApi(): Plugin {
     bio: 'Official Guitar Pedalboard demo tones.',
     avatarUrl: null,
     handleChangedAt: null,
+    termsAcceptedVersion: '2026-08-29',
+    publicProfileCompletedAt: demoCreatedAt,
     createdAt: demoCreatedAt,
     updatedAt: demoCreatedAt,
   }])

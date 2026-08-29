@@ -41,6 +41,8 @@ export function createMemoryMemberRepository(
         bio: '',
         avatarUrl: identity.avatarUrl,
         handleChangedAt: null,
+        termsAcceptedVersion: null,
+        publicProfileCompletedAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -78,6 +80,8 @@ export function createMemoryMemberRepository(
         handle: update.handle ?? current.handle,
         displayName: update.displayName ?? current.displayName,
         bio: update.bio ?? current.bio,
+        termsAcceptedVersion: update.termsAcceptedVersion ?? current.termsAcceptedVersion,
+        publicProfileCompletedAt: update.termsAcceptedVersion ? now : current.publicProfileCompletedAt,
         handleChangedAt:
           update.handle && update.handle !== current.handle ? now : current.handleChangedAt,
         updatedAt: now,
