@@ -543,6 +543,31 @@ test('restore selection rejects a valid but superseded fencing token', async () 
   }
 });
 
+test('restore selection keeps the artifact day when backup completion crosses UTC midnight', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'marketplace-backup-midnight-selection-'));
+  const startedAt = new Date('2026-08-29T23:59:00.000Z');
+  const completedAt = new Date('2026-08-30T00:01:00.000Z');
+  const paths = marketplaceBackupArtifactPaths(directory, startedAt, 1001, '1');
+  try {
+    await mkdir(paths.bundlePath, { recursive: true });
+    await writeFile(paths.archivePath, 'midnight archive');
+    const manifest = JSON.parse(testBackupManifest(
+      paths.archivePath, completedAt, 'midnight archive',
+    ));
+    manifest.startedAt = startedAt.toISOString();
+    manifest.durationMs = completedAt.getTime() - startedAt.getTime();
+    await writeFile(paths.manifestPath, JSON.stringify(manifest));
+    await writeFile(paths.fencePath!, '', { flag: 'wx' });
+
+    const selected = await assertCurrentMarketplaceBackupSelection(
+      directory, paths.archivePath, paths.manifestPath,
+    );
+    assert.equal(selected.paths.dayKey, '2026-08-29');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('restore requires exact fact counts and checksums from the exported snapshot', () => {
   const facts: MarketplaceBackupFacts = {
     members: { count: 10, checksum: 'members-a' },

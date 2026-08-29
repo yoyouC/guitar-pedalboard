@@ -242,7 +242,7 @@ export async function assertCurrentMarketplaceBackupSelection(
   manifestPath: string,
 ): Promise<{ paths: MarketplaceBackupArtifactPaths; manifest: MarketplaceBackupManifest }> {
   const requestedManifest = await readMarketplaceBackupManifest(resolve(manifestPath));
-  const dayKey = requestedManifest.completedAt.slice(0, 10);
+  const dayKey = requestedManifest.startedAt.slice(0, 10);
   const current = await readCurrentMarketplaceBackup(directory, dayKey);
   if (
     !current

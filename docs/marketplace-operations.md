@@ -62,12 +62,17 @@ npm run marketplace:backup:status
 备份在一个 exported repeatable-read snapshot 中计算事实指纹并运行 `pg_dump`，manifest 记录去凭证的源库身份、四类事实数量与校验摘要。至少每月在名称包含 `restore`、`drill`、`recovery` 或 `scratch` 的新建空数据库演练：
 
 ```sh
+marketplace_backup_root='/mounted/encrypted/durable/marketplace'
+# 使用 marketplace:backup:status 输出的 latestArchivePath/latestManifestPath；以下为示例。
+marketplace_current_archive="$marketplace_backup_root/marketplace-2026-08-29.fence-1.backup/marketplace-2026-08-29.dump"
+marketplace_current_manifest="$marketplace_current_archive.json"
+
 MARKETPLACE_ALLOW_RESTORE_DRILL=true \
-MARKETPLACE_BACKUP_DIR='/mounted/encrypted/durable/marketplace' \
+MARKETPLACE_BACKUP_DIR="$marketplace_backup_root" \
 MARKETPLACE_EXPECTED_DATABASE_URL='postgresql://…/marketplace' \
 MARKETPLACE_RESTORE_DATABASE_URL='postgresql://…/marketplace_restore_drill' \
-MARKETPLACE_RESTORE_DRILL_ARCHIVE='artifacts/marketplace.dump' \
-MARKETPLACE_RESTORE_DRILL_MANIFEST='artifacts/marketplace.dump.json' \
+MARKETPLACE_RESTORE_DRILL_ARCHIVE="$marketplace_current_archive" \
+MARKETPLACE_RESTORE_DRILL_MANIFEST="$marketplace_current_manifest" \
 MARKETPLACE_RESTORE_DRILL_REPORT='artifacts/marketplace-restore.json' \
 npm run marketplace:restore-drill
 ```
