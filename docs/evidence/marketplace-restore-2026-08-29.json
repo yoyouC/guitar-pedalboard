@@ -12,12 +12,12 @@
     "command": "MARKETPLACE_ALLOW_RESTORE_DRILL=true npm run marketplace:restore-drill"
   },
   "passed": true,
-  "archiveSha256": "6cd29a30d7d610a3063b9e3435bc22ab0b500fe0975b64ef519b3929dd2239be",
-  "backupCompletedAt": "2026-08-29T15:35:18.157Z",
-  "drillStartedAt": "2026-08-29T15:35:38.586Z",
-  "drillCompletedAt": "2026-08-29T15:35:42.085Z",
-  "rpoHours": 0.0056747222222222225,
-  "rtoHours": 0.0009719444444444444,
+  "archiveSha256": "238e2ce3afd7e2c157e8055576b59858d58226f27b982364fa45e28b9e51e5fd",
+  "backupCompletedAt": "2026-08-29T15:43:19.604Z",
+  "drillStartedAt": "2026-08-29T15:43:20.113Z",
+  "drillCompletedAt": "2026-08-29T15:43:23.839Z",
+  "rpoHours": 0.0001413888888888889,
+  "rtoHours": 0.001035,
   "targets": {
     "rpoHours": 24,
     "rtoHours": 8
@@ -30,15 +30,15 @@
   "facts": {
     "members": {
       "count": 10000,
-      "checksum": "1735082084150181955"
+      "checksum": "3425185316037867823"
     },
     "presets": {
       "count": 100001,
-      "checksum": "5278773150453072536"
+      "checksum": "5557992547460139833"
     },
     "revisions": {
       "count": 100021,
-      "checksum": "4742063740839757407"
+      "checksum": "8986555486765366030"
     },
     "collections": {
       "count": 0,
