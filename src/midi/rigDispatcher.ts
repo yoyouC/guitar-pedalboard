@@ -33,6 +33,8 @@ export interface RigDispatcherDeps {
     | 'setPreAmpEqEnabled'
     | 'setPreAmpEqBand'
     | 'setPreAmpEqLevel'
+    | 'setPreAmpEqCutEnabled'
+    | 'setPreAmpEqCutFrequency'
   >;
   looper: {
     /** 主按钮命令(初录→完成→叠录→完成叠录,共享守卫) */
@@ -92,6 +94,15 @@ export function createRigDispatcher(deps: RigDispatcherDeps): (action: RigAction
         return;
       case 'set-preamp-eq-band':
         store.setPreAmpEqBand(action.key, action.value);
+        return;
+      case 'toggle-preamp-eq-cut':
+        store.setPreAmpEqCutEnabled(
+          action.cut,
+          !store.getState().preAmpEq[action.cut].enabled,
+        );
+        return;
+      case 'set-preamp-eq-cut-frequency':
+        store.setPreAmpEqCutFrequency(action.cut, action.value);
         return;
       case 'set-preamp-eq-level':
         store.setPreAmpEqLevel(action.value);

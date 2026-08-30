@@ -83,6 +83,7 @@ test('full rig preset round-trips and clamps every parameter domain', () => {
     },
     preAmpEq: {
       enabled: true,
+      lowCut: { enabled: true, frequencyHz: 9.4 },
       bands: {
         hz31_25: -99,
         hz62_5: -10,
@@ -95,6 +96,7 @@ test('full rig preset round-trips and clamps every parameter domain', () => {
         hz8000: 10,
         hz16000: 99,
       },
+      highCut: { enabled: true, frequencyHz: 22000.2 },
       levelDb: Number.POSITIVE_INFINITY,
     },
     globals: {
@@ -110,6 +112,7 @@ test('full rig preset round-trips and clamps every parameter domain', () => {
   assert.equal(preset.rig.cab.values.level, 6);
   assert.deepEqual(preset.rig.preAmpEq, {
     enabled: true,
+    lowCut: { enabled: true, frequencyHz: 20 },
     bands: {
       hz31_25: -12,
       hz62_5: -10,
@@ -122,6 +125,7 @@ test('full rig preset round-trips and clamps every parameter domain', () => {
       hz8000: 10,
       hz16000: 12,
     },
+    highCut: { enabled: true, frequencyHz: 20000 },
     levelDb: 0,
   });
   assert.deepEqual(preset.rig.globals, {
@@ -157,7 +161,9 @@ test('legacy chain-only presets migrate with safe rig defaults', () => {
     bypass: false,
   });
   assert.equal(imported[0].rig.preAmpEq.enabled, false);
+  assert.deepEqual(imported[0].rig.preAmpEq.lowCut, { enabled: false, frequencyHz: 80 });
   assert.deepEqual(Object.values(imported[0].rig.preAmpEq.bands), Array(10).fill(0));
+  assert.deepEqual(imported[0].rig.preAmpEq.highCut, { enabled: false, frequencyHz: 12000 });
   assert.equal(imported[0].rig.preAmpEq.levelDb, 0);
 });
 
@@ -227,6 +233,29 @@ test('v4 preset 缺少箱头前均衡时迁移为 Bypass 全平', () => {
   assert.equal(migrated.rig.preAmpEq.enabled, false);
   assert.deepEqual(Object.values(migrated.rig.preAmpEq.bands), Array(10).fill(0));
   assert.equal(migrated.rig.preAmpEq.levelDb, 0);
+});
+
+test('v5 preset 保留十段设置并把新增高低切迁移为关闭默认值', () => {
+  const migrated = normalizeRigPreset({
+    version: 5,
+    name: 'Before Cuts',
+    rig: {
+      chain: [],
+      amp: {
+        categoryId: 'clean', modelKey: 'builtin:clean', enabled: true, values: {}, customName: null,
+      },
+      cab: {
+        id: 'open1x12', ir: { kind: 'builtin', id: 'open1x12' }, enabled: true, values: {},
+      },
+      preAmpEq: { enabled: true, bands: { hz1000: 4.5 }, levelDb: -2 },
+      globals: { inputGain: 1, masterVolume: 0.5, bypass: false },
+    },
+  }, catalog)!;
+  assert.equal(migrated.version, RIG_PRESET_VERSION);
+  assert.equal(migrated.rig.preAmpEq.enabled, true);
+  assert.equal(migrated.rig.preAmpEq.bands.hz1000, 4.5);
+  assert.deepEqual(migrated.rig.preAmpEq.lowCut, { enabled: false, frequencyHz: 80 });
+  assert.deepEqual(migrated.rig.preAmpEq.highCut, { enabled: false, frequencyHz: 12000 });
 });
 
 test('preset export envelope imports again and drops unknown modules', () => {

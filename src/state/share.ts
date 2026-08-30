@@ -28,7 +28,7 @@ export interface ShareState {
 }
 
 interface SharePayload {
-  v: 1 | 2 | 3 | 4;
+  v: 1 | 2 | 3 | 4 | 5;
   c: { id: string; e: 0 | 1; v: Record<string, number>; p?: 0 | 1; r?: string; m?: string }[];
   a?: { cat: string; key: string; on: 0 | 1; v: Record<string, number>; m?: string };
   b?: {
@@ -37,7 +37,13 @@ interface SharePayload {
     v: Record<string, number>;
     r?: { k: 'b'; i: string } | { k: 'c'; h: string };
   };
-  q?: { on: 0 | 1; b: Partial<Record<PreAmpEqBandKey, number>>; l: number };
+  q?: {
+    on: 0 | 1;
+    b: Partial<Record<PreAmpEqBandKey, number>>;
+    l: number;
+    lo?: { on: 0 | 1; f: number };
+    hi?: { on: 0 | 1; f: number };
+  };
 }
 
 function base64urlEncode(text: string): string {
@@ -59,7 +65,7 @@ export function decodeShareState(encoded: string): ShareState | null {
   try {
     const payload = JSON.parse(base64urlDecode(encoded)) as SharePayload;
     if (
-      (payload?.v !== 1 && payload?.v !== 2 && payload?.v !== 3 && payload?.v !== 4) ||
+      (payload?.v !== 1 && payload?.v !== 2 && payload?.v !== 3 && payload?.v !== 4 && payload?.v !== 5) ||
       !Array.isArray(payload.c)
     ) return null;
 
@@ -96,8 +102,18 @@ export function decodeShareState(encoded: string): ShareState | null {
               values: payload.b.v,
             }
           : undefined,
-        preAmpEq: payload.v === 4 && payload.q
-          ? { enabled: payload.q.on !== 0, bands: payload.q.b, levelDb: payload.q.l }
+        preAmpEq: payload.v >= 4 && payload.q
+          ? {
+              enabled: payload.q.on !== 0,
+              bands: payload.q.b,
+              levelDb: payload.q.l,
+              lowCut: payload.v >= 5 && payload.q.lo
+                ? { enabled: payload.q.lo.on !== 0, frequencyHz: payload.q.lo.f }
+                : undefined,
+              highCut: payload.v >= 5 && payload.q.hi
+                ? { enabled: payload.q.hi.on !== 0, frequencyHz: payload.q.hi.f }
+                : undefined,
+            }
           : undefined,
         globals: undefined,
       },
@@ -124,7 +140,7 @@ export function decodeShareState(encoded: string): ShareState | null {
 
 export function encodeShareState(state: ShareState): string {
   const payload: SharePayload = {
-    v: 4,
+    v: 5,
     c: state.chain.map((i) => ({
       id: i.effectId,
       e: i.enabled ? 1 : 0,
@@ -157,6 +173,14 @@ export function encodeShareState(state: ShareState): string {
       on: state.preAmpEq.enabled ? 1 : 0,
       b: state.preAmpEq.bands,
       l: state.preAmpEq.levelDb,
+      lo: {
+        on: state.preAmpEq.lowCut.enabled ? 1 : 0,
+        f: state.preAmpEq.lowCut.frequencyHz,
+      },
+      hi: {
+        on: state.preAmpEq.highCut.enabled ? 1 : 0,
+        f: state.preAmpEq.highCut.frequencyHz,
+      },
     },
   };
   return base64urlEncode(JSON.stringify(payload));

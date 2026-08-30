@@ -7,7 +7,7 @@
 - **Rig** —— 一份完整可复现的配置:效果链 + 箱头前均衡 + 箱头 + 箱体 + 全局参数(inputGain、masterVolume、globalBypass)。序列化、快照、预设、分享的对象都是 Rig。
 - **效果链(Chain)** —— 有序的单块列表,每项(`ChainItem`)有稳定身份 `uid`、效果 `effectId`、开关 `enabled`、参数 `values`、前后置位 `post`;模型型单块另有外部 `modelRef/modelId`，不把动态模型身份塞进 `effectId`。
 - **单块(Pedal)** —— 效果链上的一级效果器(过载、延迟、混响、哇音……)。注册于 `src/audio/effects/`。
-- **箱头前均衡(Pre-Amp EQ)** —— 效果链前置单块之后、箱头之前的固定十段图示均衡级；它是 Rig 中唯一的专用级，不是可拖动 Pedal。自己的 bypass 只令频响与 Level 回到单位增益，仍记住并允许编辑参数；与 Amp 自带的 Bass/Mid/Treble 独立。
+- **箱头前均衡(Pre-Amp EQ)** —— 效果链前置单块之后、箱头之前的固定音色整形级，顺序为低切(HPF)→十段图示均衡→高切(LPF)→Level；它是 Rig 中唯一的专用级，不是可拖动 Pedal。总 bypass 令整级回到单位响应，低切和高切另有独立旁路；所有旁路都仍记住并允许编辑目标参数。它与 Amp 自带的 Bass/Mid/Treble 独立。
 - **箱头(Amp)** —— 效果链之后的放大器级,有自己的开关与参数;同一箱头可能有多个**模型(model)**(如 NAM 扫档包的档位)。
 - **箱体(Cab)** —— 箱头之后的箱体模拟级；四个内置型号使用 Biquad DSP，`Custom IR` 使用用户 WAV 卷积。
 - **FX Loop / 后置位(post)** —— 单块可放在箱头前(默认)或箱头后/箱体前(`post: true`)。

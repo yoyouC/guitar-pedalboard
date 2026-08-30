@@ -40,9 +40,12 @@ import {
   type NamModelSelection,
 } from '../audio/namWasm';
 import {
+  clonePreAmpEqState,
   createDefaultPreAmpEqState,
+  normalizePreAmpEqCutFrequency,
   normalizePreAmpEqDb,
   type PreAmpEqBandKey,
+  type PreAmpEqCutKind,
   type PreAmpEqState,
 } from '../audio/preAmpEq';
 import type { ShareState } from './share';
@@ -74,6 +77,8 @@ export type RigEngine = Pick<
   | 'setPreAmpEqEnabled'
   | 'updatePreAmpEqBand'
   | 'setPreAmpEqLevel'
+  | 'setPreAmpEqCutEnabled'
+  | 'setPreAmpEqCutFrequency'
   | 'updateParam'
   | 'updateAmpParam'
   | 'updateCabParam'
@@ -206,6 +211,8 @@ export interface RigStore {
   setPreAmpEqEnabled(enabled: boolean): void;
   setPreAmpEqBand(key: PreAmpEqBandKey, gainDb: number): void;
   setPreAmpEqLevel(levelDb: number): void;
+  setPreAmpEqCutEnabled(kind: PreAmpEqCutKind, enabled: boolean): void;
+  setPreAmpEqCutFrequency(kind: PreAmpEqCutKind, frequencyHz: number): void;
   resetPreAmpEq(): void;
 
   // 全局
@@ -326,7 +333,7 @@ export function rigFromPreset(preset: RigPreset): ApplyRigState {
       values: rig.amp.values,
     },
     cab: rig.cab,
-    preAmpEq: rig.preAmpEq,
+    preAmpEq: clonePreAmpEqState(rig.preAmpEq),
     globals: rig.globals,
   };
 }
@@ -344,7 +351,7 @@ export function rigFromSnapshot(
     })),
     amp: { ...snap.amp, values: { ...snap.amp.values } },
     cab: { ...snap.cab, values: { ...snap.cab.values } },
-    preAmpEq: { ...snap.preAmpEq, bands: { ...snap.preAmpEq.bands } },
+    preAmpEq: clonePreAmpEqState(snap.preAmpEq),
     globals,
   };
 }
@@ -371,7 +378,7 @@ export function rigFromShare(
       enabled: share.cabEnabled,
       values: share.cabValues,
     },
-    preAmpEq: { ...share.preAmpEq, bands: { ...share.preAmpEq.bands } },
+    preAmpEq: clonePreAmpEqState(share.preAmpEq),
     globals,
   };
 }
@@ -389,7 +396,7 @@ export function rigToShareState(state: RigStoreState): ShareState {
     cabIrRef: state.cabIrRef,
     cabEnabled: state.cabEnabled,
     cabValues: state.cabValues,
-    preAmpEq: { ...state.preAmpEq, bands: { ...state.preAmpEq.bands } },
+    preAmpEq: clonePreAmpEqState(state.preAmpEq),
   };
 }
 
@@ -417,7 +424,7 @@ export function toSnapshot(state: RigStoreState): Snapshot {
       enabled: state.cabEnabled,
       values: { ...state.cabValues },
     },
-    preAmpEq: { ...state.preAmpEq, bands: { ...state.preAmpEq.bands } },
+    preAmpEq: clonePreAmpEqState(state.preAmpEq),
   };
 }
 
@@ -558,7 +565,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       key: state.cabIrRef.kind === 'custom' ? 'cab-ir-runtime:v1' : `cab-dsp:${state.cabId}`,
       irRef: state.cabIrRef,
     },
-    preAmpEq: { ...state.preAmpEq, bands: { ...state.preAmpEq.bands } },
+    preAmpEq: clonePreAmpEqState(state.preAmpEq),
     inputGain: state.inputGain,
     masterVolume: state.masterVolume,
   });
@@ -873,6 +880,33 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       emit();
     },
 
+    setPreAmpEqCutEnabled(kind, enabled) {
+      if (state.preAmpEq[kind].enabled === enabled) return;
+      state = {
+        ...state,
+        preAmpEq: {
+          ...state.preAmpEq,
+          [kind]: { ...state.preAmpEq[kind], enabled },
+        },
+      };
+      engine.setPreAmpEqCutEnabled(kind, enabled);
+      emit();
+    },
+
+    setPreAmpEqCutFrequency(kind, frequencyHz) {
+      const normalized = normalizePreAmpEqCutFrequency(kind, frequencyHz);
+      if (state.preAmpEq[kind].frequencyHz === normalized) return;
+      state = {
+        ...state,
+        preAmpEq: {
+          ...state.preAmpEq,
+          [kind]: { ...state.preAmpEq[kind], frequencyHz: normalized },
+        },
+      };
+      engine.setPreAmpEqCutFrequency(kind, normalized);
+      emit();
+    },
+
     resetPreAmpEq() {
       const defaults = createDefaultPreAmpEqState();
       state = {
@@ -940,7 +974,7 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
         cabIrRef: rig.cab.ir,
         cabEnabled: rig.cab.enabled,
         cabValues: rig.cab.values,
-        preAmpEq: { ...rig.preAmpEq, bands: { ...rig.preAmpEq.bands } },
+        preAmpEq: clonePreAmpEqState(rig.preAmpEq),
         inputGain: rig.globals.inputGain,
         masterVolume: rig.globals.masterVolume,
         globalBypass: rig.globals.bypass,

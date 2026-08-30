@@ -93,16 +93,20 @@ test('normalizeSnapshot: 箱头前均衡使用稳定频段名并钳制到 ±12 d
     ...newShapeSnapshot(),
     preAmpEq: {
       enabled: true,
+      lowCut: { enabled: true, frequencyHz: 9.4 },
       bands: { hz31_25: -99, hz1000: 4.5, hz16000: 99 },
+      highCut: { enabled: true, frequencyHz: 22000.2 },
       levelDb: 99,
     },
   };
   const snap = normalizeSnapshot(raw, RIG_PRESET_CATALOG)!;
   assert.equal(snap.preAmpEq.enabled, true);
+  assert.deepEqual(snap.preAmpEq.lowCut, { enabled: true, frequencyHz: 20 });
   assert.equal(snap.preAmpEq.bands.hz31_25, -12);
   assert.equal(snap.preAmpEq.bands.hz1000, 4.5);
   assert.equal(snap.preAmpEq.bands.hz16000, 12);
   assert.equal(snap.preAmpEq.bands.hz4000, 0);
+  assert.deepEqual(snap.preAmpEq.highCut, { enabled: true, frequencyHz: 20000 });
   assert.equal(snap.preAmpEq.levelDb, 12);
 });
 

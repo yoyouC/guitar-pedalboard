@@ -18,12 +18,20 @@
  */
 
 import { getEffectDef } from '../audio/effects';
-import { PRE_AMP_EQ_MAX_DB, PRE_AMP_EQ_MIN_DB } from '../audio/preAmpEq';
+import {
+  PRE_AMP_EQ_HIGH_CUT_MAX_HZ,
+  PRE_AMP_EQ_HIGH_CUT_MIN_HZ,
+  PRE_AMP_EQ_LOW_CUT_MAX_HZ,
+  PRE_AMP_EQ_LOW_CUT_MIN_HZ,
+  PRE_AMP_EQ_MAX_DB,
+  PRE_AMP_EQ_MIN_DB,
+} from '../audio/preAmpEq';
 import type { MidiBinding, MidiTarget } from './midiLearn';
 import type { ParsedMidiMessage } from './midiMessage';
 import {
   AMP_MASTER_RANGE,
   AMP_TONE_RANGE,
+  ccToLogRange,
   ccToRange,
   type AmpParamKey,
   type RigAction,
@@ -46,6 +54,8 @@ function toggleAction(t: MidiTarget): RigAction | null {
       return { type: 'toggle-bypass' };
     case 'preamp-eq-toggle':
       return { type: 'toggle-preamp-eq' };
+    case 'preamp-eq-cut-toggle':
+      return { type: 'toggle-preamp-eq-cut', cut: t.cut };
     case 'looper-record':
       return { type: 'looper-record' };
     case 'looper-play':
@@ -122,6 +132,19 @@ export function translateBinding(
         },
         nextValue: v,
       };
+    case 'preamp-eq-cut-frequency': {
+      const [min, max] = target.cut === 'lowCut'
+        ? [PRE_AMP_EQ_LOW_CUT_MIN_HZ, PRE_AMP_EQ_LOW_CUT_MAX_HZ]
+        : [PRE_AMP_EQ_HIGH_CUT_MIN_HZ, PRE_AMP_EQ_HIGH_CUT_MAX_HZ];
+      return {
+        action: {
+          type: 'set-preamp-eq-cut-frequency',
+          cut: target.cut,
+          value: Math.round(ccToLogRange(v, min, max)),
+        },
+        nextValue: v,
+      };
+    }
     case 'pedal-treadle':
       return {
         action: { type: 'set-pedal-treadle', index: target.index, value: ccToRange(v, 0, 100) },

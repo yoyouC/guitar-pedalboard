@@ -3,11 +3,12 @@ import { isBuiltinCabId } from '../audio/cabIrTypes';
 import {
   PRE_AMP_EQ_BANDS,
   createDefaultPreAmpEqState,
+  normalizePreAmpEqCutFrequency,
   normalizePreAmpEqDb,
   type PreAmpEqState,
 } from '../audio/preAmpEq';
 
-export const RIG_PRESET_VERSION = 5;
+export const RIG_PRESET_VERSION = 6;
 export const PRESET_EXPORT_FORMAT = 'guitar-pedalboard-presets';
 export const PRESET_EXPORT_VERSION = 1;
 
@@ -298,11 +299,21 @@ function normalizeGlobals(
 function normalizePreAmpEq(rawEq: unknown): PreAmpEqState {
   const fallback = createDefaultPreAmpEqState();
   const source = isRecord(rawEq) ? rawEq : {};
+  const lowCut = isRecord(source.lowCut) ? source.lowCut : {};
+  const highCut = isRecord(source.highCut) ? source.highCut : {};
   const rawBands = isRecord(source.bands) ? source.bands : {};
   for (const band of PRE_AMP_EQ_BANDS) {
     fallback.bands[band.key] = normalizePreAmpEqDb(rawBands[band.key]);
   }
   fallback.enabled = typeof source.enabled === 'boolean' ? source.enabled : false;
+  fallback.lowCut = {
+    enabled: typeof lowCut.enabled === 'boolean' ? lowCut.enabled : false,
+    frequencyHz: normalizePreAmpEqCutFrequency('lowCut', lowCut.frequencyHz),
+  };
+  fallback.highCut = {
+    enabled: typeof highCut.enabled === 'boolean' ? highCut.enabled : false,
+    frequencyHz: normalizePreAmpEqCutFrequency('highCut', highCut.frequencyHz),
+  };
   fallback.levelDb = normalizePreAmpEqDb(source.levelDb);
   return fallback;
 }
@@ -390,13 +401,13 @@ function migrateLegacyPreset(
   };
 }
 
-/** v2-v4 已是 canonical Rig；经当前 normalize 补齐后续身份字段。 */
+/** v2-v5 已是 canonical Rig；经当前 normalize 补齐后续身份字段。 */
 function migratePreviousPreset(
   source: Record<string, unknown>,
   catalog: RigPresetCatalog,
 ): RigPreset | null {
   if (
-    (source.version !== 2 && source.version !== 3 && source.version !== 4) ||
+    (source.version !== 2 && source.version !== 3 && source.version !== 4 && source.version !== 5) ||
     typeof source.name !== 'string' ||
     !source.name.trim() ||
     !isRecord(source.rig)

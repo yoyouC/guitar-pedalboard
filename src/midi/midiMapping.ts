@@ -17,7 +17,7 @@
 
 import { LEVEL_DB_MAX, LEVEL_DB_MIN } from '../audio/level';
 import type { ParsedMidiMessage } from './midiMessage';
-import type { PreAmpEqBandKey } from '../audio/preAmpEq';
+import type { PreAmpEqBandKey, PreAmpEqCutKind } from '../audio/preAmpEq';
 
 // ---------- 编号常量(实机核对/改配时改这里) ----------
 
@@ -140,6 +140,10 @@ export type RigAction =
   | { type: 'toggle-preamp-eq' }
   /** 设置箱头前均衡的一个稳定身份频段。 */
   | { type: 'set-preamp-eq-band'; key: PreAmpEqBandKey; value: number }
+  /** 切换箱头前均衡的低切或高切。 */
+  | { type: 'toggle-preamp-eq-cut'; cut: PreAmpEqCutKind }
+  /** 设置箱头前均衡低切或高切的名义频率。 */
+  | { type: 'set-preamp-eq-cut-frequency'; cut: PreAmpEqCutKind; value: number }
   /** 设置箱头前均衡输出 Level(dB)。 */
   | { type: 'set-preamp-eq-level'; value: number };
 
@@ -147,6 +151,12 @@ export type RigAction =
 export function ccToRange(ccValue: number, min: number, max: number): number {
   const t = Math.max(0, Math.min(127, ccValue)) / 127;
   return min + t * (max - min);
+}
+
+/** CC 值 0..127 对数映射到正数频率范围。 */
+export function ccToLogRange(ccValue: number, min: number, max: number): number {
+  const t = Math.max(0, Math.min(127, ccValue)) / 127;
+  return Math.exp(Math.log(min) + t * (Math.log(max) - Math.log(min)));
 }
 
 /**

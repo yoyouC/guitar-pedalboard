@@ -43,6 +43,8 @@ function createStubEngine() {
     setPreAmpEqEnabled: rec('setPreAmpEqEnabled'),
     updatePreAmpEqBand: rec('updatePreAmpEqBand'),
     setPreAmpEqLevel: rec('setPreAmpEqLevel'),
+    setPreAmpEqCutEnabled: rec('setPreAmpEqCutEnabled'),
+    setPreAmpEqCutFrequency: rec('setPreAmpEqCutFrequency'),
     updateParam: rec('updateParam'),
     updateAmpParam: rec('updateAmpParam'),
     updateCabParam: rec('updateCabParam'),
@@ -169,23 +171,37 @@ test('箱头前均衡 verbs 实时投影且 Reset 保持开关、不触发图谱
 
   store.setPreAmpEqBand('hz1000', 6.24);
   store.setPreAmpEqLevel(-3.26);
+  store.setPreAmpEqCutFrequency('lowCut', 80.6);
+  store.setPreAmpEqCutFrequency('highCut', 22000);
+  store.setPreAmpEqCutEnabled('lowCut', true);
+  store.setPreAmpEqCutEnabled('highCut', true);
   store.setPreAmpEqEnabled(true);
   assert.equal(store.getState().preAmpEq.bands.hz1000, 6);
   assert.equal(store.getState().preAmpEq.levelDb, -3.5);
+  assert.deepEqual(store.getState().preAmpEq.lowCut, { enabled: true, frequencyHz: 81 });
+  assert.deepEqual(store.getState().preAmpEq.highCut, { enabled: true, frequencyHz: 20000 });
   assert.equal(store.getState().preAmpEq.enabled, true);
   assert.deepEqual(calls.map((call) => call.method), [
     'updatePreAmpEqBand',
     'setPreAmpEqLevel',
+    'setPreAmpEqCutFrequency',
+    'setPreAmpEqCutFrequency',
+    'setPreAmpEqCutEnabled',
+    'setPreAmpEqCutEnabled',
     'setPreAmpEqEnabled',
   ]);
   assert.deepEqual(calls[0].args, ['hz1000', 6]);
   assert.deepEqual(calls[1].args, [-3.5]);
+  assert.deepEqual(calls[2].args, ['lowCut', 81]);
+  assert.deepEqual(calls[3].args, ['highCut', 20000]);
   assert.equal(store.getState().graphVersion, 0);
 
   calls.length = 0;
   store.resetPreAmpEq();
   assert.equal(store.getState().preAmpEq.enabled, true);
   assert.deepEqual(Object.values(store.getState().preAmpEq.bands), Array(10).fill(0));
+  assert.deepEqual(store.getState().preAmpEq.lowCut, { enabled: false, frequencyHz: 80 });
+  assert.deepEqual(store.getState().preAmpEq.highCut, { enabled: false, frequencyHz: 12000 });
   assert.equal(store.getState().preAmpEq.levelDb, 0);
   assert.deepEqual(calls.map((call) => call.method), ['setPreAmpEq']);
   assert.equal(store.getState().graphVersion, 0);
@@ -440,6 +456,10 @@ function makeSourceRig() {
   src.setCabParam('level', -4);
   src.setPreAmpEqBand('hz1000', 4);
   src.setPreAmpEqLevel(-2);
+  src.setPreAmpEqCutFrequency('lowCut', 96);
+  src.setPreAmpEqCutFrequency('highCut', 8500);
+  src.setPreAmpEqCutEnabled('lowCut', true);
+  src.setPreAmpEqCutEnabled('highCut', true);
   src.setPreAmpEqEnabled(true);
   src.savePreset('T');
   src.captureSnapshot(0);
@@ -548,6 +568,14 @@ test('snapshot capture/recall/clear with derived dirty flag', () => {
   store.setPreAmpEqLevel(-2);
   assert.equal(isSnapshotDirty(store.getState(), 0), true, 'EQ Level 属于 Snapshot dirty');
   store.setPreAmpEqLevel(0);
+  assert.equal(isSnapshotDirty(store.getState(), 0), false);
+  store.setPreAmpEqCutFrequency('lowCut', 96);
+  assert.equal(isSnapshotDirty(store.getState(), 0), true, '低切频率属于 Snapshot dirty');
+  store.setPreAmpEqCutFrequency('lowCut', 80);
+  assert.equal(isSnapshotDirty(store.getState(), 0), false);
+  store.setPreAmpEqCutEnabled('highCut', true);
+  assert.equal(isSnapshotDirty(store.getState(), 0), true, '高切开关属于 Snapshot dirty');
+  store.setPreAmpEqCutEnabled('highCut', false);
   assert.equal(isSnapshotDirty(store.getState(), 0), false);
   store.setPreAmpEqEnabled(true);
   assert.equal(isSnapshotDirty(store.getState(), 0), true, 'EQ 开关属于 Snapshot dirty');

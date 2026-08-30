@@ -19,6 +19,8 @@ const ALL_TARGETS: MidiTarget[] = [
   { kind: 'master-volume' },
   { kind: 'amp-param', key: 'gain' },
   { kind: 'preamp-eq-toggle' },
+  { kind: 'preamp-eq-cut-toggle', cut: 'lowCut' },
+  { kind: 'preamp-eq-cut-frequency', cut: 'highCut' },
   { kind: 'preamp-eq-band', key: 'hz1000' },
   { kind: 'preamp-eq-level' },
   { kind: 'looper-record' },
@@ -38,6 +40,8 @@ test('parseTarget 非法输入返回 null', () => {
   assert.equal(parseTarget('pedal-toggle:'), null);
   assert.equal(parseTarget('pedal-param:0'), null);
   assert.equal(parseTarget('preamp-eq-band:not-a-band'), null);
+  assert.equal(parseTarget('preamp-eq-cut-toggle:not-a-cut'), null);
+  assert.equal(parseTarget('preamp-eq-cut-frequency:'), null);
 });
 
 test('upsertBinding:同 target 替换', () => {
@@ -80,5 +84,9 @@ test('标签可读', () => {
   assert.equal(
     bindingLabel({ msgType: 'cc', number: 12, source: 'other', target: { kind: 'preamp-eq-band', key: 'hz1000' } }),
     'CC12 → 箱头前 EQ · 1k',
+  );
+  assert.equal(
+    bindingLabel({ msgType: 'cc', number: 13, source: 'other', target: { kind: 'preamp-eq-cut-frequency', cut: 'highCut' } }),
+    'CC13 → 箱头前 EQ · 高切频率',
   );
 });

@@ -159,7 +159,7 @@ test('current share round-trip keeps Tone3000 Pedal and Amp exact model variants
     preAmpEq: createDefaultPreAmpEqState(),
   });
   const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
-  assert.equal(payload.v, 4);
+  assert.equal(payload.v, 5);
 
   const restored = decodeShareState(encoded)!;
   assert.equal(restored.chain[0].modelRef, 'tone3000:42');
@@ -167,7 +167,7 @@ test('current share round-trip keeps Tone3000 Pedal and Amp exact model variants
   assert.equal(restored.ampModelId, '7007');
 });
 
-test('v4 share preserves custom IR identity without binary data', () => {
+test('current share preserves custom IR identity without binary data', () => {
   const hash = 'b'.repeat(64);
   const encoded = encodeShareState({
     chain: [],
@@ -182,7 +182,7 @@ test('v4 share preserves custom IR identity without binary data', () => {
     preAmpEq: createDefaultPreAmpEqState(),
   });
   const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
-  assert.equal(payload.v, 4);
+  assert.equal(payload.v, 5);
   assert.deepEqual(payload.b.r, { k: 'c', h: hash });
   assert.deepEqual(decodeShareState(encoded)?.cabIrRef, { kind: 'custom', hash });
 });
@@ -201,6 +201,27 @@ test('v4 share round-trip preserves and clamps the named箱头前均衡 bands', 
   assert.equal(restored.preAmpEq.bands.hz1000, 4.5);
   assert.equal(restored.preAmpEq.bands.hz16000, 12);
   assert.equal(restored.preAmpEq.levelDb, -3);
+  assert.deepEqual(restored.preAmpEq.lowCut, { enabled: false, frequencyHz: 80 });
+  assert.deepEqual(restored.preAmpEq.highCut, { enabled: false, frequencyHz: 12000 });
+});
+
+test('v5 share round-trip preserves and clamps independent high/low cuts', () => {
+  const encoded = encodePayload({
+    v: 5,
+    c: [],
+    a: { cat: 'crunch', key: 'builtin:crunch', on: 1, v: {} },
+    b: { id: 'gb4x12', on: 1, v: {} },
+    q: {
+      on: 1,
+      b: {},
+      l: 0,
+      lo: { on: 1, f: 9.4 },
+      hi: { on: 1, f: 22000.2 },
+    },
+  });
+  const restored = decodeShareState(encoded)!;
+  assert.deepEqual(restored.preAmpEq.lowCut, { enabled: true, frequencyHz: 20 });
+  assert.deepEqual(restored.preAmpEq.highCut, { enabled: true, frequencyHz: 20000 });
 });
 
 test('v4 share 缺失或损坏的 EQ 值按段安全回退', () => {

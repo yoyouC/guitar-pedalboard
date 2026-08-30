@@ -76,9 +76,11 @@ import {
   type PreparedCabIrBuffer,
 } from './cabIrRuntime';
 import {
+  clonePreAmpEqState,
   createDefaultPreAmpEqState,
   createPreAmpEqRuntime,
   type PreAmpEqBandKey,
+  type PreAmpEqCutKind,
   type PreAmpEqRuntime,
   type PreAmpEqState,
 } from './preAmpEq';
@@ -1204,11 +1206,7 @@ export class AudioEngine {
       ? { ...projection.cab, def: getCabDef('gb4x12'), key: 'cab-dsp-fallback:gb4x12' }
       : projection.cab;
     this.globalBypass = projection.globalBypass;
-    this.preAmpEqState = {
-      enabled: projection.preAmpEq.enabled,
-      bands: { ...projection.preAmpEq.bands },
-      levelDb: projection.preAmpEq.levelDb,
-    };
+    this.preAmpEqState = clonePreAmpEqState(projection.preAmpEq);
     this.inputGainValue = projection.inputGain;
     this.masterVolumeValue = projection.masterVolume;
     if (projection.cab?.irRef && cabIrRefKey(projection.cab.irRef) !== cabIrRefKey(this.cabIrRef)) {
@@ -1250,11 +1248,7 @@ export class AudioEngine {
   }
 
   setPreAmpEq(state: PreAmpEqState): void {
-    this.preAmpEqState = {
-      enabled: state.enabled,
-      bands: { ...state.bands },
-      levelDb: state.levelDb,
-    };
+    this.preAmpEqState = clonePreAmpEqState(state);
     this.runtime?.preAmpEq.setState(this.preAmpEqState);
   }
 
@@ -1274,6 +1268,22 @@ export class AudioEngine {
   setPreAmpEqLevel(levelDb: number): void {
     this.preAmpEqState = { ...this.preAmpEqState, levelDb };
     this.runtime?.preAmpEq.setLevel(levelDb);
+  }
+
+  setPreAmpEqCutEnabled(kind: PreAmpEqCutKind, enabled: boolean): void {
+    this.preAmpEqState = {
+      ...this.preAmpEqState,
+      [kind]: { ...this.preAmpEqState[kind], enabled },
+    };
+    this.runtime?.preAmpEq.setCutEnabled(kind, enabled);
+  }
+
+  setPreAmpEqCutFrequency(kind: PreAmpEqCutKind, frequencyHz: number): void {
+    this.preAmpEqState = {
+      ...this.preAmpEqState,
+      [kind]: { ...this.preAmpEqState[kind], frequencyHz },
+    };
+    this.runtime?.preAmpEq.setCutFrequency(kind, frequencyHz);
   }
 
   setChain(chain: ChainSpec[]): void {

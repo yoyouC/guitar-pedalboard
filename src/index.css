@@ -858,7 +858,7 @@ input[type='text'] {
   cursor: pointer;
 }
 
-/* ---------- 箱头前十段均衡 ---------- */
+/* ---------- 箱头前十段均衡 + 高低切 ---------- */
 
 .preamp-eq-panel {
   overflow: hidden;
@@ -982,13 +982,22 @@ input[type='text'] {
 }
 
 .preamp-eq-controls {
+  --preamp-eq-control-gap: clamp(8px, 1.3vw, 18px);
   display: flex;
   align-items: stretch;
   justify-content: center;
-  gap: clamp(8px, 1.6vw, 22px);
-  min-width: 900px;
+  gap: var(--preamp-eq-control-gap);
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
   padding: 14px 22px 16px;
   transition: opacity 0.15s, filter 0.15s;
+}
+
+.preamp-eq-graphic-group {
+  display: flex;
+  align-items: stretch;
+  gap: var(--preamp-eq-control-gap);
 }
 
 .eq-bypassed .preamp-eq-controls {
@@ -1000,7 +1009,7 @@ input[type='text'] {
   position: relative;
   display: grid;
   grid-template-columns: 23px 28px;
-  grid-template-rows: 18px 158px 16px 11px;
+  grid-template-rows: 18px 158px 16px 11px 26px;
   justify-items: center;
   align-items: center;
   column-gap: 2px;
@@ -1073,6 +1082,79 @@ input[type='text'] {
   margin-left: 8px;
   padding-left: 14px;
   border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.preamp-eq-cut {
+  min-width: 82px;
+  transition: opacity 0.15s, filter 0.15s;
+}
+
+.preamp-eq-cut:first-child {
+  margin-right: 5px;
+  padding-right: 13px;
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.preamp-eq-graphic-group + .preamp-eq-cut {
+  margin-left: 5px;
+  padding-left: 13px;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.preamp-eq-cut.is-off {
+  opacity: 0.62;
+  filter: saturate(0.55);
+}
+
+.preamp-eq-cut-range {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 154px;
+}
+
+.preamp-eq-cut-range input[type='range'] {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.preamp-eq-cut .preamp-eq-scale {
+  width: 29px;
+  font-size: 7px;
+}
+
+.preamp-eq-cut .preamp-eq-frequency {
+  font-size: 9px;
+  letter-spacing: -0.02em;
+}
+
+.preamp-eq-cut-toggle-target {
+  grid-column: 1 / -1;
+  grid-row: 5;
+  display: inline-flex;
+  align-items: end;
+}
+
+.preamp-eq-cut-toggle {
+  min-width: 46px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-color: #785047;
+  background: rgba(40, 24, 22, 0.72);
+  color: #d49a8d;
+  font-family: monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.preamp-eq-cut-toggle.is-on {
+  border-color: #2cab8e;
+  background: rgba(23, 107, 91, 0.88);
+  color: #effffb;
+  box-shadow: 0 0 8px rgba(48, 221, 182, 0.2);
 }
 
 @media (max-width: 720px) {

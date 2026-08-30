@@ -80,7 +80,7 @@ test('master-volume:CC 0 → 0,CC 127 → 1(线性)', () => {
   });
 });
 
-test('箱头前均衡 Learn:开关走沿检测，频段与 Level 映射到 ±12 dB', () => {
+test('箱头前均衡 Learn:开关走沿检测，增益线性映射、切频对数映射', () => {
   assert.deepEqual(
     translateBinding({ kind: 'preamp-eq-toggle' }, noteOn(40), 0, []).action,
     { type: 'toggle-preamp-eq' },
@@ -92,6 +92,22 @@ test('箱头前均衡 Learn:开关走沿检测，频段与 Level 映射到 ±12 
   assert.deepEqual(
     translateBinding({ kind: 'preamp-eq-level' }, cc(13, 127), 0, []).action,
     { type: 'set-preamp-eq-level', value: 12 },
+  );
+  assert.deepEqual(
+    translateBinding({ kind: 'preamp-eq-cut-toggle', cut: 'lowCut' }, noteOn(41), 0, []).action,
+    { type: 'toggle-preamp-eq-cut', cut: 'lowCut' },
+  );
+  assert.deepEqual(
+    translateBinding({ kind: 'preamp-eq-cut-frequency', cut: 'lowCut' }, cc(14, 0), 0, []).action,
+    { type: 'set-preamp-eq-cut-frequency', cut: 'lowCut', value: 20 },
+  );
+  assert.deepEqual(
+    translateBinding({ kind: 'preamp-eq-cut-frequency', cut: 'lowCut' }, cc(14, 64), 0, []).action,
+    { type: 'set-preamp-eq-cut-frequency', cut: 'lowCut', value: 101 },
+  );
+  assert.deepEqual(
+    translateBinding({ kind: 'preamp-eq-cut-frequency', cut: 'highCut' }, cc(15, 127), 0, []).action,
+    { type: 'set-preamp-eq-cut-frequency', cut: 'highCut', value: 20000 },
   );
 });
 
@@ -308,6 +324,8 @@ function setup() {
     setPreAmpEqEnabled: rec('setPreAmpEqEnabled'),
     updatePreAmpEqBand: rec('updatePreAmpEqBand'),
     setPreAmpEqLevel: rec('setPreAmpEqLevel'),
+    setPreAmpEqCutEnabled: rec('setPreAmpEqCutEnabled'),
+    setPreAmpEqCutFrequency: rec('setPreAmpEqCutFrequency'),
     updateParam: rec('updateParam'),
     updateAmpParam: rec('updateAmpParam'),
     updateCabParam: rec('updateCabParam'),
@@ -382,12 +400,21 @@ test('dispatch 箱头前均衡动作落在统一 store verbs', () => {
   dispatch({ type: 'toggle-preamp-eq' });
   dispatch({ type: 'set-preamp-eq-band', key: 'hz1000', value: 4 });
   dispatch({ type: 'set-preamp-eq-level', value: -2 });
+  dispatch({ type: 'toggle-preamp-eq-cut', cut: 'lowCut' });
+  dispatch({ type: 'set-preamp-eq-cut-frequency', cut: 'lowCut', value: 95.6 });
   assert.equal(store.getState().preAmpEq.enabled, true);
   assert.equal(store.getState().preAmpEq.bands.hz1000, 4);
   assert.equal(store.getState().preAmpEq.levelDb, -2);
+  assert.deepEqual(store.getState().preAmpEq.lowCut, { enabled: true, frequencyHz: 96 });
   assert.deepEqual(
     engineCalls.filter((call) => call.method.includes('PreAmpEq')).map((call) => call.method),
-    ['setPreAmpEqEnabled', 'updatePreAmpEqBand', 'setPreAmpEqLevel'],
+    [
+      'setPreAmpEqEnabled',
+      'updatePreAmpEqBand',
+      'setPreAmpEqLevel',
+      'setPreAmpEqCutEnabled',
+      'setPreAmpEqCutFrequency',
+    ],
   );
 });
 
