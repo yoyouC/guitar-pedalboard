@@ -9,7 +9,7 @@
 - **单块(Pedal)** —— 效果链上的一级效果器(过载、延迟、混响、哇音……)。注册于 `src/audio/effects/`。
 - **箱头前均衡(Pre-Amp EQ)** —— 效果链前置单块之后、箱头之前的固定十段图示均衡级；它是 Rig 中唯一的专用级，不是可拖动 Pedal。自己的 bypass 只令频响与 Level 回到单位增益，仍记住并允许编辑参数；与 Amp 自带的 Bass/Mid/Treble 独立。
 - **箱头(Amp)** —— 效果链之后的放大器级,有自己的开关与参数;同一箱头可能有多个**模型(model)**(如 NAM 扫档包的档位)。
-- **箱体(Cab)** —— 箱头之后的箱体模拟级。
+- **箱体(Cab)** —— 箱头之后的箱体模拟级；四个内置型号使用 Biquad DSP，`Custom IR` 使用用户 WAV 卷积。
 - **FX Loop / 后置位(post)** —— 单块可放在箱头前(默认)或箱头后/箱体前(`post: true`)。
 - **NAM** —— Neural Amp Modeler,经 WASM 运行的神经网络箱头/单块模型;有**扫档包(sweep pack)**(一个模型按增益分档)。
 - **WDF** —— Wave Digital Filter,白盒电路建模的另一条 DSP 路线(与 NAM 并列)。
@@ -25,8 +25,8 @@
 
 - **AudioEngine** —— 音频图的所有者:AudioContext、主链路、worklet 预载、输入源、录音、Looper 宿主、图谱编译(rebuildGraph)。
 - **Worklet** —— AudioWorklet 处理器;经 `createWorkletLoader` 按 AudioContext 幂等注册(ADR-0001)。
-- **箱体 IR 身份(Cab IR Ref)** —— canonical Rig 只保存可序列化的 `{kind:'builtin', id}` 或 `{kind:'custom', hash}`。WAV Blob、AudioBuffer、加载状态、离线资产校准值与缺失回退都不属于 Rig；Custom 校准是由 WAV 内容确定性派生的本机 Library 元数据。
-- **图谱编译(rebuildGraph)** —— 由 Rig 快照重建/复用音频节点图的过程;实例复用语义:uid+def+key 复用单块,def+key 复用箱头与稳定 Cab Runtime，固定 Pre-Amp EQ Runtime 不随参数或 bypass 重建。内部分两层(ADR-0005):**plan**(纯函数决策:创建/复用/销毁清单,无 WebAudio 依赖)与 **execute**(薄执行:节点创建与连线,NAM 的 fetch 等副作用隔离在此层)。
+- **箱体 IR 身份(Cab IR Ref)** —— canonical Rig 只保存可序列化的 `{kind:'builtin', id}` 或 `{kind:'custom', hash}`；builtin id 解析到 DSP definition，只有 custom hash 解析到 WAV。WAV Blob、AudioBuffer、加载状态、离线资产校准值与缺失回退都不属于 Rig；Custom 校准是由 WAV 内容确定性派生的本机 Library 元数据。
+- **图谱编译(rebuildGraph)** —— 由 Rig 快照重建/复用音频节点图的过程;实例复用语义:uid+def+key 复用单块,def+key 复用箱头、内置 Cab DSP 或 Custom IR Runtime，固定 Pre-Amp EQ Runtime 不随参数或 bypass 重建。内部分两层(ADR-0005):**plan**(纯函数决策:创建/复用/销毁清单,无 WebAudio 依赖)与 **execute**(薄执行:节点创建与连线,NAM 的 fetch 等副作用隔离在此层)。
 - **DSP 核(`*.dsp.js`)** —— WDF 算法的唯一 canonical 源(纯 JS + JSDoc,与 worklet 同目录)。两个消费对象:worklet 侧经 `?raw` 取源码字符串拼装 Blob,eval/测试侧正常 import 执行。验证的代码 = 发声的代码(ADR-0003)。
 - **音频档位(Audio Profile)** —— 当前设备的运行偏好：实时演奏、平衡或稳定播放。它只影响浏览器音频请求，不属于 Rig，也不改变 DSP 音质。
 - **输出估算(Output Estimate)** —— 浏览器报告的 `baseLatency + outputLatency` 输出侧估算；不包含输入捕获、Rig 链路或完整物理设备往返。

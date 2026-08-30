@@ -1,7 +1,6 @@
 import type { EffectDefinition } from './effects/types';
 import { LEVEL_DB_MAX, LEVEL_DB_MIN } from './level';
 import { createCabIrEffect, type CabIrEffectInstance } from './cabIrEffect';
-import { BUILTIN_CAB_IR_MANIFEST } from './cabIrManifest';
 import {
   CUSTOM_CAB_IR_CALIBRATION_DB_MAX,
   CUSTOM_CAB_IR_CALIBRATION_DB_MIN,
@@ -39,14 +38,6 @@ export function stageInitialCabIrBuffer(
   calibrationDb = 0,
 ): void {
   initialBuffers.set(ctx, { buffer, calibrationDb });
-}
-
-function builtinCabIrCalibrationDb(ref: Extract<CabIrRef, { kind: 'builtin' }>): number {
-  const entry = BUILTIN_CAB_IR_MANIFEST.find((candidate) => candidate.id === ref.id);
-  if (!entry || !Number.isFinite(entry.calibrationDb)) {
-    throw new Error(`内置箱体 IR 缺少校准数据：${ref.id}`);
-  }
-  return entry.calibrationDb;
 }
 
 export function isCabIrEffectInstance(value: unknown): value is CabIrEffectInstance {
@@ -150,16 +141,7 @@ export class CabIrBufferResolver {
         }
       }
     } else {
-      const entry = BUILTIN_CAB_IR_MANIFEST.find((candidate) => candidate.id === ref.id);
-      if (!entry?.approved) throw new Error(`内置箱体 IR 尚未获准发布：${ref.id}`);
-      const response = await fetch(entry.url);
-      if (!response.ok) throw new Error(`箱体 IR 下载失败 (${response.status})`);
-      const bytes = await response.arrayBuffer();
-      if (entry.sha256 && await sha256Hex(bytes) !== entry.sha256) {
-        throw new Error(`箱体 IR 完整性校验失败：${ref.id}`);
-      }
-      const decoded = await decodeWav(ctx, bytes);
-      resolved = { buffer: decoded.buffer, calibrationDb: builtinCabIrCalibrationDb(ref) };
+      throw new Error('内置箱体使用 DSP，不加载卷积 IR');
     }
     cache.set(key, resolved);
     return resolved;

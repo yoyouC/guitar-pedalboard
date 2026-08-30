@@ -8,7 +8,6 @@
  * 任一失败即非零退出,阻断部署。
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 let failures = 0;
@@ -61,66 +60,6 @@ ok(`public/models 共 ${namFiles.length} 个 .nam,许可记录检查完毕`);
 if (!distFiles.some((f) => f.endsWith('.wasm'))) fail('dist 缺少 .wasm 产物');
 if (!distFiles.some((f) => f.endsWith('.nam'))) fail('dist 缺少 .nam 模型');
 if (failures === 0) ok('wasm 与模型产物齐全');
-
-// 5. Cab IR manifest / attribution / binary integrity. approved=false 可以保留研究占位，
-// 但不得偷偷分发 WAV；一旦批准则字段、源码归属、public 与 dist hash 必须全部闭环。
-const irManifestPath = 'public/irs/manifest.json';
-const irAttributionPath = 'public/irs/ATTRIBUTION.md';
-if (!existsSync(irManifestPath)) {
-  fail('缺少 public/irs/manifest.json');
-} else {
-  let manifest;
-  try {
-    manifest = JSON.parse(readFileSync(irManifestPath, 'utf8'));
-  } catch {
-    fail('public/irs/manifest.json 不是有效 JSON');
-  }
-  const requiredIds = ['open1x12', 'blue2x12', 'gb4x12', 'v304x12'];
-  const entries = Array.isArray(manifest?.entries) ? manifest.entries : [];
-  const attributionText = existsSync(irAttributionPath) ? readFileSync(irAttributionPath, 'utf8') : '';
-  if (!attributionText) fail('缺少 public/irs/ATTRIBUTION.md');
-  for (const id of requiredIds) {
-    const entry = entries.find((candidate) => candidate?.id === id);
-    if (!entry) {
-      fail(`IR manifest 缺少 ${id}`);
-      continue;
-    }
-    for (const field of ['sampleRate', 'bitsPerSample', 'durationSeconds', 'trimmedFrames', 'calibrationDb']) {
-      if (!Number.isFinite(entry[field])) fail(`${id} 缺少 ${field}`);
-    }
-    if (entry.channels !== 1 && entry.channels !== 2) fail(`${id} channels 必须为 1 或 2`);
-    const publicPath = typeof entry.file === 'string' ? join('public/irs', entry.file) : '';
-    const distPath = typeof entry.file === 'string' ? join('dist/irs', entry.file) : '';
-    if (!entry.approved) {
-      if (publicPath && existsSync(publicPath)) fail(`${id} 未批准却已加入 public WAV`);
-      continue;
-    }
-    for (const field of ['file', 'url', 'sha256', 'sourceUrl', 'license', 'attribution', 'captureDescription']) {
-      if (typeof entry[field] !== 'string' || !entry[field].trim()) fail(`${id} 缺少 ${field}`);
-    }
-    if (!attributionText.includes(id)) fail(`ATTRIBUTION.md 未记录 ${id}`);
-    if (!publicPath || !existsSync(publicPath)) {
-      fail(`${id} 已批准但 public WAV 不存在`);
-      continue;
-    }
-    const digest = createHash('sha256').update(readFileSync(publicPath)).digest('hex');
-    if (digest !== entry.sha256) fail(`${id} public WAV SHA-256 与 manifest 不符`);
-    if (!entry.file.includes(digest.slice(0, 8))) fail(`${id} 文件名缺少 SHA-256 指纹`);
-    if (entry.url !== `/irs/${entry.file}`) fail(`${id} url 与 fingerprinted file 不一致`);
-    if (!existsSync(distPath)) fail(`${id} 未进入 dist/irs`);
-    else {
-      const distDigest = createHash('sha256').update(readFileSync(distPath)).digest('hex');
-      if (distDigest !== entry.sha256) fail(`${id} dist WAV SHA-256 与 manifest 不符`);
-    }
-  }
-  const listed = new Set(entries.map((entry) => entry?.file).filter(Boolean));
-  const publicWavs = [...walk('public/irs')].filter((file) => /\.wav$/i.test(file));
-  for (const file of publicWavs) {
-    const name = file.split('/').at(-1);
-    if (!listed.has(name)) fail(`public/irs 中存在未登记 WAV: ${name}`);
-  }
-  if (entries.length === requiredIds.length) ok('Cab IR manifest 与发布许可门禁检查完毕');
-}
 
 if (failures > 0) {
   console.error(`\n发布检查失败(${failures} 项)。`);

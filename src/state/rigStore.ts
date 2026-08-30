@@ -552,10 +552,10 @@ export function createRigStore(engine: RigEngine, init?: RigStoreInit): RigStore
       key: `${state.ampId}:${state.namVersion}`,
     } satisfies AmpSpec,
     cab: {
-      def: CAB_IR_RUNTIME_DEF,
+      def: state.cabIrRef.kind === 'custom' ? CAB_IR_RUNTIME_DEF : getCabDef(state.cabId),
       enabled: state.cabEnabled,
       values: state.cabValues,
-      key: 'cab-ir-runtime:v1',
+      key: state.cabIrRef.kind === 'custom' ? 'cab-ir-runtime:v1' : `cab-dsp:${state.cabId}`,
       irRef: state.cabIrRef,
     },
     preAmpEq: { ...state.preAmpEq, bands: { ...state.preAmpEq.bands } },

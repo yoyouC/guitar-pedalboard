@@ -94,15 +94,16 @@ as substitutes**. Both are 5 ms captures of a Korg AX1500g cabinet-simulation al
 source identifies Alnico Blue speakers or establishes the uploader's rights in the upstream commercial
 simulation.
 
-## Tone Factor production selection
+## Tone Factor evaluated selection
 
 The locally purchased Tone Factor packs contain exact physical matches for all four product labels.
 The standard retail-pack instructions and EULA prohibit redistribution; however, the project owner
 confirmed on 2026-08-28 that the project has obtained separate direct permission to embed and
 redistribute these four selected files. The separate permission held by the project owner—not the
-retail EULA—is the basis for their inclusion in `public/irs`.
+retail EULA—would have permitted their inclusion. After listening review, the product owner chose the
+original DSP defaults instead, so the candidate WAVs are not distributed by production.
 
-The approved 48 kHz Starter selections are:
+The evaluated 48 kHz Starter selections were:
 
 | Product cab | Exact Tone Factor candidate | Selection intent | First-window spectral check |
 |---|---|---|---|
@@ -146,6 +147,7 @@ License evidence was inspected from the following files in the local purchase:
 
 ## Decision
 
-Use the four approved Tone Factor selections above. Keep the CC0 candidates documented as fallback
-provenance options, and do not relabel the low-confidence Korg simulation captures as physical
-Open/Blue cabinets.
+Do not ship any of the four evaluated Tone Factor files. Restore the four product defaults to their
+original Biquad DSP and retain convolution only for user-provided Custom IR files (ADR-0028). Keep the
+selection and authorization research as decision history; do not relabel the low-confidence Korg
+simulation captures as physical Open/Blue cabinets.

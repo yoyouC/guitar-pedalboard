@@ -247,8 +247,8 @@ test('structural verbs rebuild graph (fixed sequence) and bump graphVersion', ()
     key: string;
     irRef: unknown;
   };
-  assert.equal(cabSpec.def.id, 'cabIrRuntime');
-  assert.equal(cabSpec.key, 'cab-ir-runtime:v1');
+  assert.equal(cabSpec.def.id, 'blue2x12');
+  assert.equal(cabSpec.key, 'cab-dsp:blue2x12');
   assert.deepEqual(cabSpec.irRef, { kind: 'builtin', id: 'blue2x12' });
 
   calls.length = 0;

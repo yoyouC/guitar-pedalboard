@@ -16,6 +16,7 @@ function harness(overrides: {
   put?: CabIrLibraryPort['put'];
   get?: CabIrLibraryPort['get'];
   activate?: CabIrRuntimePort['activate'];
+  activateFallback?: CabIrRuntimePort['activateFallback'];
 } = {}) {
   const events: string[] = [];
   let committed: CabIrRef = builtin;
@@ -43,6 +44,7 @@ function harness(overrides: {
   const runtime: CabIrRuntimePort = {
     prepare: overrides.prepare ?? (async () => { events.push('prepare'); return { token: 1 }; }),
     activate: overrides.activate ?? (() => { events.push('activate'); }),
+    activateFallback: overrides.activateFallback ?? (() => { events.push('fallback'); }),
   };
   const coordinator = new CabIrCoordinator({
     library,
@@ -58,6 +60,18 @@ test('selection prepares candidate before audible activation and canonical commi
   assert.equal(result.ok, true);
   assert.deepEqual(h.events, ['prepare', 'activate', 'commit']);
   assert.deepEqual(h.committed(), custom);
+});
+
+test('built-in DSP selection commits without preparing or activating convolution', async () => {
+  const h = harness({
+    prepare: async () => assert.fail('内置 DSP 箱体不应准备 IR'),
+    activate: () => assert.fail('内置 DSP 箱体不应激活 IR'),
+  });
+
+  const result = await h.coordinator.select({ kind: 'builtin', id: 'blue2x12' });
+  assert.deepEqual(result, { ok: true, ref: { kind: 'builtin', id: 'blue2x12' } });
+  assert.deepEqual(h.events, ['commit']);
+  assert.deepEqual(h.committed(), { kind: 'builtin', id: 'blue2x12' });
 });
 
 test('runtime preparation failure leaves canonical selection and library untouched', async () => {
@@ -114,6 +128,7 @@ test('late import preparation cannot persist or overwrite a newer selection', as
     runtime: {
       prepare: async (_ref, source) => source ? delayed : { builtin: true },
       activate: () => { events.push('activate'); },
+      activateFallback: () => { events.push('fallback'); },
     },
     commit: (ref) => { committed = ref; events.push(`commit:${ref.kind}`); },
   });
@@ -138,7 +153,28 @@ test('rig restore commits the whole rig only after the requested IR is prepared'
   assert.deepEqual(h.events, ['prepare', 'activate', 'commit-rig']);
 });
 
-test('rig restore preserves a missing custom ref while activating Greenback fallback', async () => {
+test('built-in DSP rig restore commits without preparing a convolution asset', async () => {
+  const events: string[] = [];
+  const coordinator = new CabIrCoordinator({
+    library: {
+      get: async () => null,
+      put: async () => {},
+      touch: async () => {},
+    },
+    runtime: {
+      prepare: async () => assert.fail('内置 DSP 箱体不应准备 IR'),
+      activate: () => assert.fail('内置 DSP 箱体不应激活 IR'),
+      activateFallback: () => assert.fail('内置 DSP 箱体不应回退 IR'),
+    },
+    commit: () => assert.fail('restore must use its whole-rig commit callback'),
+  });
+
+  const result = await coordinator.restore(builtin, () => events.push('commit-rig'));
+  assert.deepEqual(result, { ok: true, ref: builtin, fallback: false });
+  assert.deepEqual(events, ['commit-rig']);
+});
+
+test('rig restore preserves a missing custom ref while activating Greenback DSP fallback', async () => {
   const preparedRefs: CabIrRef[] = [];
   const activatedCanonicalRefs: CabIrRef[] = [];
   const coordinator = new CabIrCoordinator({
@@ -155,6 +191,7 @@ test('rig restore preserves a missing custom ref while activating Greenback fall
       activate: (_prepared, canonicalRef) => {
         if (canonicalRef) activatedCanonicalRefs.push(canonicalRef);
       },
+      activateFallback: (canonicalRef) => activatedCanonicalRefs.push(canonicalRef),
     },
     commit: () => assert.fail('restore must use its whole-rig commit callback'),
   });
@@ -162,7 +199,7 @@ test('rig restore preserves a missing custom ref while activating Greenback fall
   const events: string[] = [];
   const result = await coordinator.restore(custom, () => events.push('commit-rig'));
   assert.deepEqual(result, { ok: true, ref: custom, fallback: true });
-  assert.deepEqual(preparedRefs, [builtin]);
+  assert.deepEqual(preparedRefs, []);
   assert.deepEqual(activatedCanonicalRefs, [custom]);
   assert.deepEqual(events, ['commit-rig']);
 });

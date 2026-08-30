@@ -1,6 +1,6 @@
 # ADR-0010: Cabinet IR Runtime 与本地 IR Library
 
-- 状态：Accepted
+- 状态：Superseded by ADR-0028（Custom IR 部分继续有效）
 - 日期：2026-08-28
 - 关联：Issue #19
 

@@ -63,6 +63,7 @@ export class CabIrService {
           prepared as Awaited<ReturnType<AudioEngine['prepareCabIr']>>,
           canonicalRef,
         ),
+        activateFallback: (canonicalRef) => this.engine.activateCabIrFallback(canonicalRef),
       },
       commit: (ref) => this.rig.commitCabIr(ref),
     });

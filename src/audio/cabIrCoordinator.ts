@@ -31,6 +31,8 @@ export interface CabIrRuntimePort {
   prepare(ref: CabIrRef, source?: unknown): Promise<unknown>;
   /** prepare 已完成后必须是同步、不可失败的原子听感切换。 */
   activate(prepared: unknown, canonicalRef?: CabIrRef): void;
+  /** 自定义文件缺失时保留 canonical 引用，并让运行时使用 Greenback DSP。 */
+  activateFallback(canonicalRef: CabIrRef): void;
 }
 
 export type CabIrSelectionResult =
@@ -86,12 +88,16 @@ export class CabIrCoordinator {
   async select(ref: CabIrRef): Promise<CabIrSelectionResult> {
     const generation = await this.begin();
     try {
-      let source: StoredCabIr | undefined;
-      if (ref.kind === 'custom') {
-        source = (await this.options.library.get(ref.hash)) ?? undefined;
-        if (!source) {
-          return { ok: false, reason: 'missing', message: 'IR 缺失，请重新导入原文件。' };
-        }
+      if (ref.kind === 'builtin') {
+        await this.finalize(async () => {
+          if (generation !== this.generation) throw new SupersededCabIrSelection();
+          this.options.commit(ref);
+        });
+        return { ok: true, ref };
+      }
+      const source = (await this.options.library.get(ref.hash)) ?? undefined;
+      if (!source) {
+        return { ok: false, reason: 'missing', message: 'IR 缺失，请重新导入原文件。' };
       }
       const prepared = await this.options.runtime.prepare(ref, source);
       if (generation !== this.generation) {
@@ -102,7 +108,7 @@ export class CabIrCoordinator {
         this.options.runtime.activate(prepared);
         this.options.commit(ref);
       });
-      if (ref.kind === 'custom') void this.options.library.touch(ref.hash);
+      void this.options.library.touch(ref.hash);
       return { ok: true, ref };
     } catch (error) {
       if (error instanceof SupersededCabIrSelection) {
@@ -118,22 +124,28 @@ export class CabIrCoordinator {
 
   /**
    * 整 Rig 恢复事务：IR 可用时先 prepare，随后在同一提交屏障内切换听感并提交整套 Rig。
-   * 自定义 hash 缺失时保留 canonical 目标，以内置 Greenback 作为仅运行时回退。
+   * 自定义 hash 缺失时保留 canonical 目标，以 Greenback DSP 作为仅运行时回退。
    */
   async restore(ref: CabIrRef, commitRig: () => void): Promise<CabIrRestoreResult> {
     const generation = await this.begin();
     try {
-      let source: StoredCabIr | undefined;
-      let audibleRef = ref;
-      let fallback = false;
-      if (ref.kind === 'custom') {
-        source = (await this.options.library.get(ref.hash)) ?? undefined;
-        if (!source) {
-          audibleRef = { kind: 'builtin', id: 'gb4x12' };
-          fallback = true;
-        }
+      if (ref.kind === 'builtin') {
+        await this.finalize(async () => {
+          if (generation !== this.generation) throw new SupersededCabIrSelection();
+          commitRig();
+        });
+        return { ok: true, ref, fallback: false };
       }
-      const prepared = await this.options.runtime.prepare(audibleRef, source);
+      const source = (await this.options.library.get(ref.hash)) ?? undefined;
+      if (!source) {
+        await this.finalize(async () => {
+          if (generation !== this.generation) throw new SupersededCabIrSelection();
+          this.options.runtime.activateFallback(ref);
+          commitRig();
+        });
+        return { ok: true, ref, fallback: true };
+      }
+      const prepared = await this.options.runtime.prepare(ref, source);
       if (generation !== this.generation) {
         return { ok: false, reason: 'superseded', message: '已恢复更新的 Rig。' };
       }
@@ -142,8 +154,8 @@ export class CabIrCoordinator {
         this.options.runtime.activate(prepared, ref);
         commitRig();
       });
-      if (ref.kind === 'custom' && !fallback) void this.options.library.touch(ref.hash);
-      return { ok: true, ref, fallback };
+      void this.options.library.touch(ref.hash);
+      return { ok: true, ref, fallback: false };
     } catch (error) {
       if (error instanceof SupersededCabIrSelection) {
         return { ok: false, reason: 'superseded', message: '已恢复更新的 Rig。' };

@@ -67,6 +67,7 @@ import {
 import { assertRuntimeRevision, profileSwitchBlock, runRuntimeTransaction } from './runtimeTransaction';
 import { LongTaskTracker, type StabilityObservation } from './performanceDiagnostics';
 import { cabIrRefKey, type CabIrRef } from './cabIrTypes';
+import { getCabDef } from './cabs';
 import {
   CAB_IR_RUNTIME_DEF,
   CabIrBufferResolver,
@@ -315,6 +316,7 @@ export class AudioEngine {
   private ampSpec: AmpSpec | null = null;
   private cabSpec: CabSpec | null = null;
   private cabIrRef: CabIrRef = { kind: 'builtin', id: 'gb4x12' };
+  private cabIrFallbackDesired = false;
   /** 使候选 AudioContext 无法提交在 prepare 期间已经过期的 IR。 */
   private cabIrVersion = 0;
   private globalBypass = false;
@@ -481,19 +483,23 @@ export class AudioEngine {
         preAmpEq,
         loadedWorklets: loaded,
         graph: emptyGraphState(),
-        cabIrFallbackActive: false,
+        cabIrFallbackActive: this.cabIrFallbackDesired,
       };
       if (this.cabSpec?.def === CAB_IR_RUNTIME_DEF) {
-        let activeIr: Awaited<ReturnType<CabIrBufferResolver['resolve']>>;
         try {
-          activeIr = await this.cabIrResolver.resolve(ctx, this.cabIrRef);
+          const activeIr = await this.cabIrResolver.resolve(ctx, this.cabIrRef);
           runtime.cabIrFallbackActive = false;
+          stageInitialCabIrBuffer(ctx, activeIr.buffer, activeIr.calibrationDb);
         } catch (error) {
           if (this.cabIrRef.kind !== 'custom') throw error;
-          activeIr = await this.cabIrResolver.resolve(ctx, { kind: 'builtin', id: 'gb4x12' });
+          this.cabIrFallbackDesired = true;
+          this.cabSpec = {
+            ...this.cabSpec,
+            def: getCabDef('gb4x12'),
+            key: 'cab-dsp-fallback:gb4x12',
+          };
           runtime.cabIrFallbackActive = true;
         }
-        stageInitialCabIrBuffer(ctx, activeIr.buffer, activeIr.calibrationDb);
       }
       const plan = planGraph(this.graphSpec(), graphPrevState(runtime.graph));
       const artifacts = executePlan(
@@ -1190,7 +1196,13 @@ export class AudioEngine {
   applyRig(projection: AudioRigProjection): void {
     this.chain = projection.chain;
     this.ampSpec = projection.amp;
-    this.cabSpec = projection.cab;
+    if (projection.cab?.irRef?.kind === 'builtin') {
+      this.cabIrFallbackDesired = false;
+      if (this.runtime) this.runtime.cabIrFallbackActive = false;
+    }
+    this.cabSpec = projection.cab?.irRef?.kind === 'custom' && this.cabIrFallbackDesired
+      ? { ...projection.cab, def: getCabDef('gb4x12'), key: 'cab-dsp-fallback:gb4x12' }
+      : projection.cab;
     this.globalBypass = projection.globalBypass;
     this.preAmpEqState = {
       enabled: projection.preAmpEq.enabled,
@@ -1292,7 +1304,13 @@ export class AudioEngine {
   }
 
   setCab(spec: CabSpec | null): void {
-    this.cabSpec = spec;
+    if (spec?.irRef?.kind === 'builtin') {
+      this.cabIrFallbackDesired = false;
+      if (this.runtime) this.runtime.cabIrFallbackActive = false;
+    }
+    this.cabSpec = spec?.irRef?.kind === 'custom' && this.cabIrFallbackDesired
+      ? { ...spec, def: getCabDef('gb4x12'), key: 'cab-dsp-fallback:gb4x12' }
+      : spec;
     if (spec?.irRef && cabIrRefKey(spec.irRef) !== cabIrRefKey(this.cabIrRef)) {
       this.cabIrRef = spec.irRef;
       this.cabIrVersion++;
@@ -1316,7 +1334,15 @@ export class AudioEngine {
   }
 
   get isCabIrFallbackActive(): boolean {
-    return this.runtime?.cabIrFallbackActive ?? false;
+    return this.runtime?.cabIrFallbackActive ?? this.cabIrFallbackDesired;
+  }
+
+  activateCabIrFallback(canonicalRef: CabIrRef): void {
+    if (canonicalRef.kind !== 'custom') throw new Error('只有缺失的自定义 IR 可以使用 DSP 回退');
+    this.cabIrRef = canonicalRef;
+    this.cabIrFallbackDesired = true;
+    this.cabIrVersion++;
+    if (this.runtime) this.runtime.cabIrFallbackActive = true;
   }
 
   /** prepare 成功后的同步提交；迟到的旧 context 候选不会覆盖新 Runtime。 */
@@ -1325,9 +1351,12 @@ export class AudioEngine {
     if (!runtime || runtime.ctx !== prepared.context) throw new Error('音频 Runtime 已变化，请重试');
     const instance = runtime.graph.cabInstance;
     stageInitialCabIrBuffer(runtime.ctx, prepared.buffer, prepared.calibrationDb);
-    if (instance && !isCabIrEffectInstance(instance)) throw new Error('箱体 IR Runtime 类型无效');
+    if (this.cabSpec?.def === CAB_IR_RUNTIME_DEF && instance && !isCabIrEffectInstance(instance)) {
+      throw new Error('箱体 IR Runtime 类型无效');
+    }
     if (isCabIrEffectInstance(instance)) instance.switchBuffer(prepared.buffer, prepared.calibrationDb);
     this.cabIrRef = canonicalRef;
+    this.cabIrFallbackDesired = false;
     this.cabIrVersion++;
     runtime.cabIrFallbackActive = cabIrRefKey(canonicalRef) !== cabIrRefKey(prepared.ref);
   }

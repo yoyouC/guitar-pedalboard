@@ -23,8 +23,7 @@ emsdk;重编见 `wasm/build-nam-wasm.sh`。
   publicDir,永远不会进 dist);
 - **发布检查**:`scripts/check-publish-models.mjs` 校验 ① dist 无
   models-local/扫档包/namknobs 内容 ② public/models 每个 .nam 都在
-  ATTRIBUTION.md 有许可记录 ③ wasm 与模型产物齐全 ④ Cab IR 的批准状态、
-  来源/许可/署名、产品映射、校准值以及 public/dist SHA-256 完整一致。挂在 Vercel 的
+  ATTRIBUTION.md 有许可记录 ③ wasm 与模型产物齐全。挂在 Vercel 的
   buildCommand 里(`npm run build && node scripts/check-publish-models.mjs`),
   失败即阻断部署;本地也可 `npm run check:publish`;
 - **恢复本地模型**:`./scripts/fetch-local-models.sh`(NAMKnobs 与 demo 直链;
@@ -36,8 +35,7 @@ emsdk;重编见 `wasm/build-nam-wasm.sh`。
 
 - `buildCommand: npm run build && node scripts/check-publish-models.mjs`
 - `outputDirectory: dist`(vite `base: './'`,任意路径可挂)
-- SPA rewrite 到 `index.html`;`/models/**` 缓存 1h，`/nam-wasm/**` 缓存 1 天；内容指纹化的
-  `/irs/*.wav` 使用一年 `immutable` 缓存。
+- SPA rewrite 到 `index.html`;`/models/**` 缓存 1h，`/nam-wasm/**` 缓存 1 天。
 
 发布命令(需本机 `vercel login` 过,项目已 link 到 `.vercel/`):
 
@@ -49,7 +47,6 @@ npx vercel --prod
 
 - [x] dist 不含本地评估模型(检查脚本通过)
 - [x] 许可页可访问:应用 footer"模型许可"→ `/models/ATTRIBUTION.md`
-- [x] 四个 Cab IR 均有项目方持有的直接分发授权、署名、SHA-256 与 public/dist 一致性检查
 - [ ] GPL-3.0 模型随附许可文本确认(ATTRIBUTION 已标注来源与许可)
 - [ ] 非商业使用确认(CC BY-NC-ND 的 BossLSTM 两个模型)
 
