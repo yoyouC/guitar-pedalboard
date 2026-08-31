@@ -1,14 +1,19 @@
 import type { Pool } from 'pg';
-import { createPlatformAuth } from './betterAuth.ts';
+import { createPlatformAuth } from './betterAuth.js';
 import {
   createResendEmailVerificationSender,
   createResendMagicLinkSender,
-} from './resend.ts';
+} from './resend.js';
 
 export class AuthConfigurationError extends Error {}
 
-export function authenticationBaseURL(): URL {
-  const configured = process.env.BETTER_AUTH_URL;
+export function authenticationBaseURL(
+  environment: Record<string, string | undefined> = process.env,
+): URL {
+  const configured = environment.BETTER_AUTH_URL
+    ?? (environment.VERCEL_ENV === 'preview' && environment.VERCEL_URL
+      ? `https://${environment.VERCEL_URL}`
+      : undefined);
   if (!configured) throw new AuthConfigurationError('BETTER_AUTH_URL is required');
   try {
     const url = new URL(configured);

@@ -1,10 +1,10 @@
-import type { SessionVerifier } from '../auth/session.ts';
-import type { MemberRecord, MemberRepository } from '../members/repository.ts';
+import type { SessionVerifier } from '../auth/session.js';
+import type { MemberRecord, MemberRepository } from '../members/repository.js';
 import {
   communityWriteDenied,
   communityWriteErrorResponse,
   unverifiedEmailWriteDenied,
-} from '../members/communityWriteApi.ts';
+} from '../members/communityWriteApi.js';
 import {
   DuplicateModerationReportError,
   ModerationAppealForbiddenError,
@@ -16,8 +16,8 @@ import {
   type ModerationContentTargetKind,
   type ModerationReportReason,
   type ModerationTargetKind,
-} from './repository.ts';
-import { marketplaceWriteLimitDenied, type MarketplaceWriteLimiter } from '../abuse/writeLimiter.ts';
+} from './repository.js';
+import { marketplaceWriteLimitDenied, type MarketplaceWriteLimiter } from '../abuse/writeLimiter.js';
 
 const REPORTS_PATH = '/api/marketplace/reports';
 const NOTICES_PATH = '/api/marketplace/infringement-notices';

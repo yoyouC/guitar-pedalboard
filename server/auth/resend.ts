@@ -1,4 +1,4 @@
-import type { EmailVerificationSender, MagicLinkSender } from './betterAuth.ts';
+import type { EmailVerificationSender, MagicLinkSender } from './betterAuth.js';
 
 export interface ResendMagicLinkSenderDependencies {
   apiKey: string;

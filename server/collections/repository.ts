@@ -4,10 +4,10 @@ import type {
   PresetCollectionConcurrencyState,
   PresetCollectionReference,
   PresetCollectionVisibility,
-} from '../../shared/marketplace.ts';
+} from '../../shared/marketplace.js';
 import type {
   PublishedPresetRevisionReferenceRepository,
-} from '../marketplace/repository.ts';
+} from '../marketplace/repository.js';
 
 export interface PresetCollectionRepository {
   findVisibleById(id: string): Promise<PresetCollection | null>;
@@ -49,7 +49,7 @@ export interface UpdatePresetCollectionInput {
 }
 
 export interface PresetCollectionManagementRepository extends PresetCollectionRepository {
-  listAvailableTags(): Promise<import('../../shared/marketplace.ts').MarketplaceTag[]>;
+  listAvailableTags(): Promise<import('../../shared/marketplace.js').MarketplaceTag[]>;
   listManagedByCreator(creatorId: string): Promise<PresetCollection[]>;
   create(input: CreatePresetCollectionInput): Promise<PresetCollection>;
   findManagedById(collectionId: string, creatorId: string): Promise<PresetCollection>;

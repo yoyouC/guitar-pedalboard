@@ -3,9 +3,9 @@ import type {
   MarketplaceDiscoverySearchInput,
   PublishedPresetSearchInput,
   PublishedPresetSearchRepository,
-} from './repository.ts';
-import { InvalidSearchCursorError } from './cursor.ts';
-import { parseRigResourceDependencyKey } from '../../shared/marketplaceResource.ts';
+} from './repository.js';
+import { InvalidSearchCursorError } from './cursor.js';
+import { parseRigResourceDependencyKey } from '../../shared/marketplaceResource.js';
 
 export interface MarketplaceSearchApi {
   fetch(request: Request): Promise<Response>;

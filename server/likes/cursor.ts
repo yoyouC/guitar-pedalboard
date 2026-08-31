@@ -1,5 +1,5 @@
-import type { MarketplaceLikeTargetKind } from '../../shared/marketplace.ts';
-import { InvalidPopularCursorError } from './repository.ts';
+import type { MarketplaceLikeTargetKind } from '../../shared/marketplace.js';
+import { InvalidPopularCursorError } from './repository.js';
 
 export interface PopularBoundary { likeCount: number; id: string }
 export interface PopularCursorState extends PopularBoundary { snapshotVersion: number }

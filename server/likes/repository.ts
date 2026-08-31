@@ -3,8 +3,8 @@ import type {
   MarketplaceLikeTargetKind,
   MarketplaceMyLikes,
   MarketplaceRankingPage,
-} from '../../shared/marketplace.ts';
-import type { MarketplaceRankingPageInput } from '../ranking.ts';
+} from '../../shared/marketplace.js';
+import type { MarketplaceRankingPageInput } from '../ranking.js';
 
 export class LikeTargetNotFoundError extends Error {}
 export class SelfLikeForbiddenError extends Error {}

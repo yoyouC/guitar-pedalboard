@@ -1,9 +1,9 @@
-import { marketplacePool } from '../server/marketplace/postgres.ts';
+import { marketplacePool } from '../server/marketplace/postgres.js';
 import {
   createAuthenticationApi,
   createSessionBoundAuthenticationHandler,
-} from '../server/auth/api.ts';
-import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
+} from '../server/auth/api.js';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.js';
 
 let authenticationApi: ReturnType<typeof createAuthenticationApi> | null = null;
 

@@ -1,4 +1,4 @@
-import type { MarketplaceLikeTargetKind } from '../shared/marketplace.ts';
+import type { MarketplaceLikeTargetKind } from '../shared/marketplace.js';
 
 export interface MarketplaceRankingPageInput {
   kind: MarketplaceLikeTargetKind;

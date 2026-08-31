@@ -1,7 +1,7 @@
 import {
   RIG_PRESET_VERSION,
   type RigPresetState,
-} from '../src/state/presetCodec.ts';
+} from '../src/state/presetCodec.js';
 
 export type PublishedPresetVisibility = 'public' | 'unlisted' | 'withdrawn' | 'hidden';
 

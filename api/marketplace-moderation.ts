@@ -1,13 +1,13 @@
-import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.ts';
-import { hasCanonicalOrigin } from '../server/auth/api.ts';
-import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
-import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { createPostgresMemberRepository } from '../server/members/postgresRepository.ts';
-import { createMarketplaceModerationApi } from '../server/moderation/api.ts';
-import { createPostgresMarketplaceModerationRepository } from '../server/moderation/postgresRepository.ts';
-import { parseMarketplaceTrendingPolicy } from '../server/trending/policy.ts';
-import { createPostgresMarketplaceWriteLimiter } from '../server/abuse/postgresWriteLimiter.ts';
-import { parseMarketplaceWritePolicies } from '../server/abuse/policy.ts';
+import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.js';
+import { hasCanonicalOrigin } from '../server/auth/api.js';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.js';
+import { marketplacePool } from '../server/marketplace/postgres.js';
+import { createPostgresMemberRepository } from '../server/members/postgresRepository.js';
+import { createMarketplaceModerationApi } from '../server/moderation/api.js';
+import { createPostgresMarketplaceModerationRepository } from '../server/moderation/postgresRepository.js';
+import { parseMarketplaceTrendingPolicy } from '../server/trending/policy.js';
+import { createPostgresMarketplaceWriteLimiter } from '../server/abuse/postgresWriteLimiter.js';
+import { parseMarketplaceWritePolicies } from '../server/abuse/policy.js';
 
 let api: ReturnType<typeof createMarketplaceModerationApi> | null = null;
 

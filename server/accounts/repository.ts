@@ -1,7 +1,7 @@
 import type {
   MarketplaceAccountDeletion,
   MarketplaceAccountExport,
-} from '../../shared/account.ts';
+} from '../../shared/account.js';
 
 export const ACCOUNT_DELETION_GRACE_MS = 30 * 24 * 60 * 60 * 1000;
 

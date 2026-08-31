@@ -4,17 +4,17 @@ import type {
   MarketplaceLikeTargetKind,
   MarketplaceLikedTargetSummary,
   MarketplaceLikeTargetSummary,
-} from '../../shared/marketplace.ts';
-import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
-import { decodePopularCursor, encodePopularCursor } from './cursor.ts';
+} from '../../shared/marketplace.js';
+import type { PostgresQueryable } from '../marketplace/postgresRepository.js';
+import { decodePopularCursor, encodePopularCursor } from './cursor.js';
 import {
   InvalidPopularCursorError,
   LikeTargetNotFoundError,
   SelfLikeForbiddenError,
   type MarketplaceLikeRepository,
-} from './repository.ts';
-import { MARKETPLACE_LIKE_WRITE_LOCK } from './postgresLock.ts';
-import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
+} from './repository.js';
+import { MARKETPLACE_LIKE_WRITE_LOCK } from './postgresLock.js';
+import { lockCommunityWriteMember } from '../members/postgresStanding.js';
 
 interface TargetConfig {
   targetTable: string;

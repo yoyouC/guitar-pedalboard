@@ -2,8 +2,8 @@ import type {
   ManagedMarketplaceTag,
   MarketplaceTagAdministrationRepository,
   MarketplaceTagAuditEntry,
-} from './repository.ts';
-import { MarketplaceTagConflictError, MarketplaceTagNotFoundError } from './repository.ts';
+} from './repository.js';
+import { MarketplaceTagConflictError, MarketplaceTagNotFoundError } from './repository.js';
 
 type StoredTag = Omit<ManagedMarketplaceTag, 'presetCount' | 'collectionCount'>;
 

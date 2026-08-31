@@ -1,4 +1,4 @@
-import type { MarketplaceWriteLimiter, MarketplaceWritePolicies, TokenBucketPolicy } from './writeLimiter.ts';
+import type { MarketplaceWriteLimiter, MarketplaceWritePolicies, TokenBucketPolicy } from './writeLimiter.js';
 
 interface Bucket { tokens: number; updatedAt: number }
 

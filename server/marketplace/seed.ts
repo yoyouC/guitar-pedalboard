@@ -1,4 +1,4 @@
-import type { PublishedPreset } from '../../shared/marketplace.ts';
+import type { PublishedPreset } from '../../shared/marketplace.js';
 
 export interface MarketplaceSeedClient {
   query(text: string, values?: readonly unknown[]): Promise<unknown>;

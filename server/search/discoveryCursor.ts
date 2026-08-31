@@ -1,11 +1,11 @@
-import { normalizeSearchText } from './text.ts';
+import { normalizeSearchText } from './text.js';
 import {
   decodeStableSearchCursor,
   encodeStableSearchCursor,
   type SearchBoundary,
   type StableSearchCursor,
-} from './cursor.ts';
-import type { MarketplaceDiscoverySearchInput } from './repository.ts';
+} from './cursor.js';
+import type { MarketplaceDiscoverySearchInput } from './repository.js';
 
 export type MarketplaceDiscoveryKind = 'collections' | 'creators';
 

@@ -1,6 +1,6 @@
-import type { MarketplaceRankingPage } from '../../shared/marketplace.ts';
-import type { MarketplaceRankingPageInput } from '../ranking.ts';
-import type { MarketplaceTrendingPolicy } from './policy.ts';
+import type { MarketplaceRankingPage } from '../../shared/marketplace.js';
+import type { MarketplaceRankingPageInput } from '../ranking.js';
+import type { MarketplaceTrendingPolicy } from './policy.js';
 
 export class InvalidTrendingCursorError extends Error {}
 

@@ -1,7 +1,7 @@
 import type {
   RigResourceDependency,
   RigResourceDependencyKey,
-} from './marketplace.ts';
+} from './marketplace.js';
 
 export function rigResourceDependencyKey(
   dependency: RigResourceDependency,

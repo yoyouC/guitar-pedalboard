@@ -1,5 +1,5 @@
-import type { MarketplaceLikeTargetKind } from '../../shared/marketplace.ts';
-import { InvalidTrendingCursorError } from './repository.ts';
+import type { MarketplaceLikeTargetKind } from '../../shared/marketplace.js';
+import { InvalidTrendingCursorError } from './repository.js';
 
 export interface TrendingBoundary { trendScore: number; id: string }
 export interface TrendingCursorState extends TrendingBoundary { snapshotVersion: number }

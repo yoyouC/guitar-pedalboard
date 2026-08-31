@@ -1,16 +1,16 @@
-import type { MemberRecord } from '../members/repository.ts';
-import type { PresetCollection } from '../../shared/marketplace.ts';
+import type { MemberRecord } from '../members/repository.js';
+import type { PresetCollection } from '../../shared/marketplace.js';
 import type {
   MarketplaceDiscoveryRepository,
   MarketplaceDiscoverySearchInput,
-} from './repository.ts';
+} from './repository.js';
 import {
   decodeDiscoveryCursor,
   encodeDiscoveryCursor,
   type MarketplaceDiscoveryKind,
-} from './discoveryCursor.ts';
-import { isAfterCursor, isAtOrBefore, type SearchBoundary } from './cursor.ts';
-import { marketplaceTagSearchFields, matchesSearchText } from './text.ts';
+} from './discoveryCursor.js';
+import { isAfterCursor, isAtOrBefore, type SearchBoundary } from './cursor.js';
+import { marketplaceTagSearchFields, matchesSearchText } from './text.js';
 
 interface Discoverable {
   id: string;

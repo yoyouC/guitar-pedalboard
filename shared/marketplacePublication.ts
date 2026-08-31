@@ -2,14 +2,14 @@ import type {
   PublishPresetRequest,
   RigDerivedAttributes,
   RigResourceDependency,
-} from './marketplace.ts';
-import type { RigPresetState } from '../src/state/presetCodec.ts';
-import { RIG_PRESET_VERSION } from '../src/state/presetCodec.ts';
+} from './marketplace.js';
+import type { RigPresetState } from '../src/state/presetCodec.js';
+import { RIG_PRESET_VERSION } from '../src/state/presetCodec.js';
 import {
   analyzePublishableRigAtSchema,
   isMarketplaceSchemaVersionSupported,
-} from './publishableRig.ts';
-import { MARKETPLACE_SUPPORTED_SCHEMA_RANGE } from './marketplaceCompatibility.ts';
+} from './publishableRig.js';
+import { MARKETPLACE_SUPPORTED_SCHEMA_RANGE } from './marketplaceCompatibility.js';
 
 export type PublicationField = 'title' | 'description' | 'tagIds' | 'rig' | 'source';
 export type PublicationErrors = Partial<Record<PublicationField, string>>;

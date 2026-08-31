@@ -1,21 +1,21 @@
-import type { SessionVerifier } from '../auth/session.ts';
-import type { MemberRepository } from '../members/repository.ts';
+import type { SessionVerifier } from '../auth/session.js';
+import type { MemberRepository } from '../members/repository.js';
 import {
   communityWriteDenied,
   communityWriteErrorResponse,
-} from '../members/communityWriteApi.ts';
-import { marketplaceWriteLimitDenied, type MarketplaceWriteLimiter } from '../abuse/writeLimiter.ts';
-import type { MarketplaceLikeTargetKind } from '../../shared/marketplace.ts';
+} from '../members/communityWriteApi.js';
+import { marketplaceWriteLimitDenied, type MarketplaceWriteLimiter } from '../abuse/writeLimiter.js';
+import type { MarketplaceLikeTargetKind } from '../../shared/marketplace.js';
 import {
   InvalidTrendingCursorError,
   type MarketplaceTrendingRepository,
-} from '../trending/repository.ts';
+} from '../trending/repository.js';
 import {
   InvalidPopularCursorError,
   LikeTargetNotFoundError,
   SelfLikeForbiddenError,
   type MarketplaceLikeRepository,
-} from './repository.ts';
+} from './repository.js';
 
 const LIKE_PATH = /^\/api\/marketplace\/likes\/(presets|collections)\/([^/]+)$/;
 const RANKING_PATH = /^\/api\/marketplace\/(popular|trending)\/(presets|collections)$/;

@@ -3,11 +3,11 @@ import { createReadStream } from 'node:fs';
 import { access, mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import type { QueryResultRow } from 'pg';
-import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
+import type { PostgresQueryable } from '../marketplace/postgresRepository.js';
 import {
   isMarketplaceDatabaseIdentity,
   type MarketplaceDatabaseIdentity,
-} from './restoreSafety.ts';
+} from './restoreSafety.js';
 
 const DEFAULT_BACKUP_MAX_AGE_MS = 23 * 60 * 60 * 1_000;
 

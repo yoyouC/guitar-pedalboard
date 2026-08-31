@@ -1,7 +1,7 @@
-import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { createMarketplaceSearchApi } from '../server/search/api.ts';
-import { createPostgresPublishedPresetSearchRepository } from '../server/search/postgresRepository.ts';
-import { createPostgresMarketplaceDiscoveryRepository } from '../server/search/postgresDiscoveryRepository.ts';
+import { marketplacePool } from '../server/marketplace/postgres.js';
+import { createMarketplaceSearchApi } from '../server/search/api.js';
+import { createPostgresPublishedPresetSearchRepository } from '../server/search/postgresRepository.js';
+import { createPostgresMarketplaceDiscoveryRepository } from '../server/search/postgresDiscoveryRepository.js';
 
 let searchApi: ReturnType<typeof createMarketplaceSearchApi> | null = null;
 

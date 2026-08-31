@@ -1,4 +1,4 @@
-import type { MemberRecord } from './repository.ts';
+import type { MemberRecord } from './repository.js';
 
 export class BannedMemberError extends Error {}
 export class AccountDeletionPendingError extends Error {}

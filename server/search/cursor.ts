@@ -1,5 +1,5 @@
-import type { PublishedPresetSearchInput } from './repository.ts';
-import { normalizeSearchText } from './text.ts';
+import type { PublishedPresetSearchInput } from './repository.js';
+import { normalizeSearchText } from './text.js';
 
 export interface SearchBoundary {
   createdAt: string;

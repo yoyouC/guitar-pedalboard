@@ -1,15 +1,15 @@
-import { createMarketplaceApi } from '../server/marketplace/api.ts';
-import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.ts';
-import { hasCanonicalOrigin } from '../server/auth/api.ts';
-import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
-import { marketplacePool } from '../server/marketplace/postgres.ts';
+import { createMarketplaceApi } from '../server/marketplace/api.js';
+import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.js';
+import { hasCanonicalOrigin } from '../server/auth/api.js';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.js';
+import { marketplacePool } from '../server/marketplace/postgres.js';
 import {
   createPostgresPublishedPresetPublicationRepository,
   createPostgresPublishedPresetRepository,
-} from '../server/marketplace/postgresRepository.ts';
-import { createPostgresMemberRepository } from '../server/members/postgresRepository.ts';
-import { createPostgresMarketplaceWriteLimiter } from '../server/abuse/postgresWriteLimiter.ts';
-import { parseMarketplaceWritePolicies } from '../server/abuse/policy.ts';
+} from '../server/marketplace/postgresRepository.js';
+import { createPostgresMemberRepository } from '../server/members/postgresRepository.js';
+import { createPostgresMarketplaceWriteLimiter } from '../server/abuse/postgresWriteLimiter.js';
+import { parseMarketplaceWritePolicies } from '../server/abuse/policy.js';
 
 let publicApi: ReturnType<typeof createMarketplaceApi> | null = null;
 let privateApi: ReturnType<typeof createMarketplaceApi> | null = null;

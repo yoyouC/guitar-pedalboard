@@ -1,7 +1,7 @@
 import type {
   PresetCollectionVisibility,
   PublishedPresetVisibility,
-} from '../../shared/marketplace.ts';
+} from '../../shared/marketplace.js';
 
 export function canIncludePresetRevision(input: {
   targetVisibility: 'public' | 'unlisted' | 'withdrawn';

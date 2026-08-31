@@ -3,7 +3,7 @@ import type {
   MarketplaceContentModerationTargetKind,
   MarketplaceModerationReportReason,
   MarketplaceModerationTargetKind,
-} from '../../shared/marketplace.ts';
+} from '../../shared/marketplace.js';
 
 export type ModerationTargetKind = MarketplaceModerationTargetKind;
 export type ModerationContentTargetKind = MarketplaceContentModerationTargetKind;

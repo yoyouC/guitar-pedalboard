@@ -10,9 +10,9 @@ import type {
   PublishedPresetVisibility,
   RigDerivedAttributes,
   RigResourceDependency,
-} from '../../shared/marketplace.ts';
-import type { RigPresetState } from '../../src/state/presetCodec.ts';
-import { RIG_PRESET_VERSION } from '../../src/state/presetCodec.ts';
+} from '../../shared/marketplace.js';
+import type { RigPresetState } from '../../src/state/presetCodec.js';
+import { RIG_PRESET_VERSION } from '../../src/state/presetCodec.js';
 import type {
   AppendPublishedPresetRevisionInput,
   CreatePublishedPresetInput,
@@ -22,18 +22,18 @@ import type {
   RestorePublishedPresetRevisionInput,
   UpdatePublishedPresetMetadataInput,
   UpdatePublishedPresetVisibilityInput,
-} from './repository.ts';
+} from './repository.js';
 import {
   PublishedPresetAccessError,
   PublishedPresetConflictError,
   PublishedPresetRevisionNotFoundError,
   PublishedPresetSourceError,
   UnavailableTagError,
-} from './repository.ts';
-import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.ts';
-import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
-import { normalizeSearchText } from '../search/text.ts';
-import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
+} from './repository.js';
+import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.js';
+import { lockCommunityWriteMember } from '../members/postgresStanding.js';
+import { normalizeSearchText } from '../search/text.js';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.js';
 
 export interface PostgresQueryable {
   query<R extends QueryResultRow>(text: string, values?: readonly unknown[]): Promise<QueryResult<R>>;

@@ -15,19 +15,19 @@ import type {
   PublishedPresetVisibility,
   RigDerivedAttributes,
   RigResourceDependency,
-} from './marketplace.ts';
+} from './marketplace.js';
 import {
   decodeCurrentRigPresetState,
   RIG_PRESET_VERSION,
   type RigPresetState,
-} from '../src/state/presetCodec.ts';
+} from '../src/state/presetCodec.js';
 import {
   analyzePublishableRig,
   deriveRigResourceDependencies,
   sameResourceDependencies,
-} from './publishableRig.ts';
+} from './publishableRig.js';
 
-export { deriveRigResourceDependencies } from './publishableRig.ts';
+export { deriveRigResourceDependencies } from './publishableRig.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

@@ -1,9 +1,9 @@
 import type { Pool } from 'pg';
-import { rebuildMarketplaceLikeCountsInTransaction } from '../likes/postgresRepository.ts';
-import { rebuildPublishedPresetSearchProjectionInTransaction } from '../search/postgresRepository.ts';
-import { rebuildMarketplaceTextSearchProjection } from '../search/postgresTextProjection.ts';
-import type { MarketplaceTrendingPolicy } from '../trending/policy.ts';
-import { rebuildMarketplaceTrendingInTransaction } from '../trending/postgresRepository.ts';
+import { rebuildMarketplaceLikeCountsInTransaction } from '../likes/postgresRepository.js';
+import { rebuildPublishedPresetSearchProjectionInTransaction } from '../search/postgresRepository.js';
+import { rebuildMarketplaceTextSearchProjection } from '../search/postgresTextProjection.js';
+import type { MarketplaceTrendingPolicy } from '../trending/policy.js';
+import { rebuildMarketplaceTrendingInTransaction } from '../trending/postgresRepository.js';
 
 export async function rebuildAllMarketplaceProjections(
   pool: Pool,

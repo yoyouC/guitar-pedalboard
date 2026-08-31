@@ -3,23 +3,23 @@ import type {
   MarketplaceTag,
   PresetCollectionSearchItem,
   PublicCreatorSearchItem,
-} from '../../shared/marketplace.ts';
-import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
+} from '../../shared/marketplace.js';
+import type { PostgresQueryable } from '../marketplace/postgresRepository.js';
 import {
   decodeDiscoveryCursor,
   encodeDiscoveryCursor,
   type MarketplaceDiscoveryKind,
-} from './discoveryCursor.ts';
+} from './discoveryCursor.js';
 import type {
   MarketplaceDiscoveryRepository,
   MarketplaceDiscoverySearchInput,
-} from './repository.ts';
-import type { SearchBoundary } from './cursor.ts';
+} from './repository.js';
+import type { SearchBoundary } from './cursor.js';
 import {
   marketplaceTagSearchFields,
   matchesSearchText,
   searchCandidateToken,
-} from './text.ts';
+} from './text.js';
 
 interface CollectionSearchTag extends MarketplaceTag {
   aliases: string[];

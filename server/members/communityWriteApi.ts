@@ -1,10 +1,10 @@
-import type { MemberRecord } from './repository.ts';
-import type { AuthenticatedIdentity } from '../auth/session.ts';
+import type { MemberRecord } from './repository.js';
+import type { AuthenticatedIdentity } from '../auth/session.js';
 import {
   AccountDeletionPendingError,
   assertCommunityWriteAllowed,
   BannedMemberError,
-} from './standing.ts';
+} from './standing.js';
 
 export function communityWriteDenied(member: MemberRecord): Response | null {
   try {

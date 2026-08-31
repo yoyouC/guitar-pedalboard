@@ -5,16 +5,16 @@ import type {
   MemberRecord,
   MemberRepository,
   UpdateMemberProfileInput,
-} from './repository.ts';
-import { assertCommunityWriteAllowed } from './standing.ts';
-import { normalizeSearchText } from '../search/text.ts';
-import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
+} from './repository.js';
+import { assertCommunityWriteAllowed } from './standing.js';
+import { normalizeSearchText } from '../search/text.js';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.js';
 import {
   HANDLE_CHANGE_INTERVAL_MS,
   HandleChangeTooSoonError,
   HandleUnavailableError,
   MemberUpdateConflictError,
-} from './repository.ts';
+} from './repository.js';
 
 interface MemberRow extends QueryResultRow {
   id: string;

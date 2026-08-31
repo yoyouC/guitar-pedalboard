@@ -2,8 +2,8 @@ import type {
   CreatePresetCollectionRequest,
   PresetCollectionReference,
   UpdatePresetCollectionRequest,
-} from './marketplace.ts';
-import { validatePublicationFields } from './marketplacePublication.ts';
+} from './marketplace.js';
+import { validatePublicationFields } from './marketplacePublication.js';
 
 export type CollectionField =
   | 'title'

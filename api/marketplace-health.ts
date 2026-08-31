@@ -1,8 +1,8 @@
-import { marketplacePool } from '../server/marketplace/postgres.ts';
+import { marketplacePool } from '../server/marketplace/postgres.js';
 import {
   createMarketplaceHealthApi,
   probeMarketplaceStorage,
-} from '../server/operations/healthApi.ts';
+} from '../server/operations/healthApi.js';
 
 const api = createMarketplaceHealthApi({
   async probe() {

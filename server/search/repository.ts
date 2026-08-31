@@ -5,7 +5,7 @@ import type {
   PublishedPresetSearchPage,
   RigDerivedAttributes,
   RigResourceDependencyKey,
-} from '../../shared/marketplace.ts';
+} from '../../shared/marketplace.js';
 
 export interface PublishedPresetSearchInput {
   text: string;

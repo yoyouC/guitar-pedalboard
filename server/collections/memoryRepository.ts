@@ -1,24 +1,24 @@
 import type {
   MarketplaceTag,
   PresetCollection,
-} from '../../shared/marketplace.ts';
+} from '../../shared/marketplace.js';
 import {
   PresetCollectionAccessError,
   PresetCollectionConflictError,
   PresetCollectionReferenceError,
   PresetCollectionTagError,
-} from './repository.ts';
-import type { ManagedMarketplaceTag } from '../tags/repository.ts';
+} from './repository.js';
+import type { ManagedMarketplaceTag } from '../tags/repository.js';
 
 type MemoryCollectionTag = MarketplaceTag & { aliases?: readonly string[] };
-import type { MarketplaceAccountExport } from '../../shared/account.ts';
-import { canIncludePresetRevision } from './referencePolicy.ts';
+import type { MarketplaceAccountExport } from '../../shared/account.js';
+import { canIncludePresetRevision } from './referencePolicy.js';
 import type {
   PresetCollectionReferenceSource,
   PresetCollectionManagementRepository,
   PresetCollectionRepository,
   StoredPresetCollection,
-} from './repository.ts';
+} from './repository.js';
 
 export function createMemoryPresetCollectionRepository(
   initialCollections: readonly PresetCollection[],

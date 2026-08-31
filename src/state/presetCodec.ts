@@ -1,11 +1,11 @@
-import type { CabIrRef } from '../audio/cabIrTypes';
-import { isBuiltinCabId } from '../audio/cabIrTypes';
+import type { CabIrRef } from '../audio/cabIrTypes.js';
+import { isBuiltinCabId } from '../audio/cabIrTypes.js';
 import {
   PRE_AMP_EQ_BANDS,
   createDefaultPreAmpEqState,
   normalizePreAmpEqDb,
   type PreAmpEqState,
-} from '../audio/preAmpEq';
+} from '../audio/preAmpEq.js';
 
 export const RIG_PRESET_VERSION = 5;
 export const PRESET_EXPORT_FORMAT = 'guitar-pedalboard-presets';

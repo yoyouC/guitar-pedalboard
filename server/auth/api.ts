@@ -1,4 +1,4 @@
-import type { PlatformAuth } from './betterAuth.ts';
+import type { PlatformAuth } from './betterAuth.js';
 
 export interface AuthenticationHandler {
   handler(request: Request): Promise<Response>;

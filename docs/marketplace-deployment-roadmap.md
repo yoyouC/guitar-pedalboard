@@ -12,7 +12,8 @@
 - PostgreSQL 17 完整测试：619 passed，0 skipped，0 failed。
 - Playwright：14 passed。
 - TypeScript/Vite build、Oxlint 和发布资产门禁通过。
-- 现有 Vercel 项目已链接，但没有 Marketplace 环境变量；生产 health URL 仍落到 SPA。
+- 现有 Vercel 项目保持 Production 不变；Marketplace 先部署到受保护的 Preview。
+- Neon `guitar-pedalboard` 项目的 `Test` 分支已完成迁移、seed 和投影重建。
 
 ## 执行顺序
 
@@ -50,30 +51,41 @@
 
 验收门槛：连接总量上界可计算，冷启动/暂停不会遗留失控连接，health 超时仍保持两秒上限。
 
-### D3 — Staging 基础设施
+### D3 — 受保护 Test Preview
+
+状态：`DONE`　执行者：Codex
+
+当前路线使用现有 Vercel Hobby 项目的 Preview 环境和现有 Neon 项目的 `Test` 分支，
+不部署 Production、不修改生产别名。Vercel Standard Protection 为生成的 Preview URL 提供
+登录保护；Better Auth 在 Preview 自动读取当前 `VERCEL_URL`，正式环境仍要求显式稳定域名。
+
+- [x] 确认匿名访问被 Vercel SSO 重定向拦截。
+- [x] 复用 Neon `Test` 分支，运行 migration、seed 和 `marketplace:rebuild-all`。
+- [x] 只在 Vercel Preview 配置 pooled database URL、`BETTER_AUTH_SECRET` 和 `CRON_SECRET`。
+- [x] 直连迁移 URL 不进入 Vercel Runtime。
+- [x] Vercel 平台构建通过；11 个函数的编译产物均可被 Node 加载。
+- [x] Health 返回 204，Demo 搜索和标签接口返回 200。
+- [x] Hobby/Test Cron 降为每日一次；未来升级 Pro 后恢复五分钟目标周期。
+
+验收门槛：受保护 Preview 可访问 Test 数据库，公开读路径和 health 正常，Production 未变化。
+
+### D3.1 — Test 身份与写路径验收
 
 状态：`USER`　执行者：项目所有者 + Codex
 
-已确认决策：Vercel Pro、Neon PostgreSQL、亚洲同区域；Staging 先使用稳定的
-`.vercel.app` 域名。
+需要项目所有者提供：
 
-需要项目所有者完成：
-
-- [x] 确认 Vercel Pro，以仓库中的五分钟 Trending Cron 作为调度器。
-- [ ] 创建独立 Vercel Staging 项目、稳定域名和同区域 PostgreSQL。
-- [ ] 开启数据库 PITR，并提供 pooled `MARKETPLACE_RUNTIME_DATABASE_URL` 与仅供 release runner
-      使用的 direct `MARKETPLACE_MIGRATION_DATABASE_URL`。
-- [ ] 在 Staging 配置 `BETTER_AUTH_SECRET`、`BETTER_AUTH_URL`、`RESEND_API_KEY`、
-      `AUTH_EMAIL_FROM`、`CRON_SECRET`、`MARKETPLACE_ADMIN_AUTH_USER_IDS`。
-- [ ] 可选配置 Google OAuth client 与 callback。
+- [ ] `RESEND_API_KEY`。
+- [ ] 已验证发件地址 `AUTH_EMAIL_FROM`。
 
 Codex 随后执行：
 
-- [ ] 在 Staging 数据库执行 migrate、seed 和 `marketplace:rebuild-all`。
-- [ ] 部署 Staging 并验证 health、登录、发布、Revision、Remix、搜索、Like、治理和注销恢复。
+- [ ] 配置 Preview 邮件变量并重新部署。
+- [ ] 验证魔法链接登录、邮件验证、发布、Revision、Remix、Like、治理和注销恢复。
+- [ ] 第一次登录后确认稳定 `auth_user_id`，再配置管理员白名单。
 - [ ] 验证 Cron 授权和失败行为。
 
-验收门槛：稳定 Staging 域名完成端到端验收，Marketplace 故障不影响本地 Rig 和音频。
+验收门槛：受保护 Test Preview 完成身份和核心写路径端到端验收。
 
 ### D4 — 运维基线
 

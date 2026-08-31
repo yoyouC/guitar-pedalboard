@@ -1,6 +1,6 @@
 import type { Pool, QueryResultRow } from 'pg';
-import type { PublicCreatorWorkSummary } from '../../shared/members.ts';
-import type { PublishedPreset } from '../../shared/marketplace.ts';
+import type { PublicCreatorWorkSummary } from '../../shared/members.js';
+import type { PublishedPreset } from '../../shared/marketplace.js';
 
 export interface PublicCreatorWorks {
   listByCreatorId(creatorId: string): Promise<PublicCreatorWorkSummary[]>;

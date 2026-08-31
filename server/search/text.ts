@@ -57,4 +57,4 @@ export function marketplaceTagSearchFields(
 ): string[] {
   return [tag.nameZh, tag.nameEn, ...(tag.aliases ?? [])];
 }
-import type { MarketplaceTag } from '../../shared/marketplace.ts';
+import type { MarketplaceTag } from '../../shared/marketplace.js';

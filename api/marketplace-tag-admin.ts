@@ -1,9 +1,9 @@
-import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.ts';
-import { hasCanonicalOrigin } from '../server/auth/api.ts';
-import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
-import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { createMarketplaceTagAdministrationApi } from '../server/tags/api.ts';
-import { createPostgresMarketplaceTagAdministrationRepository } from '../server/tags/postgresRepository.ts';
+import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.js';
+import { hasCanonicalOrigin } from '../server/auth/api.js';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.js';
+import { marketplacePool } from '../server/marketplace/postgres.js';
+import { createMarketplaceTagAdministrationApi } from '../server/tags/api.js';
+import { createPostgresMarketplaceTagAdministrationRepository } from '../server/tags/postgresRepository.js';
 
 let api: ReturnType<typeof createMarketplaceTagAdministrationApi> | null = null;
 

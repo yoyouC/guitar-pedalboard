@@ -1,8 +1,8 @@
-import type { SessionVerifier } from '../auth/session.ts';
-import type { MemberRepository } from '../members/repository.ts';
-import { isReadyForPublicAttribution } from '../members/repository.ts';
-import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
-import { communityWriteDenied, communityWriteErrorResponse } from '../members/communityWriteApi.ts';
+import type { SessionVerifier } from '../auth/session.js';
+import type { MemberRepository } from '../members/repository.js';
+import { isReadyForPublicAttribution } from '../members/repository.js';
+import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.js';
+import { communityWriteDenied, communityWriteErrorResponse } from '../members/communityWriteApi.js';
 import {
   PresetCollectionAccessError,
   PresetCollectionConflictError,
@@ -10,11 +10,11 @@ import {
   PresetCollectionTagError,
   type PresetCollectionManagementRepository,
   type PresetCollectionRepository,
-} from './repository.ts';
+} from './repository.js';
 import {
   validateCreatePresetCollection,
   validateUpdatePresetCollection,
-} from '../../shared/collectionManagement.ts';
+} from '../../shared/collectionManagement.js';
 
 export interface PresetCollectionApi {
   fetch(request: Request): Promise<Response>;

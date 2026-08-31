@@ -1,4 +1,4 @@
-import type { AuthenticatedIdentity } from '../auth/session.ts';
+import type { AuthenticatedIdentity } from '../auth/session.js';
 
 export const HANDLE_CHANGE_INTERVAL_MS = 90 * 24 * 60 * 60 * 1000;
 

@@ -10,8 +10,8 @@ import {
   type ModerationContentTargetKind,
   type ModerationReportReason,
   type ModerationTargetKind,
-} from './repository.ts';
-import type { MarketplaceAccountExport } from '../../shared/account.ts';
+} from './repository.js';
+import type { MarketplaceAccountExport } from '../../shared/account.js';
 
 interface Target {
   kind: ModerationTargetKind;

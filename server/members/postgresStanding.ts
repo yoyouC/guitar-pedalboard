@@ -1,5 +1,5 @@
 import type { QueryResultRow } from 'pg';
-import { AccountDeletionPendingError, BannedMemberError } from './standing.ts';
+import { AccountDeletionPendingError, BannedMemberError } from './standing.js';
 
 interface PostgresStandingQueryable {
   query<T extends QueryResultRow = QueryResultRow>(

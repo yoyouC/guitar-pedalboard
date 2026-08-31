@@ -1,6 +1,6 @@
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
-import { AccountDeletionPendingError } from '../members/standing.ts';
-import type { MarketplaceWriteLimiter, MarketplaceWritePolicies, TokenBucketPolicy } from './writeLimiter.ts';
+import { AccountDeletionPendingError } from '../members/standing.js';
+import type { MarketplaceWriteLimiter, MarketplaceWritePolicies, TokenBucketPolicy } from './writeLimiter.js';
 
 interface BucketRow extends QueryResultRow {
   scope: 'member' | 'network';

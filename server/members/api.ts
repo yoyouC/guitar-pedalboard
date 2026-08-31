@@ -1,16 +1,16 @@
-import type { MemberProfile, PublicCreatorProfile } from '../../shared/members.ts';
-import type { SessionVerifier } from '../auth/session.ts';
-import type { MemberRecord, MemberRepository, UpdateMemberProfileInput } from './repository.ts';
-import type { PublicCreatorWorks } from './works.ts';
-import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
+import type { MemberProfile, PublicCreatorProfile } from '../../shared/members.js';
+import type { SessionVerifier } from '../auth/session.js';
+import type { MemberRecord, MemberRepository, UpdateMemberProfileInput } from './repository.js';
+import type { PublicCreatorWorks } from './works.js';
+import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.js';
 import {
   HANDLE_CHANGE_INTERVAL_MS,
   HandleChangeTooSoonError,
   HandleUnavailableError,
   MemberUpdateConflictError,
   isReadyForPublicAttribution,
-} from './repository.ts';
-import { communityWriteDenied, communityWriteErrorResponse } from './communityWriteApi.ts';
+} from './repository.js';
+import { communityWriteDenied, communityWriteErrorResponse } from './communityWriteApi.js';
 
 const ME_PATH = '/api/marketplace/me';
 const PROFILE_PATH = '/api/marketplace/me/profile';

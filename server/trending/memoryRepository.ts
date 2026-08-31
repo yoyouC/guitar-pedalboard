@@ -3,15 +3,15 @@ import type {
   MarketplaceLikeTargetSummary,
   PresetCollection,
   PublishedPreset,
-} from '../../shared/marketplace.ts';
-import type { MarketplaceLikeFactSource } from '../likes/factSource.ts';
+} from '../../shared/marketplace.js';
+import type { MarketplaceLikeFactSource } from '../likes/factSource.js';
 import {
   decodeTrendingCursor,
   encodeTrendingCursor,
   followsTrendingBoundary,
-} from './cursor.ts';
-import { marketplaceTrendScore } from './policy.ts';
-import { InvalidTrendingCursorError, type MarketplaceTrendingRepository } from './repository.ts';
+} from './cursor.js';
+import { marketplaceTrendScore } from './policy.js';
+import { InvalidTrendingCursorError, type MarketplaceTrendingRepository } from './repository.js';
 
 interface Target {
   id: string;

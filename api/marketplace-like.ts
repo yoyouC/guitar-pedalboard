@@ -1,13 +1,13 @@
-import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.ts';
-import { hasCanonicalOrigin } from '../server/auth/api.ts';
-import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
-import { createMarketplaceLikesApi } from '../server/likes/api.ts';
-import { createPostgresMarketplaceLikeRepository } from '../server/likes/postgresRepository.ts';
-import { createPostgresMarketplaceTrendingRepository } from '../server/trending/postgresRepository.ts';
-import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { createPostgresMemberRepository } from '../server/members/postgresRepository.ts';
-import { createPostgresMarketplaceWriteLimiter } from '../server/abuse/postgresWriteLimiter.ts';
-import { parseMarketplaceWritePolicies } from '../server/abuse/policy.ts';
+import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.js';
+import { hasCanonicalOrigin } from '../server/auth/api.js';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.js';
+import { createMarketplaceLikesApi } from '../server/likes/api.js';
+import { createPostgresMarketplaceLikeRepository } from '../server/likes/postgresRepository.js';
+import { createPostgresMarketplaceTrendingRepository } from '../server/trending/postgresRepository.js';
+import { marketplacePool } from '../server/marketplace/postgres.js';
+import { createPostgresMemberRepository } from '../server/members/postgresRepository.js';
+import { createPostgresMarketplaceWriteLimiter } from '../server/abuse/postgresWriteLimiter.js';
+import { parseMarketplaceWritePolicies } from '../server/abuse/policy.js';
 
 let api: ReturnType<typeof createMarketplaceLikesApi> | null = null;
 

@@ -2,12 +2,12 @@ import type { Pool, QueryResultRow } from 'pg';
 import type {
   MarketplaceLikeTargetKind,
   MarketplaceLikeTargetSummary,
-} from '../../shared/marketplace.ts';
-import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
-import { MARKETPLACE_LIKE_WRITE_LOCK } from '../likes/postgresLock.ts';
-import { decodeTrendingCursor, encodeTrendingCursor } from './cursor.ts';
-import type { MarketplaceTrendingPolicy } from './policy.ts';
-import { InvalidTrendingCursorError, type MarketplaceTrendingRepository } from './repository.ts';
+} from '../../shared/marketplace.js';
+import type { PostgresQueryable } from '../marketplace/postgresRepository.js';
+import { MARKETPLACE_LIKE_WRITE_LOCK } from '../likes/postgresLock.js';
+import { decodeTrendingCursor, encodeTrendingCursor } from './cursor.js';
+import type { MarketplaceTrendingPolicy } from './policy.js';
+import { InvalidTrendingCursorError, type MarketplaceTrendingRepository } from './repository.js';
 
 interface TargetConfig {
   targetTable: string;

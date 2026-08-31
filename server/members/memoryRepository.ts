@@ -4,8 +4,8 @@ import type {
   MemberRecord,
   MemberRepository,
   UpdateMemberProfileInput,
-} from './repository.ts';
-import { assertCommunityWriteAllowed } from './standing.ts';
+} from './repository.js';
+import { assertCommunityWriteAllowed } from './standing.js';
 
 async function handleDigest(handle: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(handle));
@@ -16,7 +16,7 @@ import {
   HandleChangeTooSoonError,
   HandleUnavailableError,
   MemberUpdateConflictError,
-} from './repository.ts';
+} from './repository.js';
 
 export function createMemoryMemberRepository(
   initialMembers: readonly MemberRecord[] = [],

@@ -3,10 +3,10 @@ import type {
   PublishedPresetRevision,
   PublishedPresetRevisionCompatibility,
   Tone3000DependencyFact,
-} from './marketplace.ts';
-import { rigResourceDependencyKey } from './marketplaceResource.ts';
-import { RIG_PRESET_CATALOG } from './rigPresetCatalog.ts';
-import { RIG_PRESET_VERSION } from '../src/state/presetCodec.ts';
+} from './marketplace.js';
+import { rigResourceDependencyKey } from './marketplaceResource.js';
+import { RIG_PRESET_CATALOG } from './rigPresetCatalog.js';
+import { RIG_PRESET_VERSION } from '../src/state/presetCodec.js';
 
 export const MARKETPLACE_SUPPORTED_SCHEMA_RANGE = {
   min: 2,

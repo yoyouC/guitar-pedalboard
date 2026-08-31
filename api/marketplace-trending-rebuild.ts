@@ -1,7 +1,7 @@
-import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { rebuildMarketplaceTrending } from '../server/trending/postgresRepository.ts';
-import { createMarketplaceTrendingRebuildApi } from '../server/trending/rebuildApi.ts';
-import { parseMarketplaceTrendingPolicy } from '../server/trending/policy.ts';
+import { marketplacePool } from '../server/marketplace/postgres.js';
+import { rebuildMarketplaceTrending } from '../server/trending/postgresRepository.js';
+import { createMarketplaceTrendingRebuildApi } from '../server/trending/rebuildApi.js';
+import { parseMarketplaceTrendingPolicy } from '../server/trending/policy.js';
 
 const api = createMarketplaceTrendingRebuildApi({
   secret: process.env.CRON_SECRET,

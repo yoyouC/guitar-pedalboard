@@ -1,13 +1,13 @@
-import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.ts';
-import { hasCanonicalOrigin } from '../server/auth/api.ts';
-import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
-import { createPresetCollectionApi } from '../server/collections/api.ts';
+import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.js';
+import { hasCanonicalOrigin } from '../server/auth/api.js';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.js';
+import { createPresetCollectionApi } from '../server/collections/api.js';
 import {
   createPostgresPresetCollectionManagementRepository,
   createPostgresPresetCollectionRepository,
-} from '../server/collections/postgresRepository.ts';
-import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { createPostgresMemberRepository } from '../server/members/postgresRepository.ts';
+} from '../server/collections/postgresRepository.js';
+import { marketplacePool } from '../server/marketplace/postgres.js';
+import { createPostgresMemberRepository } from '../server/members/postgresRepository.js';
 
 let publicApi: ReturnType<typeof createPresetCollectionApi> | null = null;
 let privateApi: ReturnType<typeof createPresetCollectionApi> | null = null;

@@ -1,7 +1,7 @@
-import { demoPublishedPreset } from './demoPreset.ts';
-import type { PostgresQueryable } from './postgresRepository.ts';
-import { seedPublishedPreset } from './seed.ts';
-import { rebuildPublishedPresetSearchProjection } from '../search/postgresRepository.ts';
+import { demoPublishedPreset } from './demoPreset.js';
+import type { PostgresQueryable } from './postgresRepository.js';
+import { seedPublishedPreset } from './seed.js';
+import { rebuildPublishedPresetSearchProjection } from '../search/postgresRepository.js';
 
 export interface MarketplaceSeedPool {
   connect(): Promise<PostgresQueryable & { release(): void }>;

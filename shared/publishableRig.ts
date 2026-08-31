@@ -1,13 +1,13 @@
-import type { RigPresetState } from '../src/state/presetCodec.ts';
+import type { RigPresetState } from '../src/state/presetCodec.js';
 import {
   normalizeRig,
   normalizeRigPreset,
   RIG_PRESET_VERSION,
-} from '../src/state/presetCodec.ts';
-import { MARKETPLACE_SUPPORTED_SCHEMA_RANGE } from './marketplaceCompatibility.ts';
-import { RIG_PRESET_CATALOG } from './rigPresetCatalog.ts';
-import type { RigDerivedAttributes, RigResourceDependency } from './marketplace.ts';
-import { rigResourceDependencyKey } from './marketplaceResource.ts';
+} from '../src/state/presetCodec.js';
+import { MARKETPLACE_SUPPORTED_SCHEMA_RANGE } from './marketplaceCompatibility.js';
+import { RIG_PRESET_CATALOG } from './rigPresetCatalog.js';
+import type { RigDerivedAttributes, RigResourceDependency } from './marketplace.js';
+import { rigResourceDependencyKey } from './marketplaceResource.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

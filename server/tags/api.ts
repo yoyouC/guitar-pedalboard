@@ -1,6 +1,6 @@
-import type { SessionVerifier } from '../auth/session.ts';
-import type { MarketplaceTagAdministrationRepository } from './repository.ts';
-import { MarketplaceTagConflictError, MarketplaceTagNotFoundError } from './repository.ts';
+import type { SessionVerifier } from '../auth/session.js';
+import type { MarketplaceTagAdministrationRepository } from './repository.js';
+import { MarketplaceTagConflictError, MarketplaceTagNotFoundError } from './repository.js';
 
 const TAGS_PATH = '/api/marketplace/admin/tags';
 const AUDIT_PATH = `${TAGS_PATH}/audit`;

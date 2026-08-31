@@ -4,33 +4,33 @@ import type {
   PublishedPresetConcurrencyState,
   PublishedPresetRevision,
   PublishedPresetRevisionView,
-} from '../../shared/marketplace.ts';
+} from '../../shared/marketplace.js';
 import type {
   PublishedPresetManagementRepository,
   PublishedPresetPublicationRepository,
   PublishedPresetRepository,
   PublishedPresetRevisionReferenceRepository,
-} from './repository.ts';
+} from './repository.js';
 import {
   PublishedPresetAccessError,
   PublishedPresetConflictError,
   PublishedPresetRevisionNotFoundError,
   PublishedPresetSourceError,
   UnavailableTagError,
-} from './repository.ts';
-import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.ts';
-import type { PublishedPresetSearchRepository } from '../search/repository.ts';
-import { matchesSearchText } from '../search/text.ts';
+} from './repository.js';
+import { isValidStoredPublishedPresetRevision } from '../../shared/marketplaceValidation.js';
+import type { PublishedPresetSearchRepository } from '../search/repository.js';
+import { matchesSearchText } from '../search/text.js';
 import {
   decodeSearchCursor,
   encodeSearchCursor,
   isAfterCursor,
   isAtOrBefore,
   type SearchBoundary,
-} from '../search/cursor.ts';
-import { rigResourceDependencyKey } from '../../shared/marketplaceResource.ts';
-import type { MarketplaceAccountExport } from '../../shared/account.ts';
-import type { ManagedMarketplaceTag } from '../tags/repository.ts';
+} from '../search/cursor.js';
+import { rigResourceDependencyKey } from '../../shared/marketplaceResource.js';
+import type { MarketplaceAccountExport } from '../../shared/account.js';
+import type { ManagedMarketplaceTag } from '../tags/repository.js';
 
 type MemoryMarketplaceTag = MarketplaceTag & {
   aliases?: readonly string[];

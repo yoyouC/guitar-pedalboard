@@ -3,16 +3,16 @@ import type {
   MarketplaceLikeTargetSummary,
   PresetCollection,
   PublishedPreset,
-} from '../../shared/marketplace.ts';
-import { decodePopularCursor, encodePopularCursor, followsPopularBoundary } from './cursor.ts';
-import type { MarketplaceLikeFactSource } from './factSource.ts';
+} from '../../shared/marketplace.js';
+import { decodePopularCursor, encodePopularCursor, followsPopularBoundary } from './cursor.js';
+import type { MarketplaceLikeFactSource } from './factSource.js';
 import {
   InvalidPopularCursorError,
   LikeTargetNotFoundError,
   SelfLikeForbiddenError,
   type MarketplaceLikeRepository,
-} from './repository.ts';
-import type { MarketplaceAccountExport } from '../../shared/account.ts';
+} from './repository.js';
+import type { MarketplaceAccountExport } from '../../shared/account.js';
 
 interface Target {
   id: string;

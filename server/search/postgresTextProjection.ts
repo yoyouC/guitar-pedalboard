@@ -1,6 +1,6 @@
 import type { QueryResultRow } from 'pg';
-import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
-import { normalizeSearchText } from './text.ts';
+import type { PostgresQueryable } from '../marketplace/postgresRepository.js';
+import { normalizeSearchText } from './text.js';
 
 interface ProjectionSourceRow extends QueryResultRow {
   id: string;

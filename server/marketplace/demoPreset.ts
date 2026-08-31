@@ -1,4 +1,4 @@
-import type { CanonicalPublishedPreset } from '../../shared/marketplace.ts';
+import type { CanonicalPublishedPreset } from '../../shared/marketplace.js';
 
 export const DEMO_PUBLISHED_PRESET_ID = 'preset-demo-crunch';
 

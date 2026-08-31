@@ -1,10 +1,10 @@
-import { createMarketplaceAccountApi } from '../server/accounts/api.ts';
-import { createPostgresMarketplaceAccountRepository } from '../server/accounts/postgresRepository.ts';
-import { hasCanonicalOrigin } from '../server/auth/api.ts';
-import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.ts';
-import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
-import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { parseMarketplaceTrendingPolicy } from '../server/trending/policy.ts';
+import { createMarketplaceAccountApi } from '../server/accounts/api.js';
+import { createPostgresMarketplaceAccountRepository } from '../server/accounts/postgresRepository.js';
+import { hasCanonicalOrigin } from '../server/auth/api.js';
+import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.js';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.js';
+import { marketplacePool } from '../server/marketplace/postgres.js';
+import { parseMarketplaceTrendingPolicy } from '../server/trending/policy.js';
 
 let api: ReturnType<typeof createMarketplaceAccountApi> | null = null;
 

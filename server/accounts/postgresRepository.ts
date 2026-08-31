@@ -1,20 +1,20 @@
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
-import type { MarketplaceAccountExport } from '../../shared/account.ts';
-import { deleteMarketplaceWriteBucketsForMember } from '../abuse/postgresWriteLimiter.ts';
-import { rebuildMarketplaceLikeCountsInTransaction } from '../likes/postgresRepository.ts';
-import { MARKETPLACE_LIKE_WRITE_LOCK } from '../likes/postgresLock.ts';
+import type { MarketplaceAccountExport } from '../../shared/account.js';
+import { deleteMarketplaceWriteBucketsForMember } from '../abuse/postgresWriteLimiter.js';
+import { rebuildMarketplaceLikeCountsInTransaction } from '../likes/postgresRepository.js';
+import { MARKETPLACE_LIKE_WRITE_LOCK } from '../likes/postgresLock.js';
 import {
   DEFAULT_MARKETPLACE_TRENDING_POLICY,
   type MarketplaceTrendingPolicy,
-} from '../trending/policy.ts';
-import { rebuildMarketplaceTrendingInTransaction } from '../trending/postgresRepository.ts';
+} from '../trending/policy.js';
+import { rebuildMarketplaceTrendingInTransaction } from '../trending/postgresRepository.js';
 import {
   ACCOUNT_DELETION_GRACE_MS,
   MarketplaceAccountDeletionNotPendingError,
   MarketplaceAccountNotFoundError,
   MarketplaceAccountRecoveryExpiredError,
   type MarketplaceAccountRepository,
-} from './repository.ts';
+} from './repository.js';
 
 interface MemberExportRow extends QueryResultRow {
   id: string;

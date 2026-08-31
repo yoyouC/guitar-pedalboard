@@ -1,4 +1,4 @@
-import type { MarketplaceWriteOperation, MarketplaceWritePolicies, TokenBucketPolicy } from './writeLimiter.ts';
+import type { MarketplaceWriteOperation, MarketplaceWritePolicies, TokenBucketPolicy } from './writeLimiter.js';
 
 const MAX_BUCKET_VALUE = 1_000_000;
 const MAX_FULL_REFILL_MINUTES = 30 * 24 * 60;

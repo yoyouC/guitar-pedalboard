@@ -1,4 +1,4 @@
-import type { SessionVerifier } from './session.ts';
+import type { SessionVerifier } from './session.js';
 
 interface BetterAuthSessionApi {
   getSession(input: { headers: Headers }): Promise<{

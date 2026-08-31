@@ -5,11 +5,11 @@ import type {
   MarketplaceTagAuditEntry,
   MarketplaceTagCommand,
   MarketplaceTagStatus,
-} from './repository.ts';
-import { MarketplaceTagConflictError, MarketplaceTagNotFoundError } from './repository.ts';
-import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
-import { normalizeSearchText } from '../search/text.ts';
-import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
+} from './repository.js';
+import { MarketplaceTagConflictError, MarketplaceTagNotFoundError } from './repository.js';
+import type { PostgresQueryable } from '../marketplace/postgresRepository.js';
+import { normalizeSearchText } from '../search/text.js';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.js';
 
 interface TagRow extends QueryResultRow {
   id: string;

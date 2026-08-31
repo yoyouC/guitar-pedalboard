@@ -4,7 +4,7 @@ import type {
   PresetCollection,
   PresetCollectionVisibility,
   PublishedPresetVisibility,
-} from '../../shared/marketplace.ts';
+} from '../../shared/marketplace.js';
 import {
   PresetCollectionAccessError,
   PresetCollectionConflictError,
@@ -14,12 +14,12 @@ import {
   type PresetCollectionManagementRepository,
   type PresetCollectionRepository,
   type UpdatePresetCollectionInput,
-} from './repository.ts';
-import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
-import { canIncludePresetRevision } from './referencePolicy.ts';
-import { lockCommunityWriteMember } from '../members/postgresStanding.ts';
-import { normalizeSearchText } from '../search/text.ts';
-import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.ts';
+} from './repository.js';
+import type { PostgresQueryable } from '../marketplace/postgresRepository.js';
+import { canIncludePresetRevision } from './referencePolicy.js';
+import { lockCommunityWriteMember } from '../members/postgresStanding.js';
+import { normalizeSearchText } from '../search/text.js';
+import { markMarketplaceTextSearchProjectionWrite } from '../search/postgresTextProjection.js';
 
 interface CollectionRow extends QueryResultRow {
   id: string;

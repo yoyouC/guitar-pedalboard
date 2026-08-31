@@ -5,14 +5,14 @@ import type {
   RigResourceDependency,
   UpdatePublishedPresetMetadataRequest,
   UpdatePublishedPresetVisibilityRequest,
-} from './marketplace.ts';
-import { validatePublicationFields, type PublicationErrors } from './marketplacePublication.ts';
+} from './marketplace.js';
+import { validatePublicationFields, type PublicationErrors } from './marketplacePublication.js';
 import {
   analyzePublishableRigAtSchema,
   isMarketplaceSchemaVersionSupported,
-} from './publishableRig.ts';
-import { RIG_PRESET_VERSION } from '../src/state/presetCodec.ts';
-import { MARKETPLACE_SUPPORTED_SCHEMA_RANGE } from './marketplaceCompatibility.ts';
+} from './publishableRig.js';
+import { RIG_PRESET_VERSION } from '../src/state/presetCodec.js';
+import { MARKETPLACE_SUPPORTED_SCHEMA_RANGE } from './marketplaceCompatibility.js';
 
 export type PresetManagementErrors = PublicationErrors & Partial<Record<
   'expectedUpdatedAt' | 'visibility',

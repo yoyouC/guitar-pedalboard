@@ -1,39 +1,39 @@
-import type { PublishedPresetRepository } from './repository.ts';
-import type { PublishedPresetManagementRepository } from './repository.ts';
+import type { PublishedPresetRepository } from './repository.js';
+import type { PublishedPresetManagementRepository } from './repository.js';
 import {
   PublishedPresetAccessError,
   PublishedPresetConflictError,
   PublishedPresetRevisionNotFoundError,
   PublishedPresetSourceError,
   UnavailableTagError,
-} from './repository.ts';
+} from './repository.js';
 import {
   parseManagedPublishedPreset,
   parsePublicPublishedPreset,
   parsePublishedPresetRevisionView,
-} from '../../shared/marketplaceValidation.ts';
-import { validatePublishPresetRequest } from '../../shared/marketplacePublication.ts';
+} from '../../shared/marketplaceValidation.js';
+import { validatePublishPresetRequest } from '../../shared/marketplacePublication.js';
 import {
   validateMetadataUpdate,
   validateRevisionAppend,
   validateRevisionRestore,
   validateVisibilityUpdate,
-} from '../../shared/marketplaceManagement.ts';
-import type { SessionVerifier } from '../auth/session.ts';
-import type { MemberRepository } from '../members/repository.ts';
-import { isReadyForPublicAttribution } from '../members/repository.ts';
-import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.ts';
+} from '../../shared/marketplaceManagement.js';
+import type { SessionVerifier } from '../auth/session.js';
+import type { MemberRepository } from '../members/repository.js';
+import { isReadyForPublicAttribution } from '../members/repository.js';
+import { CURRENT_MEMBER_TERMS_VERSION } from '../../shared/memberTerms.js';
 import {
   communityWriteDenied,
   communityWriteErrorResponse,
   unverifiedEmailWriteDenied,
-} from '../members/communityWriteApi.ts';
+} from '../members/communityWriteApi.js';
 import type {
   RigResourceDependency,
   Tone3000DependencyFact,
-} from '../../shared/marketplace.ts';
-import { evaluatePublishedPresetRevisionCompatibility } from '../../shared/marketplaceCompatibility.ts';
-import { marketplaceWriteLimitDenied, type MarketplaceWriteLimiter } from '../abuse/writeLimiter.ts';
+} from '../../shared/marketplace.js';
+import { evaluatePublishedPresetRevisionCompatibility } from '../../shared/marketplaceCompatibility.js';
+import { marketplaceWriteLimitDenied, type MarketplaceWriteLimiter } from '../abuse/writeLimiter.js';
 
 export interface MarketplaceCompatibilityFacts {
   inspectTone3000Dependencies(

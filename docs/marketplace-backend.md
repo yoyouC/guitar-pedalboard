@@ -111,4 +111,4 @@ MARKETPLACE_TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55440/mar
 
 部署路由先把公开稳定 URL 转给 Vercel Function，再由最后的 SPA rewrite 处理前端页面。数据库未配置或查询失败时 API 返回稳定的 `503 marketplace_unavailable`；不存在和非公开作品统一返回 `404 published_preset_not_found`。
 
-Trending 由 Vercel Cron 以五分钟目标周期重建，也可用 `npm run marketplace:rebuild-trending` 手动重建。任务只读取当前点赞事实、点赞时间和成员 `community_status`，取消点赞与封禁在下一次成功重建后从榜单排除；公开 API 不接受趋势权重或任何浏览/应用信号。定时入口只接受 Vercel 从 `CRON_SECRET` 生成的 Bearer 授权。
+Trending 在 Hobby/Test 阶段由 Vercel Cron 每日重建一次，也可用 `npm run marketplace:rebuild-trending` 手动重建；升级 Pro 并准备正式上线时，将目标周期恢复为五分钟。任务只读取当前点赞事实、点赞时间和成员 `community_status`，取消点赞与封禁在下一次成功重建后从榜单排除；公开 API 不接受趋势权重或任何浏览/应用信号。定时入口只接受 Vercel 从 `CRON_SECRET` 生成的 Bearer 授权。

@@ -1,11 +1,11 @@
-import type { SessionVerifier } from '../auth/session.ts';
-import { emailVerificationRequired } from '../members/communityWriteApi.ts';
-import type { MarketplaceAccountRepository } from './repository.ts';
+import type { SessionVerifier } from '../auth/session.js';
+import { emailVerificationRequired } from '../members/communityWriteApi.js';
+import type { MarketplaceAccountRepository } from './repository.js';
 import {
   MarketplaceAccountDeletionNotPendingError,
   MarketplaceAccountNotFoundError,
   MarketplaceAccountRecoveryExpiredError,
-} from './repository.ts';
+} from './repository.js';
 
 const EXPORT_PATH = '/api/marketplace/me/export';
 const DELETION_PATH = '/api/marketplace/me/deletion';

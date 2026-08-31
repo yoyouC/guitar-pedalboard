@@ -9,11 +9,11 @@ import type {
   RigDerivedAttributes,
   RigResourceDependency,
   PublishedPresetSourceReference,
-} from '../../shared/marketplace.ts';
+} from '../../shared/marketplace.js';
 import {
   RIG_PRESET_VERSION,
   type RigPresetState,
-} from '../../src/state/presetCodec.ts';
+} from '../../src/state/presetCodec.js';
 
 export interface PublishedPresetRepository {
   findVisibleById(id: string): Promise<PublishedPreset | null>;

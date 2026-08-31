@@ -1,13 +1,13 @@
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
-import type { PublishedPresetVisibility } from '../../shared/marketplace.ts';
-import { rebuildMarketplaceLikeCountsInTransaction } from '../likes/postgresRepository.ts';
-import { MARKETPLACE_LIKE_WRITE_LOCK } from '../likes/postgresLock.ts';
-import { rebuildMarketplaceTrendingInTransaction } from '../trending/postgresRepository.ts';
-import type { MarketplaceTrendingPolicy } from '../trending/policy.ts';
+import type { PublishedPresetVisibility } from '../../shared/marketplace.js';
+import { rebuildMarketplaceLikeCountsInTransaction } from '../likes/postgresRepository.js';
+import { MARKETPLACE_LIKE_WRITE_LOCK } from '../likes/postgresLock.js';
+import { rebuildMarketplaceTrendingInTransaction } from '../trending/postgresRepository.js';
+import type { MarketplaceTrendingPolicy } from '../trending/policy.js';
 import {
   lockActiveContentCreator,
   lockCommunityWriteMember,
-} from '../members/postgresStanding.ts';
+} from '../members/postgresStanding.js';
 import {
   DuplicateModerationReportError,
   ModerationAppealForbiddenError,
@@ -18,7 +18,7 @@ import {
   type MarketplaceModerationRepository,
   type ModerationContentTargetKind,
   type ModerationTargetKind,
-} from './repository.ts';
+} from './repository.js';
 
 const TARGET = {
   preset: { table: 'marketplace_published_presets' },
@@ -189,7 +189,7 @@ export function createPostgresMarketplaceModerationRepository(
         kind: row.kind,
         ...(row.target_kind ? { targetKind: row.target_kind } : {}),
         ...(row.target_id ? { targetId: row.target_id } : {}),
-        ...(row.reason ? { reason: row.reason as import('./repository.ts').ModerationReportReason } : {}),
+        ...(row.reason ? { reason: row.reason as import('./repository.js').ModerationReportReason } : {}),
         ...(row.claimant_name ? { claimantName: row.claimant_name } : {}),
         ...(row.claimant_email ? { claimantEmail: row.claimant_email } : {}),
         details: row.details,

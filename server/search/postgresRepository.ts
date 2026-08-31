@@ -5,18 +5,18 @@ import type {
   RigDerivedAttributes,
   RigResourceDependency,
   RigResourceDependencyKey,
-} from '../../shared/marketplace.ts';
-import type { PostgresQueryable } from '../marketplace/postgresRepository.ts';
+} from '../../shared/marketplace.js';
+import type { PostgresQueryable } from '../marketplace/postgresRepository.js';
 import {
   decodeSearchCursor,
   encodeSearchCursor,
   type SearchBoundary,
-} from './cursor.ts';
+} from './cursor.js';
 import type {
   PublishedPresetSearchInput,
   PublishedPresetSearchRepository,
-} from './repository.ts';
-import { matchesSearchText, searchCandidateToken } from './text.ts';
+} from './repository.js';
+import { matchesSearchText, searchCandidateToken } from './text.js';
 
 interface SearchTag extends MarketplaceTag {
   aliases: string[];

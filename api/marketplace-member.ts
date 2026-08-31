@@ -1,10 +1,10 @@
-import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.ts';
-import { hasCanonicalOrigin } from '../server/auth/api.ts';
-import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.ts';
-import { marketplacePool } from '../server/marketplace/postgres.ts';
-import { createMemberApi } from '../server/members/api.ts';
-import { createPostgresMemberRepository } from '../server/members/postgresRepository.ts';
-import { createPostgresPublicCreatorWorks } from '../server/members/works.ts';
+import { createBetterAuthSessionVerifier } from '../server/auth/betterAuthSession.js';
+import { hasCanonicalOrigin } from '../server/auth/api.js';
+import { authenticationBaseURL, createRuntimeAuth } from '../server/auth/runtime.js';
+import { marketplacePool } from '../server/marketplace/postgres.js';
+import { createMemberApi } from '../server/members/api.js';
+import { createPostgresMemberRepository } from '../server/members/postgresRepository.js';
+import { createPostgresPublicCreatorWorks } from '../server/members/works.js';
 
 let privateApi: ReturnType<typeof createMemberApi> | null = null;
 let publicApi: ReturnType<typeof createMemberApi> | null = null;

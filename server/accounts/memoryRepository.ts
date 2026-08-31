@@ -1,12 +1,12 @@
-import type { MemberRecord } from '../members/repository.ts';
-import type { MarketplaceAccountExport } from '../../shared/account.ts';
+import type { MemberRecord } from '../members/repository.js';
+import type { MarketplaceAccountExport } from '../../shared/account.js';
 import {
   ACCOUNT_DELETION_GRACE_MS,
   MarketplaceAccountDeletionNotPendingError,
   MarketplaceAccountNotFoundError,
   MarketplaceAccountRecoveryExpiredError,
   type MarketplaceAccountRepository,
-} from './repository.ts';
+} from './repository.js';
 
 interface MemoryAccountMembers {
   findByAuthUserId(authUserId: string): Promise<MemberRecord | null>;
