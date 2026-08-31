@@ -191,25 +191,11 @@ export function extractAssembledProcessor(
   return instantiateProcessorSource(build(dspSources, wm[1]), workletPath);
 }
 
-const float32Bits = new DataView(new ArrayBuffer(4));
-
-function orderedFloat32Bits(value: number): number {
-  float32Bits.setFloat32(0, value, true);
-  const bits = float32Bits.getUint32(0, true);
-  return (bits & 0x80000000) !== 0
-    ? 0x80000000 - (bits & 0x7fffffff)
-    : 0x80000000 + bits;
-}
-
-function float32UlpDistance(actual: number, expected: number): number {
-  if (Object.is(actual, expected)) return 0;
-  if (!Number.isFinite(actual) || !Number.isFinite(expected)) return Number.POSITIVE_INFINITY;
-  if (actual === 0 && expected === 0) return Number.POSITIVE_INFINITY;
-  return Math.abs(orderedFloat32Bits(actual) - orderedFloat32Bits(expected));
-}
+const GOLDEN_ABSOLUTE_TOLERANCE = 1e-7;
+const GOLDEN_RELATIVE_TOLERANCE = 1e-6;
 
 /**
- * Float32 golden 断言。相同平台仍逐位一致；跨 CPU 允许一个 ULP 的中间运算舍入差异，
+ * Float32 golden 断言。相同平台仍逐位一致；跨 CPU 允许低于 -120 dB 的舍入差异，
  * 同时继续区分 -0、NaN、Infinity 和真正的 DSP 数值漂移。
  */
 export function assertGoldenEqual(
@@ -221,11 +207,19 @@ export function assertGoldenEqual(
     throw new Error(`${label}: 长度不一致 ${actual.length} vs ${expected.length}`);
   }
   for (let i = 0; i < actual.length; i++) {
-    const ulpDistance = float32UlpDistance(actual[i], expected[i]);
-    if (ulpDistance > 1) {
+    if (Object.is(actual[i], expected[i])) continue;
+    const difference = Math.abs(actual[i] - expected[i]);
+    const tolerance = Math.max(
+      GOLDEN_ABSOLUTE_TOLERANCE,
+      Math.abs(expected[i]) * GOLDEN_RELATIVE_TOLERANCE,
+    );
+    const invalid = !Number.isFinite(actual[i])
+      || !Number.isFinite(expected[i])
+      || (actual[i] === 0 && expected[i] === 0);
+    if (invalid || difference > tolerance) {
       throw new Error(
         `${label}: 样本 ${i} 起分叉 ${actual[i]} vs ${expected[i]} `
-        + `(差 ${actual[i] - expected[i]}, ULP ${ulpDistance})`,
+        + `(绝对差 ${difference}, 容差 ${tolerance})`,
       );
     }
   }

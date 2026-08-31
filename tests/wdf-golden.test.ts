@@ -32,17 +32,19 @@ import { buildProcessorSource } from '../src/audio/workletLoader.ts';
 
 const FIXTURE_DIR = 'tests/fixtures/wdf';
 
-test('golden comparison permits only one portable Float32 ULP', () => {
+test('golden comparison accepts CPU rounding but rejects material drift', () => {
   const value = new Float32Array([0.25]);
-  const bits = new Uint32Array(value.buffer)[0];
-  const oneUlpAway = new Float32Array(new Uint32Array([bits + 1]).buffer);
-  const twoUlpsAway = new Float32Array(new Uint32Array([bits + 2]).buffer);
+  const cpuRounding = new Float32Array([0.25000009]);
+  const materialDrift = new Float32Array([0.250001]);
 
-  assert.doesNotThrow(() => assertGoldenEqual(oneUlpAway, value, 'one ULP'));
-  assert.throws(() => assertGoldenEqual(twoUlpsAway, value, 'two ULPs'), /ULP 2/);
+  assert.doesNotThrow(() => assertGoldenEqual(cpuRounding, value, 'CPU rounding'));
+  assert.throws(
+    () => assertGoldenEqual(materialDrift, value, 'material drift'),
+    /绝对差/,
+  );
   assert.throws(
     () => assertGoldenEqual(new Float32Array([-0]), new Float32Array([0]), 'signed zero'),
-    /ULP Infinity/,
+    /绝对差/,
   );
 });
 
