@@ -16,14 +16,22 @@ open http://localhost:5173/marketplace/presets/preset-demo-crunch
 
 ## PostgreSQL
 
-生产环境设置 `DATABASE_URL`（也兼容 `POSTGRES_URL`），然后依次运行：
+生产 Functions 把提供商的 pooled URL 配置为 `MARKETPLACE_RUNTIME_DATABASE_URL`；它与
+Vercel Functions suspension 生命周期绑定，默认每个 Function 实例最多保留两个连接、
+空闲五秒释放、连接两秒超时、查询十五秒超时。`MARKETPLACE_DATABASE_POOL_MAX`、
+`MARKETPLACE_DATABASE_IDLE_TIMEOUT_MS`、`MARKETPLACE_DATABASE_CONNECTION_TIMEOUT_MS` 和
+`MARKETPLACE_DATABASE_QUERY_TIMEOUT_MS` 可以在既定安全范围内覆盖默认值。
+
+迁移需要跨多个事务持有 session advisory lock，不得使用 transaction-mode pooler。把数据库
+提供商的 direct URL 单独配置为 `MARKETPLACE_MIGRATION_DATABASE_URL`；本地仍兼容
+`DATABASE_URL` 或 `POSTGRES_URL`。然后依次运行：
 
 ```bash
 npm run marketplace:migrate
 npm run marketplace:seed
 ```
 
-迁移脚本按文件名顺序运行全部 SQL，创建成员、认证、handle claim、作品、修订、受控标签和 Rig 筛选投影。数据库约束保证每个作品都有属于自己的当前修订，修订更新和删除由 trigger 拒绝；Remix 的来源作品/修订使用成对复合外键固定，来源撤回不级联删除 Remix；handle claim 不删除，因此旧 handle 不会被其他成员占用。首发事务一次写入作品、不可变修订、标签关系和从 Rig 派生的筛选投影，任一步失败都会回滚。声音更新同样在一个事务内追加修订、推进当前指针并重建筛选投影；每条修订同时冻结当时的派生器材属性，回退直接复制旧 Rig 与该快照，不依赖当前器材目录，也不移动历史指针。账号生命周期迁移记录 30 天恢复窗口和仅限本次注销撤回的可见性快照，并为到期清除提供只能擦除 Rig/依赖/派生属性、不能恢复正文的受控修订路径。seed 命令幂等创建 `preset-demo-crunch`，提交后会调用统一重建器补齐全部搜索投影字段。
+迁移脚本在专用 PostgreSQL session 上取得 advisory lock，按文件名顺序执行尚未记录的 SQL，并把文件名和 SHA-256 摘要与 schema 变更放入同一事务。重复执行只校验摘要；已应用文件发生变化会拒绝发布，迁移 runner 因而必须作为串行 release job 运行，不能放入并发的 Vercel build。迁移创建成员、认证、handle claim、作品、修订、受控标签和 Rig 筛选投影。数据库约束保证每个作品都有属于自己的当前修订，修订更新和删除由 trigger 拒绝；Remix 的来源作品/修订使用成对复合外键固定，来源撤回不级联删除 Remix；handle claim 不删除，因此旧 handle 不会被其他成员占用。首发事务一次写入作品、不可变修订、标签关系和从 Rig 派生的筛选投影，任一步失败都会回滚。声音更新同样在一个事务内追加修订、推进当前指针并重建筛选投影；每条修订同时冻结当时的派生器材属性，回退直接复制旧 Rig 与该快照，不依赖当前器材目录，也不移动历史指针。账号生命周期迁移记录 30 天恢复窗口和仅限本次注销撤回的可见性快照，并为到期清除提供只能擦除 Rig/依赖/派生属性、不能恢复正文的受控修订路径。seed 命令幂等创建 `preset-demo-crunch`，提交后会调用统一重建器补齐全部搜索投影字段。
 
 生产认证还需配置：
 
@@ -32,6 +40,7 @@ BETTER_AUTH_SECRET=至少32字符的随机密钥
 BETTER_AUTH_URL=https://你的正式域名
 RESEND_API_KEY=...
 AUTH_EMAIL_FROM='Guitar Pedalboard <login@example.com>'
+MARKETPLACE_RUNTIME_DATABASE_URL=postgresql://运行时连接池地址
 GOOGLE_CLIENT_ID=...          # 可选；必须与 secret 同时提供
 GOOGLE_CLIENT_SECRET=...      # 可选
 CRON_SECRET=至少16字符的独立随机密钥
@@ -39,6 +48,9 @@ MARKETPLACE_TRENDING_WINDOW_HOURS=168       # 可选，默认 7 天
 MARKETPLACE_TRENDING_HALF_LIFE_HOURS=48    # 可选，默认 48 小时
 MARKETPLACE_ADMIN_AUTH_USER_IDS=auth-user-id-1,auth-user-id-2
 ```
+
+`MARKETPLACE_MIGRATION_DATABASE_URL` 仅保存到受控 release runner，不进入 Vercel Function
+环境。
 
 Google OAuth 回调 URI 为 `https://你的域名/api/auth/callback/google`。魔法链接验证令牌在数据库中哈希保存、五分钟过期并且只能消费一次；本站不启用密码认证。相同邮箱不会自动连接 Google 身份，成员必须从资料面板显式发起“验证并绑定 Google”。
 
