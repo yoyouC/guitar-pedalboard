@@ -1,10 +1,11 @@
+import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import {
   FS,
   SIGNALS,
   GOLDEN_ENTRIES,
-  assertBitEqual,
+  assertGoldenEqual,
   extractAssembledProcessor,
   makeSignal,
   readFixture,
@@ -31,6 +32,20 @@ import { buildProcessorSource } from '../src/audio/workletLoader.ts';
 
 const FIXTURE_DIR = 'tests/fixtures/wdf';
 
+test('golden comparison permits only one portable Float32 ULP', () => {
+  const value = new Float32Array([0.25]);
+  const bits = new Uint32Array(value.buffer)[0];
+  const oneUlpAway = new Float32Array(new Uint32Array([bits + 1]).buffer);
+  const twoUlpsAway = new Float32Array(new Uint32Array([bits + 2]).buffer);
+
+  assert.doesNotThrow(() => assertGoldenEqual(oneUlpAway, value, 'one ULP'));
+  assert.throws(() => assertGoldenEqual(twoUlpsAway, value, 'two ULPs'), /ULP 2/);
+  assert.throws(
+    () => assertGoldenEqual(new Float32Array([-0]), new Float32Array([0]), 'signed zero'),
+    /ULP Infinity/,
+  );
+});
+
 interface Manifest {
   effects: Record<string, { params: Record<string, number> }>;
 }
@@ -47,7 +62,7 @@ function manifestParams(name: string): Record<string, number[]> {
 type EngineCtor = new (sampleRate: number) => BlockProcessor;
 
 for (const entry of GOLDEN_ENTRIES) {
-  test(`wdf-golden[${entry.name}]: *.dsp.js 引擎输出与黄金样本逐位一致`, async () => {
+  test(`wdf-golden[${entry.name}]: *.dsp.js 引擎输出匹配黄金样本`, async () => {
     const mod = (await import(`../src/audio/wdf/${entry.module}`)) as Record<
       string,
       EngineCtor
@@ -57,7 +72,7 @@ for (const entry of GOLDEN_ENTRIES) {
     const params = manifestParams(entry.name);
     for (const sig of SIGNALS) {
       const y = runBlocks(new Engine(FS), makeSignal(sig), params);
-      assertBitEqual(
+      assertGoldenEqual(
         y,
         readFixture(`${FIXTURE_DIR}/${entry.name}-${sig}.f32`),
         `${entry.name}/${sig}`,
@@ -65,14 +80,14 @@ for (const entry of GOLDEN_ENTRIES) {
     }
   });
 
-  test(`wdf-golden[${entry.name}]: worklet ?raw 装配串输出与黄金样本逐位一致`, () => {
+  test(`wdf-golden[${entry.name}]: worklet ?raw 装配串输出匹配黄金样本`, () => {
     const { ctor, params } = extractAssembledProcessor(
       `src/audio/wdf/${entry.name}Worklet.ts`,
       buildProcessorSource,
     );
     for (const sig of SIGNALS) {
       const y = runBlocks(new ctor(), makeSignal(sig), params);
-      assertBitEqual(
+      assertGoldenEqual(
         y,
         readFixture(`${FIXTURE_DIR}/${entry.name}-${sig}.f32`),
         `${entry.name}/${sig} (装配)`,

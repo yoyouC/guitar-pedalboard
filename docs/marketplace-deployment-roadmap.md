@@ -8,8 +8,8 @@
 ## 当前基线
 
 - 分支：`feat/marketplace-v1`
-- 本地无数据库测试：602 passed，16 skipped，0 failed；跳过项需要真实 PostgreSQL。
-- PostgreSQL 17 完整测试：618 passed，0 skipped，0 failed。
+- 本地无数据库测试：603 passed，16 skipped，0 failed；跳过项需要真实 PostgreSQL。
+- PostgreSQL 17 完整测试：619 passed，0 skipped，0 failed。
 - Playwright：14 passed。
 - TypeScript/Vite build、Oxlint 和发布资产门禁通过。
 - 现有 Vercel 项目已链接，但没有 Marketplace 环境变量；生产 health URL 仍落到 SPA。
@@ -23,7 +23,7 @@
 - [x] GitHub Actions 执行 lint、无数据库单测、生产 build 和发布资产检查。
 - [x] GitHub Actions 使用 PostgreSQL 17 执行全部数据库集成测试，禁止 skip。
 - [x] GitHub Actions 安装 Chromium 并执行 Playwright 验收。
-- [x] 本地复跑与工作流等价的命令；PostgreSQL 17 下 618 passed、0 skipped。
+- [x] 本地复跑与工作流等价的命令；PostgreSQL 17 下 619 passed、0 skipped。
 
 验收门槛：三个 CI job 全部通过；真实 PostgreSQL 运行中没有 skip 或失败。
 

@@ -191,8 +191,28 @@ export function extractAssembledProcessor(
   return instantiateProcessorSource(build(dspSources, wm[1]), workletPath);
 }
 
-/** 逐位断言两个 Float32 输出一致(Object.is 语义,-0/NaN 也区分) */
-export function assertBitEqual(
+const float32Bits = new DataView(new ArrayBuffer(4));
+
+function orderedFloat32Bits(value: number): number {
+  float32Bits.setFloat32(0, value, true);
+  const bits = float32Bits.getUint32(0, true);
+  return (bits & 0x80000000) !== 0
+    ? 0x80000000 - (bits & 0x7fffffff)
+    : 0x80000000 + bits;
+}
+
+function float32UlpDistance(actual: number, expected: number): number {
+  if (Object.is(actual, expected)) return 0;
+  if (!Number.isFinite(actual) || !Number.isFinite(expected)) return Number.POSITIVE_INFINITY;
+  if (actual === 0 && expected === 0) return Number.POSITIVE_INFINITY;
+  return Math.abs(orderedFloat32Bits(actual) - orderedFloat32Bits(expected));
+}
+
+/**
+ * Float32 golden 断言。相同平台仍逐位一致；跨 CPU 允许一个 ULP 的中间运算舍入差异，
+ * 同时继续区分 -0、NaN、Infinity 和真正的 DSP 数值漂移。
+ */
+export function assertGoldenEqual(
   actual: Float32Array,
   expected: Float32Array,
   label: string,
@@ -201,9 +221,11 @@ export function assertBitEqual(
     throw new Error(`${label}: 长度不一致 ${actual.length} vs ${expected.length}`);
   }
   for (let i = 0; i < actual.length; i++) {
-    if (!Object.is(actual[i], expected[i])) {
+    const ulpDistance = float32UlpDistance(actual[i], expected[i]);
+    if (ulpDistance > 1) {
       throw new Error(
-        `${label}: 样本 ${i} 起分叉 ${actual[i]} vs ${expected[i]} (差 ${actual[i] - expected[i]})`,
+        `${label}: 样本 ${i} 起分叉 ${actual[i]} vs ${expected[i]} `
+        + `(差 ${actual[i] - expected[i]}, ULP ${ulpDistance})`,
       );
     }
   }

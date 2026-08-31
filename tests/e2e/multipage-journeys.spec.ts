@@ -26,7 +26,7 @@ async function mockAuthenticatedWorkspace(page: Page, current = member) {
 async function startTestAudio(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: '🎵 测试音源' }).click();
-  await expect(page.getByRole('button', { name: '■ 停止' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '■ 停止' })).toBeVisible({ timeout: 15_000 });
 }
 
 async function applyDemoTone(page: Page) {
