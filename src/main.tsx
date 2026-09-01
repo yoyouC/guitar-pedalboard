@@ -1,6 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+// Tone Market 样式抽离自 index.css(含 mk- 设计基建),须在 index.css 之后加载
+import './styles/marketplace.css'
 // TONE3000 生产单例必须先于 App 链 evaluate:rigStore 创建时会恢复初始 rig
 // 并触发 tone3000 可用性检查,provider 须已注册(issue #14 手动验收发现)
 import './tone3000/instance.ts'

@@ -47,7 +47,7 @@ export function PublishPresetDialog({
     void marketplaceClient.listAvailableTags().then(
       (next) => { if (active) setTags(next); },
       (cause: unknown) => {
-        if (active) setMessage(cause instanceof Error ? cause.message : '无法读取标签');
+        if (active) setMessage(cause instanceof Error ? cause.message : 'Could not load tags');
       },
     );
     return () => { active = false; };
@@ -114,7 +114,7 @@ export function PublishPresetDialog({
       if (cause instanceof MarketplaceClientError && cause.fields) {
         setMessage(Object.values(cause.fields).join('；'));
       } else {
-        setMessage(cause instanceof Error ? cause.message : '发布失败');
+        setMessage(cause instanceof Error ? cause.message : 'Publish failed');
       }
     } finally {
       setBusy(false);
@@ -123,22 +123,22 @@ export function PublishPresetDialog({
 
   return createPortal(
     <div className="publish-dialog__backdrop" role="presentation">
-      <section className="publish-dialog" role="dialog" aria-modal="true" aria-label="发布预览">
+      <section className="publish-dialog" role="dialog" aria-modal="true" aria-label="Publish preview">
         <div className="publish-dialog__header">
-          <div><small>发布预览 · {sourceLabel}</small><h2>发布到音色广场</h2></div>
-          <button type="button" onClick={onClose} aria-label="关闭发布预览">×</button>
+          <div><small>Publish preview · {sourceLabel}</small><h2>Publish to Tone Market</h2></div>
+          <button type="button" onClick={onClose} aria-label="Close publish preview">×</button>
         </div>
         <form onSubmit={publish}>
           {appendsOwnWork && (
-            <p>这份 Rig 来自你的作品；确认后会追加一个不可变的新修订。</p>
+            <p>This Rig comes from your own work; confirming appends an immutable new revision.</p>
           )}
           {!appendsOwnWork && <>
-          <label>标题<input required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+          <label>Title<input required value={title} onChange={(event) => setTitle(event.target.value)} /></label>
           {errors.title && <small className="publish-dialog__error">{errors.title}</small>}
-          <label>介绍<textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+          <label>Description<textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
           {errors.description && <small className="publish-dialog__error">{errors.description}</small>}
           <fieldset>
-            <legend>受控标签（1–5 个）</legend>
+            <legend>Managed tags (1–5)</legend>
             <div className="publish-dialog__tags">
               {tags.map((tag) => (
                 <label key={tag.id}>
@@ -154,19 +154,19 @@ export function PublishPresetDialog({
             <div><dt>Pedals</dt><dd>{rig.chain.map((item) => item.effectId).join('、') || 'None'}</dd></div>
             <div><dt>Amp</dt><dd>{rig.amp.modelKey}</dd></div>
             <div><dt>Cab</dt><dd>{rig.cab.id}</dd></div>
-            <div><dt>资源</dt><dd>{soundAnalysis?.resourceDependencies.map((item) => item.kind === 'builtin' ? '内置' : `TONE3000 ${item.toneId}`).join('、') ?? errors.rig ?? 'Rig 无法无损发布或包含本机资源'}</dd></div>
+            <div><dt>Resources</dt><dd>{soundAnalysis?.resourceDependencies.map((item) => item.kind === 'builtin' ? 'Built-in' : `TONE3000 ${item.toneId}`).join('、') ?? errors.rig ?? 'The Rig cannot be published losslessly or contains local resources'}</dd></div>
           </dl>
           {message && <p className="publish-dialog__error" role="alert">{message}</p>}
           {verificationUrl && (
             <button type="button" onClick={() => { onClose(); onNavigate(verificationUrl); }}>
-              验证邮箱
+              Verify email
             </button>
           )}
-          {retryAt && <p>可重试时间：{new Date(retryAt).toLocaleString()}</p>}
+          {retryAt && <p>Retry available after {new Date(retryAt).toLocaleString()}</p>}
           <div className="publish-dialog__actions">
-            <button type="button" onClick={onClose}>取消</button>
+            <button type="button" onClick={onClose}>Cancel</button>
             <button type="submit" disabled={busy || !currentMemberId || !soundAnalysis || (!appendsOwnWork && !preview.value)}>
-              {busy ? '发布中…' : appendsOwnWork ? '追加新修订' : '确认发布'}
+              {busy ? 'Publishing…' : appendsOwnWork ? 'Append new revision' : 'Confirm publish'}
             </button>
           </div>
         </form>

@@ -48,7 +48,7 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
         setRevisions(history);
       },
       onError: (cause: unknown) => {
-        setMessage(cause instanceof Error ? cause.message : '无法读取管理数据。');
+        setMessage(cause instanceof Error ? cause.message : 'Could not load the management data.');
       },
     });
     return () => {
@@ -73,7 +73,7 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
           setTags(availableTags);
           setRevisions(history);
           setBusy(false);
-          setMessage('作品已更新。');
+          setMessage('Work updated.');
         },
         onError: (cause) => {
           setBusy(false);
@@ -82,12 +82,12 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
           }
           if (cause instanceof MarketplaceClientError && cause.retryAt) setRetryAt(cause.retryAt);
           if (cause instanceof MarketplaceClientError && cause.code === 'update_conflict') {
-            setMessage('作品已在别处更新。请重新载入最新版本后再继续。');
+            setMessage('This work was updated elsewhere. Reload the latest version before continuing.');
           } else if (cause instanceof MarketplaceClientError && cause.fields) {
             setErrors(cause.fields);
             setMessage(cause.message);
           } else {
-            setMessage(cause instanceof Error ? cause.message : '更新失败。');
+            setMessage(cause instanceof Error ? cause.message : 'Update failed.');
           }
         },
       },
@@ -130,21 +130,21 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
   ));
 
   return (
-    <section className="preset-manager" aria-label="管理广场预设">
-      <h3>管理作品</h3>
+    <section className="preset-manager" aria-label="Manage marketplace tone">
+      <h3>Manage work</h3>
       <form onSubmit={saveMetadata}>
         <label>
-          标题
+          Title
           <input value={title} onChange={(event) => setTitle(event.target.value)} />
           {errors.title && <small className="preset-manager__error">{errors.title}</small>}
         </label>
         <label>
-          介绍（纯文本）
+          Description (plain text)
           <textarea value={description} onChange={(event) => setDescription(event.target.value)} />
           {errors.description && <small className="preset-manager__error">{errors.description}</small>}
         </label>
         <fieldset>
-          <legend>标签（1–5）</legend>
+          <legend>Tags (1–5)</legend>
           <div className="preset-manager__tags">
             {tags.map((tag) => (
               <label key={tag.id}>
@@ -155,27 +155,27 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
                     ? current.filter((id) => id !== tag.id)
                     : [...current, tag.id])}
                 />
-                {tag.nameZh} / {tag.nameEn}
+                {tag.nameEn}
               </label>
             ))}
           </div>
           {errors.tagIds && <small className="preset-manager__error">{errors.tagIds}</small>}
         </fieldset>
-        <button type="submit" disabled={busy}>保存展示信息</button>
+        <button type="submit" disabled={busy}>Save presentation</button>
       </form>
 
       <div className="preset-manager__section">
-        <h4>声音修订</h4>
-        <button type="button" disabled={busy} onClick={appendCurrentRig}>将当前 Rig 追加为新修订</button>
+        <h4>Sound revisions</h4>
+        <button type="button" disabled={busy} onClick={appendCurrentRig}>Append current Rig as a new revision</button>
         <ol className="preset-manager__history">
           {revisions.map((revision) => (
             <li key={revision.id}>
-              <span>{revision.id}{revision.isCurrent ? '（当前）' : ''}</span>
+              <span>{revision.id}{revision.isCurrent ? ' (current)' : ''}</span>
               <button type="button" onClick={() => onNavigate(
                 `/marketplace/tones/${encodeURIComponent(preset.id)}/revisions/${encodeURIComponent(revision.id)}`
-              )}>永久链接</button>
+              )}>Permalink</button>
               {!revision.isCurrent && (
-                <button type="button" disabled={busy} onClick={() => restore(revision.id)}>复制并回退</button>
+                <button type="button" disabled={busy} onClick={() => restore(revision.id)}>Copy & roll back</button>
               )}
             </li>
           ))}
@@ -183,20 +183,20 @@ export function PublishedPresetManager({ preset, onUpdated, onNavigate }: Publis
       </div>
 
       <div className="preset-manager__section">
-        <h4>可见性</h4>
-        <p>当前：{preset.visibility}</p>
+        <h4>Visibility</h4>
+        <p>Current: {preset.visibility}</p>
         <div className="preset-manager__buttons">
           <button type="button" disabled={busy || preset.visibility === 'public'} onClick={() => setVisibility('public')}>Public</button>
           <button type="button" disabled={busy || preset.visibility === 'unlisted'} onClick={() => setVisibility('unlisted')}>Unlisted</button>
-          <button type="button" disabled={busy || preset.visibility === 'withdrawn'} onClick={() => setVisibility('withdrawn')}>撤回</button>
+          <button type="button" disabled={busy || preset.visibility === 'withdrawn'} onClick={() => setVisibility('withdrawn')}>Withdraw</button>
         </div>
       </div>
 
       {message && <p className="preset-manager__message" role="status">{message}</p>}
       {verificationUrl && (
-        <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>
+        <button type="button" onClick={() => onNavigate(verificationUrl)}>Verify email</button>
       )}
-      {retryAt && <p className="preset-manager__message">可重试时间：{new Date(retryAt).toLocaleString()}</p>}
+      {retryAt && <p className="preset-manager__message">Retry available after {new Date(retryAt).toLocaleString()}</p>}
     </section>
   );
 }

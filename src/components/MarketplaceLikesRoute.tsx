@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { ArrowLeft, AudioWaveform, Clock, Heart, Layers, LogIn } from 'lucide-react';
 import type {
   MarketplaceLikedTargetSummary,
+  MarketplaceLikeState,
   MarketplaceLikeTargetKind,
   MarketplaceLikeTargetSummary,
   PublishedPresetSearchItem,
@@ -9,6 +11,9 @@ import { marketplaceClient } from '../marketplace/client.ts';
 import { tonePath } from '../marketplace/route.ts';
 import { useMemberSession } from '../members/useMemberSession.ts';
 import { MarketplaceLikeButton } from './MarketplaceLikeButton.tsx';
+import { EmptyState } from './marketplace-ui/EmptyState.tsx';
+import { HashVisual } from './marketplace-ui/HashVisual.tsx';
+import { MiniRigChain } from './marketplace-ui/MiniRigChain.tsx';
 
 type RankingKind = 'popular' | 'trending' | 'latest';
 
@@ -16,17 +21,17 @@ const RANKING_COPY: Record<RankingKind, { title: string; eyebrow: string; explan
   popular: {
     title: 'Popular',
     eyebrow: 'Most recognized',
-    explanation: '按当前有效 Like 总数排序。Tone 与 Collection 独立排名，不读取浏览量、应用次数、音频或演奏行为。',
+    explanation: 'Ranked by the current total of active likes. Tones and collections rank independently — no views, applies, audio, or playing behavior are read.',
   },
   trending: {
     title: 'Trending',
     eyebrow: 'Recent recognition',
-    explanation: '只根据近期新增的有效 Like 衰减快照排序。没有个性化推荐，也没有人工 Featured。',
+    explanation: 'Ranked from a decayed snapshot of recently added active likes only. No personalization and no hand-picked featuring.',
   },
   latest: {
     title: 'Latest Tones',
     eyebrow: 'Newest public work',
-    explanation: '按公开发布时间展示最新 Tone；Unlisted 与已撤回内容不会进入列表。',
+    explanation: 'Newest public tones by publish time; unlisted and withdrawn work never appears here.',
   },
 };
 
@@ -41,6 +46,112 @@ function targetPath(kind: MarketplaceLikeTargetKind, id: string): string {
   return kind === 'preset'
     ? tonePath(id)
     : `/marketplace/collections/${encodeURIComponent(id)}`;
+}
+
+function formatDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function RankRowsSkeleton({ count = 6 }: { count?: number }) {
+  return (
+    <div className="mk-rank-list" aria-hidden="true">
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="mk-card mk-rank-row">
+          <div className="mk-skeleton" style={{ width: 64, height: 40 }} />
+          <div style={{ flex: 1, display: 'grid', gap: 6 }}>
+            <div className="mk-skeleton" style={{ height: 14, width: '45%' }} />
+            <div className="mk-skeleton" style={{ height: 11, width: '30%' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SummaryRow({
+  rank,
+  kind,
+  item,
+  metaExtra,
+  onNavigate,
+  onChange,
+}: {
+  rank?: number;
+  kind: MarketplaceLikeTargetKind;
+  item: MarketplaceLikeTargetSummary;
+  metaExtra?: string;
+  onNavigate(pathname: string): void;
+  onChange?(state: MarketplaceLikeState): void;
+}) {
+  return (
+    <article className="mk-card mk-card--interactive mk-rank-row">
+      <button
+        type="button"
+        className="mk-rank-row__main"
+        onClick={() => onNavigate(targetPath(kind, item.id))}
+      >
+        {rank !== undefined && (
+          <span className={rank <= 3 ? 'mk-rank-row__rank mk-rank-row__rank--top' : 'mk-rank-row__rank'}>
+            {String(rank).padStart(2, '0')}
+          </span>
+        )}
+        <HashVisual seed={item.id} className="mk-rank-row__thumb">
+          {kind === 'collection' && <Layers size={16} strokeWidth={1.5} />}
+        </HashVisual>
+        <span className="mk-rank-row__text">
+          <span className="mk-rank-row__title">{item.title}</span>
+          <span className="mk-rank-row__meta">@{item.creator.handle}{metaExtra ? ` · ${metaExtra}` : ''}</span>
+        </span>
+        <span className="mk-rank-row__likes">
+          <Heart size={12} aria-hidden="true" />
+          {item.likeCount}
+        </span>
+      </button>
+      <MarketplaceLikeButton
+        kind={kind}
+        targetId={item.id}
+        targetCreatorId={item.creator.id}
+        onNavigate={onNavigate}
+        onChange={onChange}
+        hideHints
+      />
+    </article>
+  );
+}
+
+function LatestRow({ rank, item, onNavigate }: {
+  rank: number;
+  item: PublishedPresetSearchItem;
+  onNavigate(pathname: string): void;
+}) {
+  return (
+    <article className="mk-card mk-card--interactive mk-rank-row">
+      <button
+        type="button"
+        className="mk-rank-row__main"
+        onClick={() => onNavigate(tonePath(item.id))}
+      >
+        <span className={rank <= 3 ? 'mk-rank-row__rank mk-rank-row__rank--top' : 'mk-rank-row__rank'}>
+          {String(rank).padStart(2, '0')}
+        </span>
+        <span className="mk-rank-row__thumb mk-rank-row__thumb--rig">
+          <MiniRigChain
+            pedalIds={item.derivedAttributes.pedalIds}
+            ampId={item.derivedAttributes.ampId}
+            seed={item.id}
+            compact
+          />
+        </span>
+        <span className="mk-rank-row__text">
+          <span className="mk-rank-row__title">{item.title}</span>
+          <span className="mk-rank-row__meta">@{item.creator.handle} · {formatDate(item.createdAt)}</span>
+        </span>
+      </button>
+      <MarketplaceLikeButton kind="preset" targetId={item.id} targetCreatorId={item.creator.id} onNavigate={onNavigate} hideHints />
+    </article>
+  );
 }
 
 function RankedSection({
@@ -61,23 +172,30 @@ function RankedSection({
   onLoadMore(): void;
 }) {
   return (
-    <section className="marketplace-ranking">
-      <h2>{title}</h2>
-      {items.map((item, index) => (
-        <article key={item.id}>
-          <strong>#{index + 1}</strong>
-          <button type="button" onClick={() => onNavigate(targetPath(kind, item.id))}>{item.title}</button>
-          <small>@{item.creator.handle}</small>
-          <MarketplaceLikeButton
-            kind={kind}
-            targetId={item.id}
-            targetCreatorId={item.creator.id}
-            onNavigate={onNavigate}
-          />
-        </article>
-      ))}
-      {!busy && items.length === 0 && <p>这里还没有内容。</p>}
-      {cursor && <button type="button" disabled={busy} onClick={onLoadMore}>加载更多</button>}
+    <section className="mk-rank-section" aria-label={title}>
+      <h2 className="mk-detail__section-title">
+        {title}
+        <span className="mk-rank-section__count">{items.length}</span>
+      </h2>
+      {busy && items.length === 0 ? <RankRowsSkeleton /> : (
+        <div className="mk-rank-list">
+          {items.map((item, index) => (
+            <SummaryRow key={item.id} rank={index + 1} kind={kind} item={item} onNavigate={onNavigate} />
+          ))}
+        </div>
+      )}
+      {!busy && items.length === 0 && (
+        <EmptyState
+          icon={kind === 'preset' ? AudioWaveform : Layers}
+          title={`No ${kind === 'preset' ? 'tones' : 'collections'} ranked yet`}
+          hint="Likes from the community decide the ranking."
+        />
+      )}
+      {cursor && (
+        <div className="mk-browse__more">
+          <button type="button" className="mk-btn mk-btn--secondary" disabled={busy} onClick={onLoadMore}>Load more</button>
+        </div>
+      )}
     </section>
   );
 }
@@ -130,7 +248,7 @@ export function MarketplaceRankingPage({ pathname, onNavigate }: {
       setBusy(false);
     }, (cause: unknown) => {
       if (!active) return;
-      setMessage(cause instanceof Error ? cause.message : '榜单暂不可用。');
+      setMessage(cause instanceof Error ? cause.message : 'Rankings are unavailable.');
       setBusy(false);
     });
     return () => { active = false; };
@@ -160,7 +278,7 @@ export function MarketplaceRankingPage({ pathname, onNavigate }: {
         setCollectionCursor(page.nextCursor);
       }
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '加载失败。');
+      setMessage(cause instanceof Error ? cause.message : 'Load failed.');
     } finally {
       setBusy(false);
     }
@@ -174,48 +292,74 @@ export function MarketplaceRankingPage({ pathname, onNavigate }: {
       setLatest((current) => [...current, ...page.items]);
       setPresetCursor(page.nextCursor);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '加载失败。');
+      setMessage(cause instanceof Error ? cause.message : 'Load failed.');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <section className="marketplace-detail marketplace-ranking-page" aria-live="polite">
-      <div className="marketplace-detail__topline">
-        <span className="marketplace-detail__eyebrow">Tone Market · {copy.eyebrow}</span>
-        <button className="marketplace-detail__close" type="button" onClick={() => onNavigate('/')}>返回效果器</button>
+    <section className="mk-page" aria-live="polite">
+      <div className="mk-detail__topline">
+        <span className="mk-detail__eyebrow">Tone Market · {copy.eyebrow}</span>
+        <button className="mk-btn mk-btn--ghost" type="button" onClick={() => onNavigate('/')}>
+          <ArrowLeft size={15} aria-hidden="true" />
+          Back to pedalboard
+        </button>
       </div>
-      <nav className="marketplace-search__tabs" aria-label="Tone Market discovery views">
-        <button type="button" onClick={() => onNavigate('/marketplace')}>Search</button>
+
+      <nav className="mk-browse__views" aria-label="Tone Market discovery views">
+        <button type="button" className="mk-browse__view" onClick={() => onNavigate('/marketplace')}>Search</button>
         {(['popular', 'trending', 'latest'] as const).map((kind) => (
-          <button key={kind} type="button" aria-pressed={ranking === kind} onClick={() => onNavigate(`/marketplace/${kind}`)}>{RANKING_COPY[kind].title}</button>
+          <button key={kind} type="button" className="mk-browse__view" aria-pressed={ranking === kind} onClick={() => onNavigate(`/marketplace/${kind}`)}>{RANKING_COPY[kind].title}</button>
         ))}
       </nav>
-      <div className="marketplace-detail__content">
-        <h1>{copy.title}</h1>
-        <p className="marketplace-ranking-page__explanation">{copy.explanation}</p>
-        {message && <p className="marketplace-detail__error" role="alert">{message}</p>}
-        {ranking === 'latest' ? (
-          <section className="marketplace-ranking">
-            <h2>Tones</h2>
-            {latest.map((item) => (
-              <article key={item.id}>
-                <button type="button" onClick={() => onNavigate(tonePath(item.id))}>{item.title}</button>
-                <small>@{item.creator.handle} · {new Date(item.createdAt).toLocaleDateString()}</small>
-                <MarketplaceLikeButton kind="preset" targetId={item.id} targetCreatorId={item.creator.id} onNavigate={onNavigate} />
-              </article>
-            ))}
-            {!busy && latest.length === 0 && <p>还没有公开 Tone。</p>}
-            {presetCursor && <button type="button" disabled={busy} onClick={() => void loadLatest()}>加载更多</button>}
-          </section>
-        ) : (
-          <div className="marketplace-ranking-grid">
-            <RankedSection title="Tones" kind="preset" items={presets} cursor={presetCursor} busy={busy} onNavigate={onNavigate} onLoadMore={() => void loadRanking('preset', presetCursor!)} />
-            <RankedSection title="Collections" kind="collection" items={collections} cursor={collectionCursor} busy={busy} onNavigate={onNavigate} onLoadMore={() => void loadRanking('collection', collectionCursor!)} />
-          </div>
+
+      <header className="mk-browse__heading">
+        <h1 className="mk-browse__title">{copy.title}</h1>
+        {!busy && !message && (
+          <span className="mk-browse__count">
+            {ranking === 'latest' ? `${latest.length} tones` : `${presets.length + collections.length} entries`}
+          </span>
         )}
-      </div>
+      </header>
+      <p className="mk-page__explanation">{copy.explanation}</p>
+
+      {message && (
+        <div className="mk-browse__error" role="alert">
+          <strong>Ranking unavailable</strong>
+          <p>{message}</p>
+        </div>
+      )}
+
+      {ranking === 'latest' ? (
+        <section className="mk-rank-section" aria-label="Latest tones">
+          <h2 className="mk-detail__section-title">
+            Tones
+            <span className="mk-rank-section__count">{latest.length}</span>
+          </h2>
+          {busy && latest.length === 0 ? <RankRowsSkeleton /> : (
+            <div className="mk-rank-list">
+              {latest.map((item, index) => (
+                <LatestRow key={item.id} rank={index + 1} item={item} onNavigate={onNavigate} />
+              ))}
+            </div>
+          )}
+          {!busy && latest.length === 0 && !message && (
+            <EmptyState icon={Clock} title="No public tones yet" hint="New public work appears here first." />
+          )}
+          {presetCursor && (
+            <div className="mk-browse__more">
+              <button type="button" className="mk-btn mk-btn--secondary" disabled={busy} onClick={() => void loadLatest()}>Load more</button>
+            </div>
+          )}
+        </section>
+      ) : (
+        <div className="mk-rank-sections">
+          <RankedSection title="Tones" kind="preset" items={presets} cursor={presetCursor} busy={busy} onNavigate={onNavigate} onLoadMore={() => void loadRanking('preset', presetCursor!)} />
+          <RankedSection title="Collections" kind="collection" items={collections} cursor={collectionCursor} busy={busy} onNavigate={onNavigate} onLoadMore={() => void loadRanking('collection', collectionCursor!)} />
+        </div>
+      )}
     </section>
   );
 }
@@ -234,22 +378,30 @@ function LikedSection({
   onUnlike(id: string): void;
 }) {
   return (
-    <section className="marketplace-ranking">
-      <h2>{title}</h2>
-      {items.map((item) => (
-        <article key={item.id}>
-          <button type="button" onClick={() => onNavigate(targetPath(kind, item.id))}>{item.title}</button>
-          <small>@{item.creator.handle} · liked {new Date(item.likedAt).toLocaleDateString()}</small>
-          <MarketplaceLikeButton
+    <section className="mk-rank-section" aria-label={title}>
+      <h2 className="mk-detail__section-title">
+        {title}
+        <span className="mk-rank-section__count">{items.length}</span>
+      </h2>
+      <div className="mk-rank-list">
+        {items.map((item) => (
+          <SummaryRow
+            key={item.id}
             kind={kind}
-            targetId={item.id}
-            targetCreatorId={item.creator.id}
+            item={item}
+            metaExtra={`liked ${formatDate(item.likedAt)}`}
             onNavigate={onNavigate}
             onChange={(state) => { if (!state.liked) onUnlike(item.id); }}
           />
-        </article>
-      ))}
-      {items.length === 0 && <p>这里还没有内容。</p>}
+        ))}
+      </div>
+      {items.length === 0 && (
+        <EmptyState
+          icon={kind === 'preset' ? AudioWaveform : Layers}
+          title="Nothing here yet"
+          hint="Likes you make while signed in are collected here."
+        />
+      )}
     </section>
   );
 }
@@ -276,29 +428,39 @@ export function MarketplaceMyLikesPanel({ onNavigate }: { onNavigate(pathname: s
       setLoading(false);
     }, (cause: unknown) => {
       if (!active) return;
-      setMessage(cause instanceof Error ? cause.message : 'My Likes 暂不可用。');
+      setMessage(cause instanceof Error ? cause.message : 'My Likes is unavailable.');
       setLoading(false);
     });
     return () => { active = false; };
   }, [session.status]);
 
-  if (session.status === 'loading') return <p>正在读取 My Likes…</p>;
+  if (session.status === 'loading') return <RankRowsSkeleton count={3} />;
   if (session.status !== 'authenticated') return (
-    <div className="marketplace-search__empty">
-      <strong>登录后查看私有 My Likes</strong>
-      <p>你的 Like 轨迹只在这里展示，不会出现在 Public Profile。</p>
-      <button type="button" onClick={() => onNavigate('/login?return=%2Flibrary%3Ftab%3Dlikes')}>Sign in</button>
+    <div className="mk-my-likes-signin">
+      <EmptyState
+        icon={LogIn}
+        title="Sign in to view your private My Likes"
+        hint="Your like activity only appears here — never on your Public Profile."
+      />
+      <div className="mk-browse__more">
+        <button type="button" className="mk-btn mk-btn--primary" onClick={() => onNavigate('/login?return=%2Flibrary%3Ftab%3Dlikes')}>Sign in</button>
+      </div>
     </div>
   );
   return (
-    <div>
-      <p>My Likes 是私有清单，Tone 与 Collection 分开保存；Public Profile 不会暴露这些轨迹。</p>
-      {loading && <p>正在读取 My Likes…</p>}
+    <div className="mk-my-likes">
+      <p className="mk-page__explanation">
+        My Likes is a private list — tones and collections are kept separately, and your Public
+        Profile never exposes this activity.
+      </p>
+      {loading && <RankRowsSkeleton count={3} />}
       {message && <p role="alert">{message}</p>}
-      {!loading && !message && <div className="marketplace-ranking-grid">
-        <LikedSection title="Liked Tones" kind="preset" items={presets} onNavigate={onNavigate} onUnlike={(id) => setPresets((current) => current.filter((item) => item.id !== id))} />
-        <LikedSection title="Liked Collections" kind="collection" items={collections} onNavigate={onNavigate} onUnlike={(id) => setCollections((current) => current.filter((item) => item.id !== id))} />
-      </div>}
+      {!loading && !message && (
+        <div className="mk-rank-sections">
+          <LikedSection title="Liked Tones" kind="preset" items={presets} onNavigate={onNavigate} onUnlike={(id) => setPresets((current) => current.filter((item) => item.id !== id))} />
+          <LikedSection title="Liked Collections" kind="collection" items={collections} onNavigate={onNavigate} onUnlike={(id) => setCollections((current) => current.filter((item) => item.id !== id))} />
+        </div>
+      )}
     </div>
   );
 }

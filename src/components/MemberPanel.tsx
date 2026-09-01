@@ -40,7 +40,7 @@ export function MemberPanel({ onNavigate, locale }: MemberPanelProps) {
       await memberSession.logout();
       setOpen(false);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '退出失败');
+      setMessage(cause instanceof Error ? cause.message : 'Sign-out failed');
     }
   };
 
@@ -55,7 +55,7 @@ export function MemberPanel({ onNavigate, locale }: MemberPanelProps) {
         @{member.handle}
       </button>
       {open && (
-        <section className="member-panel" aria-label="成员账户">
+        <section className="member-panel" aria-label="Member account">
           <button className="member-panel__close" type="button" onClick={() => setOpen(false)}>×</button>
           <span className="marketplace-detail__eyebrow">Signed in</span>
           <h2>{member.displayName}</h2>

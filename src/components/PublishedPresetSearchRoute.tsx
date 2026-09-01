@@ -1,4 +1,14 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  ArrowLeft,
+  ChevronDown,
+  Layers,
+  Search,
+  SearchX,
+  SlidersHorizontal,
+  Users,
+  X,
+} from 'lucide-react';
 import type {
   MarketplaceTag,
   PresetCollectionSearchItem,
@@ -14,7 +24,10 @@ import { EFFECT_REGISTRY } from '../audio/effects';
 import { marketplaceClient } from '../marketplace/client';
 import { marketplaceSearchPath, marketplaceSearchRouteState } from '../marketplace/searchRoute';
 import { tonePath } from '../marketplace/route';
-import { MarketplaceLikeButton } from './MarketplaceLikeButton.tsx';
+import { CollectionCard } from './marketplace-ui/CollectionCard.tsx';
+import { CreatorRow } from './marketplace-ui/CreatorRow.tsx';
+import { EmptyState } from './marketplace-ui/EmptyState.tsx';
+import { PresetCard, PresetCardSkeleton } from './marketplace-ui/PresetCard.tsx';
 
 interface PublishedPresetSearchRouteProps {
   pathname: string;
@@ -24,6 +37,10 @@ interface PublishedPresetSearchRouteProps {
 }
 
 type DiscoveryTab = 'presets' | 'collections' | 'creators';
+
+const SKELETON_COUNT = 8;
+const STAGGER_STEP_MS = 30;
+const STAGGER_CAP = 10;
 
 function commaValues(value: string): string[] {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
@@ -45,13 +62,6 @@ function localDate(value?: string): string {
   const date = new Date(value);
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
-function dependencySummary(item: PublishedPresetSearchItem): string {
-  return item.resourceDependencies.map((dependency) => dependency.kind === 'builtin'
-    ? 'Built-in'
-    : `TONE3000 ${dependency.toneId}${dependency.modelId ? `/${dependency.modelId}` : ''}`
-  ).join(' · ');
 }
 
 export function PublishedPresetSearchRoute({
@@ -84,6 +94,7 @@ export function PublishedPresetSearchRoute({
   const [creatorText, setCreatorText] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     if (!active) return;
@@ -108,7 +119,7 @@ export function PublishedPresetSearchRoute({
       setCollectionItems((current) => append ? [...current, ...page.items] : page.items);
       setCollectionCursor(page.nextCursor);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '合集搜索暂时不可用。');
+      setMessage(cause instanceof Error ? cause.message : 'Collection search is unavailable.');
     } finally {
       setBusy(false);
     }
@@ -124,7 +135,7 @@ export function PublishedPresetSearchRoute({
       setCreatorItems((current) => append ? [...current, ...page.items] : page.items);
       setCreatorCursor(page.nextCursor);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '创作者搜索暂时不可用。');
+      setMessage(cause instanceof Error ? cause.message : 'Creator search is unavailable.');
     } finally {
       setBusy(false);
     }
@@ -169,7 +180,7 @@ export function PublishedPresetSearchRoute({
         if (!mounted) return;
         setItems([]);
         setNextCursor(null);
-        setMessage(cause instanceof Error ? cause.message : 'Tone Market 暂时不可用。');
+        setMessage(cause instanceof Error ? cause.message : 'Tone Market is unavailable.');
         setBusy(false);
       },
     );
@@ -180,6 +191,7 @@ export function PublishedPresetSearchRoute({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    setFiltersOpen(false);
     if (tab === 'collections') {
       void runCollectionSearch(collectionText, null, false);
       return;
@@ -190,7 +202,7 @@ export function PublishedPresetSearchRoute({
     }
     const resourceDependencyKeys = resourceDependencyValues(resourceDependencies);
     if (!resourceDependencyKeys) {
-      setMessage('资源依赖格式应为 builtin、tone3000:<toneId> 或 tone3000:<toneId>:<modelId>。');
+      setMessage('Dependency keys must look like builtin, tone3000:<toneId>, or tone3000:<toneId>:<modelId>.');
       return;
     }
     onNavigate(marketplaceSearchPath({
@@ -207,140 +219,389 @@ export function PublishedPresetSearchRoute({
     }));
   };
 
+  const searchLabel = tab === 'presets'
+    ? 'Search tones, creators, or tags'
+    : tab === 'collections'
+      ? 'Search collection titles, descriptions, tags, or creators'
+      : 'Search creators by handle or display name';
+  const submitLabel = busy
+    ? 'Searching…'
+    : tab === 'presets' ? 'Search Tones' : tab === 'collections' ? 'Search Collections' : 'Search Creators';
+  const countLabel = busy || message
+    ? ''
+    : tab === 'presets'
+      ? `${items.length} ${items.length === 1 ? 'tone' : 'tones'}`
+      : tab === 'collections'
+        ? `${collectionItems.length} ${collectionItems.length === 1 ? 'collection' : 'collections'}`
+        : `${creatorItems.length} ${creatorItems.length === 1 ? 'creator' : 'creators'}`;
+  const activeTags = tab === 'presets'
+    ? tags.filter((tag) => request.tagIds?.includes(tag.id))
+    : [];
+  const firstPage = !request.cursor;
+
+  const filterGroup = (label: string, open: boolean, children: ReactNode) => (
+    <details className="mk-filter-group" open={open || undefined}>
+      <summary>
+        <span>{label}</span>
+        <ChevronDown className="mk-filter-group__chevron" size={14} aria-hidden="true" />
+      </summary>
+      <div className="mk-filter-group__body">{children}</div>
+    </details>
+  );
+
   return (
-    <section className="marketplace-detail marketplace-search" aria-live="polite">
-      <div className="marketplace-detail__topline">
-        <span className="marketplace-detail__eyebrow">Tone Market · Unified discovery</span>
-        <button className="marketplace-detail__close" type="button" onClick={onClose}>返回效果器</button>
+    <section className="mk-browse" aria-live="polite">
+      <div className="mk-browse__mobilebar">
+        <button
+          type="button"
+          className="mk-btn mk-btn--secondary"
+          aria-expanded={filtersOpen}
+          aria-controls="mk-browse-filters"
+          onClick={() => setFiltersOpen(true)}
+        >
+          <SlidersHorizontal size={15} aria-hidden="true" />
+          Filters
+        </button>
       </div>
-      <h1>找到下一种声音</h1>
-      <nav className="marketplace-search__tabs" aria-label="Tone Market discovery views">
-        <button type="button" aria-pressed>Search</button>
-        <button type="button" onClick={() => onNavigate('/marketplace/popular')}>Popular</button>
-        <button type="button" onClick={() => onNavigate('/marketplace/trending')}>Trending</button>
-        <button type="button" onClick={() => onNavigate('/marketplace/latest')}>Latest</button>
-      </nav>
-      <nav className="marketplace-search__tabs" aria-label="发现类型">
-        {([
-          ['presets', '预设'],
-          ['collections', '合集'],
-          ['creators', '创作者'],
-        ] as const).map(([kind, label]) => (
-          <button
-            key={kind}
-            type="button"
-            aria-pressed={tab === kind}
-            onClick={() => {
-              setTab(kind);
-              setMessage('');
-              if (kind === 'collections' && collectionItems.length === 0) {
-                void runCollectionSearch(collectionText, null, false);
-              }
-              if (kind === 'creators' && creatorItems.length === 0) {
-                void runCreatorSearch(creatorText, null, false);
-              }
-            }}
-          >{label}</button>
-        ))}
-      </nav>
-      <form className="marketplace-search__form" onSubmit={submit}>
-        <label>
-          {tab === 'presets'
-            ? '搜索预设标题、介绍、创作者或标签'
-            : tab === 'collections'
-              ? '搜索合集标题、介绍、标签或作者'
-              : '搜索创作者 handle 或显示名'}
-          <input
-            value={tab === 'presets' ? text : tab === 'collections' ? collectionText : creatorText}
-            placeholder="例如：rock、摇滚、distortion"
-            onChange={(event) => {
-              if (tab === 'presets') setText(event.target.value);
-              else if (tab === 'collections') setCollectionText(event.target.value);
-              else setCreatorText(event.target.value);
-            }}
-          />
-        </label>
-        {tab === 'presets' && <fieldset>
-          <legend>受控标签</legend>
-          <div className="preset-manager__tags">
-            {tags.map((tag) => (
-              <label key={tag.id}>
-                <input type="checkbox" checked={tagIds.includes(tag.id)} onChange={() => setTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} />
-                {tag.nameZh} / {tag.nameEn}
+
+      {filtersOpen && (
+        <div className="mk-browse__backdrop" aria-hidden="true" onClick={() => setFiltersOpen(false)} />
+      )}
+
+      <aside
+        id="mk-browse-filters"
+        className={filtersOpen ? 'mk-browse__sidebar mk-browse__sidebar--open' : 'mk-browse__sidebar'}
+        aria-label="Search filters"
+      >
+        <form className="mk-browse__filters" onSubmit={submit}>
+          <div className="mk-browse__filters-head">
+            <span>Filters</span>
+            <button
+              type="button"
+              className="mk-btn mk-btn--ghost"
+              aria-label="Close filters"
+              onClick={() => setFiltersOpen(false)}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="mk-filter-group">
+            <label className="mk-filter-group__label" htmlFor="mk-browse-search">{searchLabel}</label>
+            <div className="mk-browse__search">
+              <Search className="mk-browse__search-icon" size={15} aria-hidden="true" />
+              <input
+                id="mk-browse-search"
+                className="mk-input"
+                value={tab === 'presets' ? text : tab === 'collections' ? collectionText : creatorText}
+                placeholder='Try "rock", "distortion", "ambient"…'
+                onChange={(event) => {
+                  if (tab === 'presets') setText(event.target.value);
+                  else if (tab === 'collections') setCollectionText(event.target.value);
+                  else setCreatorText(event.target.value);
+                }}
+              />
+            </div>
+          </div>
+
+          {tab === 'presets' && filterGroup('Tags', true, (
+            <div className="mk-filter-group__options">
+              {tags.map((tag) => (
+                <label key={tag.id} className="mk-filter-check">
+                  <input
+                    type="checkbox"
+                    checked={tagIds.includes(tag.id)}
+                    onChange={() => setTagIds((current) => current.includes(tag.id)
+                      ? current.filter((id) => id !== tag.id)
+                      : [...current, tag.id])}
+                  />
+                  {tag.nameEn}
+                </label>
+              ))}
+            </div>
+          ))}
+          {tab === 'presets' && filterGroup('Pedals', false, (
+            <label className="mk-filter-field">
+              <span>Name or id, comma-separated</span>
+              <input className="mk-input" list="market-pedals" value={pedals} onChange={(event) => setPedals(event.target.value)} />
+            </label>
+          ))}
+          {tab === 'presets' && filterGroup('Amp', false, (
+            <label className="mk-filter-field">
+              <span>Name or id, comma-separated</span>
+              <input className="mk-input" list="market-amps" value={amps} onChange={(event) => setAmps(event.target.value)} />
+            </label>
+          ))}
+          {tab === 'presets' && filterGroup('Cab', false, (
+            <label className="mk-filter-field">
+              <span>Name or id, comma-separated</span>
+              <input className="mk-input" list="market-cabs" value={cabs} onChange={(event) => setCabs(event.target.value)} />
+            </label>
+          ))}
+          {tab === 'presets' && filterGroup('Date range', false, (
+            <>
+              <label className="mk-filter-field">
+                <span>Published after</span>
+                <input className="mk-input" type="datetime-local" value={publishedAfter} onChange={(event) => setPublishedAfter(event.target.value)} />
               </label>
+              <label className="mk-filter-field">
+                <span>Published before</span>
+                <input className="mk-input" type="datetime-local" value={publishedBefore} onChange={(event) => setPublishedBefore(event.target.value)} />
+              </label>
+            </>
+          ))}
+          {tab === 'presets' && filterGroup('Resource dependencies', false, (
+            <>
+              <div className="mk-filter-group__options">
+                <label className="mk-filter-check">
+                  <input
+                    type="checkbox"
+                    checked={resourceKinds.includes('builtin')}
+                    onChange={() => setResourceKinds((current) => current.includes('builtin')
+                      ? current.filter((kind) => kind !== 'builtin')
+                      : [...current, 'builtin'])}
+                  />
+                  Built-in resources
+                </label>
+                <label className="mk-filter-check">
+                  <input
+                    type="checkbox"
+                    checked={resourceKinds.includes('tone3000')}
+                    onChange={() => setResourceKinds((current) => current.includes('tone3000')
+                      ? current.filter((kind) => kind !== 'tone3000')
+                      : [...current, 'tone3000'])}
+                  />
+                  TONE3000
+                </label>
+              </div>
+              <label className="mk-filter-field">
+                <span>Exact dependencies</span>
+                <input
+                  className="mk-input"
+                  value={resourceDependencies}
+                  placeholder="builtin, tone3000:123:456"
+                  onChange={(event) => setResourceDependencies(event.target.value)}
+                />
+              </label>
+            </>
+          ))}
+
+          <datalist id="market-pedals">{EFFECT_REGISTRY.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</datalist>
+          <datalist id="market-amps">{AMP_REGISTRY.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</datalist>
+          <datalist id="market-cabs">{CAB_SELECTOR_REGISTRY.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</datalist>
+
+          <button type="submit" className="mk-btn mk-btn--primary" disabled={busy}>{submitLabel}</button>
+          {tab === 'presets' && (
+            <small className="mk-browse__filters-note">
+              Filters are written to the URL — shareable, and restorable via browser Back/Forward.
+              Only equipment identities derived at publish time are matched, never knob values or raw Rig JSON.
+            </small>
+          )}
+        </form>
+      </aside>
+
+      <div className="mk-browse__main">
+        <header className="mk-browse__header">
+          <div className="mk-browse__heading">
+            <h1 className="mk-browse__title">Tone Market</h1>
+            {countLabel && <span className="mk-browse__count">{countLabel}</span>}
+          </div>
+          <button type="button" className="mk-btn mk-btn--ghost" onClick={onClose}>
+            <ArrowLeft size={15} aria-hidden="true" />
+            Back to pedalboard
+          </button>
+        </header>
+
+        <nav className="mk-browse__views" aria-label="Tone Market discovery views">
+          <button type="button" className="mk-browse__view" aria-pressed>Search</button>
+          <button type="button" className="mk-browse__view" onClick={() => onNavigate('/marketplace/popular')}>Popular</button>
+          <button type="button" className="mk-browse__view" onClick={() => onNavigate('/marketplace/trending')}>Trending</button>
+          <button type="button" className="mk-browse__view" onClick={() => onNavigate('/marketplace/latest')}>Latest</button>
+        </nav>
+
+        <nav className="mk-tabs" aria-label="Discovery type">
+          {([
+            ['presets', 'Presets'],
+            ['collections', 'Collections'],
+            ['creators', 'Creators'],
+          ] as const).map(([kind, label]) => (
+            <button
+              key={kind}
+              type="button"
+              className="mk-tabs__tab"
+              aria-pressed={tab === kind}
+              onClick={() => {
+                setTab(kind);
+                setMessage('');
+                if (kind === 'collections' && collectionItems.length === 0) {
+                  void runCollectionSearch(collectionText, null, false);
+                }
+                if (kind === 'creators' && creatorItems.length === 0) {
+                  void runCreatorSearch(creatorText, null, false);
+                }
+              }}
+            >{label}</button>
+          ))}
+        </nav>
+
+        {activeTags.length > 0 && (
+          <div className="mk-browse__chips" aria-label="Active tag filters">
+            {activeTags.map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                className="mk-chip"
+                aria-label={`Remove tag filter ${tag.nameEn}`}
+                onClick={() => onNavigate(marketplaceSearchPath({
+                  ...request,
+                  tagIds: (request.tagIds ?? []).filter((id) => id !== tag.id),
+                  cursor: undefined,
+                }))}
+              >
+                {tag.nameEn}
+                <X size={12} aria-hidden="true" />
+              </button>
             ))}
           </div>
-        </fieldset>}
-        {tab === 'presets' && <div className="marketplace-search__filters">
-          <label>Pedal（名称或 id，逗号分隔）<input list="market-pedals" value={pedals} onChange={(event) => setPedals(event.target.value)} /></label>
-          <label>Amp（名称或 id，逗号分隔）<input list="market-amps" value={amps} onChange={(event) => setAmps(event.target.value)} /></label>
-          <label>Cab（名称或 id，逗号分隔）<input list="market-cabs" value={cabs} onChange={(event) => setCabs(event.target.value)} /></label>
-          <label>发布起点<input type="datetime-local" value={publishedAfter} onChange={(event) => setPublishedAfter(event.target.value)} /></label>
-          <label>发布终点<input type="datetime-local" value={publishedBefore} onChange={(event) => setPublishedBefore(event.target.value)} /></label>
-        </div>}
-        <datalist id="market-pedals">{EFFECT_REGISTRY.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</datalist>
-        <datalist id="market-amps">{AMP_REGISTRY.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</datalist>
-        <datalist id="market-cabs">{CAB_SELECTOR_REGISTRY.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</datalist>
-        {tab === 'presets' && <fieldset>
-          <legend>资源类型</legend>
-          <div className="preset-manager__tags">
-            {(['builtin', 'tone3000'] as const).map((kind) => (
-              <label key={kind}><input type="checkbox" checked={resourceKinds.includes(kind)} onChange={() => setResourceKinds((current) => current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind])} />{kind === 'builtin' ? '内置资源' : 'TONE3000'}</label>
+        )}
+
+        {message && (
+          <div className="mk-browse__error" role="alert">
+            <strong>Tone Market search failed</strong>
+            <p>{message}</p>
+            <small>You can head back to the pedalboard and keep playing your local Rig.</small>
+          </div>
+        )}
+
+        {tab === 'presets' && (busy && items.length === 0 ? (
+          <div className="mk-grid">
+            {Array.from({ length: SKELETON_COUNT }, (_, index) => <PresetCardSkeleton key={index} />)}
+          </div>
+        ) : (
+          <div className="mk-grid">
+            {items.map((item, index) => (
+              <div
+                key={item.id}
+                className={firstPage ? 'mk-grid__item mk-grid__item--enter' : 'mk-grid__item mk-grid__item--append'}
+                style={firstPage ? { animationDelay: `${Math.min(index, STAGGER_CAP) * STAGGER_STEP_MS}ms` } : undefined}
+              >
+                <PresetCard
+                  id={item.id}
+                  title={item.title}
+                  creatorHandle={item.creator.handle}
+                  pedalIds={item.derivedAttributes.pedalIds}
+                  ampId={item.derivedAttributes.ampId}
+                  tags={item.tags}
+                  createdAt={item.createdAt}
+                  onClick={() => onNavigate(tonePath(item.id))}
+                />
+              </div>
             ))}
           </div>
-        </fieldset>}
-        {tab === 'presets' && <label>精确资源依赖<input value={resourceDependencies} placeholder="builtin、tone3000:123:456" onChange={(event) => setResourceDependencies(event.target.value)} /></label>}
-        <button type="submit" disabled={busy}>{busy ? '搜索中…' : `搜索${tab === 'presets' ? ' Tone' : tab === 'collections' ? ' Collection' : ' Creator'}`}</button>
-        {tab === 'presets' && <small>筛选会写入当前 URL，可直接分享，并可用浏览器 Back / Forward 恢复；只读取发布时派生的器材身份，不搜索旋钮值或任意 Rig JSON。</small>}
-      </form>
-      {message && <div className="marketplace-detail__error" role="alert"><strong>Tone Market 无法完成搜索</strong><p>{message}</p><small>你仍可返回效果器继续使用本地 Rig。</small></div>}
-      {tab === 'presets' && <div className="marketplace-search__results">
-        {items.map((item) => (
-          <article key={item.id}>
-            <button type="button" onClick={() => onNavigate(tonePath(item.id))}>{item.title}</button>
-            <p>{item.description || '作者没有填写介绍。'}</p>
-            <small>@{item.creator.handle} · {item.tags.map((tag) => tag.nameZh).join(' · ')}</small>
-            <small>{item.derivedAttributes.pedalIds.join('、') || 'No pedals'} → {item.derivedAttributes.ampId} → {item.derivedAttributes.cabId}</small>
-            <small>{dependencySummary(item)} · 发布于 {new Date(item.createdAt).toLocaleDateString()}{item.isRemix ? ' · Remix' : ''}</small>
-            <MarketplaceLikeButton kind="preset" targetId={item.id} targetCreatorId={item.creator.id} onNavigate={onNavigate} />
-          </article>
         ))}
-      </div>}
-      {tab === 'collections' && <div className="marketplace-search__results">
-        {collectionItems.map((item) => (
-          <article key={item.id}>
-            <button type="button" onClick={() => onNavigate(item.url)}>{item.title}</button>
-            <p>{item.description || '作者没有填写介绍。'}</p>
-            <small>@{item.creator.handle} · {item.tags.map((tag) => tag.nameZh).join(' · ')}</small>
-            <MarketplaceLikeButton kind="collection" targetId={item.id} targetCreatorId={item.creator.id} onNavigate={onNavigate} />
-          </article>
+
+        {tab === 'collections' && (busy && collectionItems.length === 0 ? (
+          <div className="mk-grid">
+            {Array.from({ length: SKELETON_COUNT }, (_, index) => <PresetCardSkeleton key={index} />)}
+          </div>
+        ) : (
+          <div className="mk-grid">
+            {collectionItems.map((item) => (
+              <div key={item.id} className="mk-grid__item mk-grid__item--append">
+                <CollectionCard
+                  id={item.id}
+                  title={item.title}
+                  description={item.description}
+                  creatorHandle={item.creator.handle}
+                  tags={item.tags}
+                  createdAt={item.createdAt}
+                  onClick={() => onNavigate(item.url)}
+                />
+              </div>
+            ))}
+          </div>
         ))}
-      </div>}
-      {tab === 'creators' && <div className="marketplace-search__results">
-        {creatorItems.map((item) => (
-          <article key={item.id}>
-            <button type="button" onClick={() => onNavigate(item.url)}>{item.displayName}</button>
-            <p>@{item.handle}</p>
-            <small>{item.bio || '创作者没有填写简介。'}</small>
-          </article>
+
+        {tab === 'creators' && (busy && creatorItems.length === 0 ? (
+          <div className="mk-creator-list">
+            {Array.from({ length: 4 }, (_, index) => (
+              <div key={index} className="mk-card mk-creator-row" aria-hidden="true">
+                <div className="mk-skeleton" style={{ width: 44, height: 44, borderRadius: '50%' }} />
+                <div className="mk-creator-row__main" style={{ flex: 1 }}>
+                  <div className="mk-skeleton" style={{ height: 14, width: '35%' }} />
+                  <div className="mk-skeleton" style={{ height: 12, width: '60%' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mk-creator-list">
+            {creatorItems.map((item) => (
+              <CreatorRow
+                key={item.id}
+                displayName={item.displayName}
+                handle={item.handle}
+                bio={item.bio}
+                createdAt={item.createdAt}
+                onClick={() => onNavigate(item.url)}
+              />
+            ))}
+          </div>
         ))}
-      </div>}
-      {!busy && !message && tab === 'presets' && items.length === 0 && <div className="marketplace-search__empty"><strong>没有匹配的 Tone</strong><p>试试减少筛选条件或换一个关键词。</p></div>}
-      {!busy && !message && tab === 'collections' && collectionItems.length === 0 && <div className="marketplace-search__empty"><strong>没有匹配的 Collection</strong><p>试试标题、介绍、标签或 Creator 名称。</p></div>}
-      {!busy && !message && tab === 'creators' && creatorItems.length === 0 && <div className="marketplace-search__empty"><strong>没有匹配的 Creator</strong><p>试试 handle 或显示名。</p></div>}
-      {tab === 'presets' && nextCursor && (
-        <button type="button" disabled={busy} onClick={() => onNavigate(marketplaceSearchPath({ ...request, cursor: nextCursor }))}>下一页 Tone</button>
-      )}
-      {tab === 'collections' && collectionCursor && (
-        <button type="button" disabled={busy} onClick={() => void runCollectionSearch(
-          collectionText, collectionCursor, true,
-        )}>加载更多合集</button>
-      )}
-      {tab === 'creators' && creatorCursor && (
-        <button type="button" disabled={busy} onClick={() => void runCreatorSearch(
-          creatorText, creatorCursor, true,
-        )}>加载更多创作者</button>
-      )}
+
+        {!busy && !message && tab === 'presets' && items.length === 0 && (
+          <EmptyState
+            icon={SearchX}
+            title="No matching tones"
+            hint="Try fewer filters or a different keyword."
+          />
+        )}
+        {!busy && !message && tab === 'collections' && collectionItems.length === 0 && (
+          <EmptyState
+            icon={Layers}
+            title="No matching collections"
+            hint="Try a title, description, tag, or creator name."
+          />
+        )}
+        {!busy && !message && tab === 'creators' && creatorItems.length === 0 && (
+          <EmptyState
+            icon={Users}
+            title="No matching creators"
+            hint="Try a handle or a display name."
+          />
+        )}
+
+        {tab === 'presets' && nextCursor && (
+          <div className="mk-browse__more">
+            <button
+              type="button"
+              className="mk-btn mk-btn--secondary"
+              disabled={busy}
+              onClick={() => onNavigate(marketplaceSearchPath({ ...request, cursor: nextCursor }))}
+            >Load more tones</button>
+          </div>
+        )}
+        {tab === 'collections' && collectionCursor && (
+          <div className="mk-browse__more">
+            <button
+              type="button"
+              className="mk-btn mk-btn--secondary"
+              disabled={busy}
+              onClick={() => void runCollectionSearch(collectionText, collectionCursor, true)}
+            >Load more collections</button>
+          </div>
+        )}
+        {tab === 'creators' && creatorCursor && (
+          <div className="mk-browse__more">
+            <button
+              type="button"
+              className="mk-btn mk-btn--secondary"
+              disabled={busy}
+              onClick={() => void runCreatorSearch(creatorText, creatorCursor, true)}
+            >Load more creators</button>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

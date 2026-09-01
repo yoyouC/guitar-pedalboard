@@ -1,6 +1,6 @@
 # 前端架构
 
-前端是**无路由、无状态库**的单页应用:`main.tsx` → `App.tsx`。Rig 状态的单一事实源是 **rigStore**(`src/state/rigStore.ts`,模块级 pub-sub store,见 ADR-0002);`App` 降为 shell,组件经 `useRig(selector)` 直接订阅自己需要的状态区块。样式集中在唯一的 `src/index.css`。
+前端是**无路由、无状态库**的单页应用:`main.tsx` → `App.tsx`。Rig 状态的单一事实源是 **rigStore**(`src/state/rigStore.ts`,模块级 pub-sub store,见 ADR-0002);`App` 降为 shell,组件经 `useRig(selector)` 直接订阅自己需要的状态区块。pedalboard 样式集中在 `src/index.css`;marketplace 样式独立在 `src/styles/marketplace.css`(见第 5 节)。
 
 ## 1. 状态模型(rigStore + App shell)
 
@@ -83,6 +83,8 @@ Rig 状态全部在 rigStore(`createRigStore(audioEngine)` 的生产单例在 `s
 ## 5. 样式体系(`src/index.css`,~1500 行)
 
 纯 CSS 拟物,无图片。组织方式(按文件中注释分节):
+
+0. **Marketplace 样式已拆出**:全部 marketplace 页面样式在 `src/styles/marketplace.css`(`main.tsx` 中在 `index.css` 之后导入,层叠顺序最后)。该文件自带 `--mk-*` token 体系(surface/border/text/accent/semantic 色阶、`--mk-font-display` Space Grotesk、radius)与 `mk-` 前缀原语(`.mk-btn/.mk-card/.mk-badge/.mk-input/.mk-skeleton/.mk-avatar`);可复用展示组件在 `src/components/marketplace-ui/`(`MiniRigChain`、`PresetCard`、`CollectionCard`、`HashVisual`、`TagBadge`、`EmptyState`)。新增 marketplace 样式一律进 `marketplace.css`,不要回堆 `index.css`。
 
 1. **全局/布局**:`.app`、`.board`(Pedaltrain 金属格栅板,`::after` 做 3D 前缘)、页眉页脚。
 2. **控制台**:`.top-bar` 三组分栏、滑杆、电平表、bypass 按钮。

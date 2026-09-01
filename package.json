@@ -48,6 +48,7 @@
     "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.9.5",
     "better-auth": "^1.7.2",
+    "lucide-react": "^1.37.0",
     "pg": "^8.23.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",

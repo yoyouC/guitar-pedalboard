@@ -16,23 +16,23 @@ test('unsupported narrow browser keeps Tone shareable without claiming Rig trans
   });
   await page.goto('/marketplace/tones/preset-demo-crunch');
 
-  await expect(page.getByText('完全兼容', { exact: true })).toBeVisible();
+  await expect(page.getByText('Fully compatible', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Use in Pedalboard' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Copy Tone Link' })).toBeVisible();
   await expect(page.getByAltText('Tone link QR code')).toBeVisible();
-  await expect(page.getByText('链接只打开同一公开修订，不会跨设备传递本机 Rig 或音频状态。')).toBeVisible();
+  await expect(page.getByText('The link opens the same public revision only — it does not transfer your local Rig or audio state across devices.')).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 
 test('Market, Like, Collection, and account surfaces remain usable at phone width', async ({ page }) => {
   await page.goto('/marketplace/search');
-  await expect(page.getByRole('button', { name: '预设', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '合集', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '创作者', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Presets', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Collections', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Creators', exact: true })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.goto('/marketplace/tones/preset-demo-crunch');
-  await expect(page.getByRole('button', { name: /点赞/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Like/ })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 
   await page.goto('/marketplace/collections/collection-demo-stage-tones');

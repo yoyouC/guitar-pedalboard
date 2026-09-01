@@ -16,14 +16,14 @@ function collectionId(pathname: string): string | null {
 export function CollectionManagePage({ pathname, onNavigate }: Props) {
   const id = collectionId(pathname);
   const [collection, setCollection] = useState<PresetCollection | null>(null);
-  const [message, setMessage] = useState('正在读取 Collection…');
+  const [message, setMessage] = useState('Loading collection…');
   useEffect(() => {
     if (!id) return;
     let active = true;
     void marketplaceClient.getManagedPresetCollection(id).then((value) => {
       if (active) { setCollection(value); setMessage(''); }
     }, (cause: unknown) => {
-      if (active) setMessage(cause instanceof Error ? cause.message : '无法读取这个 Collection。');
+      if (active) setMessage(cause instanceof Error ? cause.message : 'Could not load this collection.');
     });
     return () => { active = false; };
   }, [id]);

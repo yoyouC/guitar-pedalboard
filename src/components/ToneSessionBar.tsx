@@ -20,7 +20,7 @@ export function ToneSessionBar() {
     const result = await collectionQueue.switchTo(position);
     setBusy(false);
     setPendingPosition(null);
-    if (!result.ok) setMessage(result.message ?? '无法切换到这个固定修订。');
+    if (!result.ok) setMessage(result.message ?? 'Could not switch to this fixed revision.');
   };
   const requestSwitch = (position: number | null) => {
     if (position === null || busy) return;
@@ -32,7 +32,7 @@ export function ToneSessionBar() {
   const restore = async () => {
     const result = await toneSession.backToOriginal();
     if (result.ok) collectionQueue.clear();
-    else setMessage(result.message ?? '无法恢复 My Original Rig。');
+    else setMessage(result.message ?? 'Could not restore My Original Rig.');
   };
   const exit = () => {
     collectionQueue.clear();
@@ -64,9 +64,9 @@ export function ToneSessionBar() {
 
       {queue && showQueue && <ol className="tone-session-bar__queue">{queue.items.map((item) => <li key={`${item.position}-${item.presetId}-${item.revisionId}`} className={item.position === queue.currentPosition ? 'current' : ''}><span>{item.position + 1}</span>{item.availability === 'available' ? <button type="button" disabled={busy || item.position === queue.currentPosition} onClick={() => requestSwitch(item.position)}>{item.title}<small>@{item.creator.handle} · revision {item.revisionId}</small></button> : <div><strong>Skipped Tone</strong><small>{item.skipReason ?? `@${item.creator.handle} · fixed placeholder unavailable`}</small></div>}</li>)}</ol>}
 
-      {pendingPosition !== null && <div className="tone-session-bar__decision" role="dialog" aria-modal="true" aria-label="当前 Tone 已修改">
-        <strong>当前 Tone 已修改</strong><p>切换会丢弃这些改动。请选择保存为 Local Preset、丢弃并继续，或取消。</p>
-        <label>Local Preset 名称<input value={presetName} onChange={(event) => setPresetName(event.target.value)} /></label>
+      {pendingPosition !== null && <div className="tone-session-bar__decision" role="dialog" aria-modal="true" aria-label="Current tone has unsaved changes">
+        <strong>Current tone has unsaved changes</strong><p>Switching discards these edits. Save them as a Local Preset, discard and continue, or cancel.</p>
+        <label>Local Preset name<input value={presetName} onChange={(event) => setPresetName(event.target.value)} /></label>
         <div><button type="button" disabled={!presetName.trim() || busy} onClick={saveAndContinue}>Save as Local Preset</button><button type="button" disabled={busy} onClick={() => void switchTo(pendingPosition)}>Discard &amp; Continue</button><button type="button" disabled={busy} onClick={() => setPendingPosition(null)}>Cancel</button></div>
       </div>}
     </aside>

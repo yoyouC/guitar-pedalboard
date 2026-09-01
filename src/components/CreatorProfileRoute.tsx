@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
+import { ArrowLeft, AudioWaveform } from 'lucide-react';
 import type { PublicCreatorProfile, PublicCreatorWorkSummary } from '../../shared/members.ts';
 import {
   fetchPublicCreator,
@@ -10,11 +11,20 @@ import { loadCreatorProfile } from '../members/loadCreatorProfile.ts';
 import { useMarketplacePageMetadata } from '../marketplace/pageMetadata.ts';
 import { creatorRouteFromPath } from '../marketplace/route.ts';
 import { MarketplaceReportForm } from './MarketplaceReportForm.tsx';
+import { EmptyState } from './marketplace-ui/EmptyState.tsx';
+import { HashVisual } from './marketplace-ui/HashVisual.tsx';
+import { hueFromString } from './marketplace-ui/hash.ts';
 
 interface CreatorProfileRouteProps {
   pathname: string;
   onClose(): void;
   onNavigate(pathname: string): void;
+}
+
+function initials(displayName: string): string {
+  const parts = displayName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return parts.slice(0, 2).map((part) => part[0]).join('');
 }
 
 export function CreatorProfileRoute({ pathname, onClose, onNavigate }: CreatorProfileRouteProps) {
@@ -42,7 +52,7 @@ export function CreatorProfileRoute({ pathname, onClose, onNavigate }: CreatorPr
         }
       },
       onError(cause) {
-        setError(cause instanceof Error ? cause.message : '无法加载创作者');
+        setError(cause instanceof Error ? cause.message : 'Could not load this creator');
       },
     });
   }, [handle, identity, memberId, onNavigate]);
@@ -51,31 +61,85 @@ export function CreatorProfileRoute({ pathname, onClose, onNavigate }: CreatorPr
     kind: 'creator',
     id: creator.id,
     title: creator.displayName,
-    description: creator.bio || `@${creator.handle} · Guitar Pedalboard 创作者`,
+    description: creator.bio || `@${creator.handle} · Guitar Pedalboard creator`,
     visibility: 'public',
   } : null);
 
   if (!route) return null;
   return (
-    <section className="creator-profile" aria-label="公开创作者主页">
-      <button type="button" className="marketplace-detail__close" onClick={onClose}>返回效果器</button>
-      {!creator && !error && <p>正在加载创作者资料…</p>}
-      {error && <p className="marketplace-detail__error">{error}</p>}
+    <section className="mk-page" aria-label="Public creator profile">
+      <div className="mk-detail__topline">
+        <span className="mk-detail__eyebrow">Tone Market · Creator</span>
+        <button type="button" className="mk-btn mk-btn--ghost" onClick={onClose}>
+          <ArrowLeft size={15} aria-hidden="true" />
+          Back to pedalboard
+        </button>
+      </div>
+
+      {!creator && !error && (
+        <div className="mk-detail__skeleton" aria-hidden="true">
+          <div className="mk-skeleton" style={{ height: 96, width: '100%', borderRadius: 14 }} />
+          <div className="mk-skeleton" style={{ height: 14, width: '30%' }} />
+        </div>
+      )}
+      {error && (
+        <div className="mk-detail__error" role="alert">
+          <strong>Could not load this creator</strong>
+          <p>{error}</p>
+        </div>
+      )}
       {creator && (
         <>
-          {creator.avatarUrl && <img src={creator.avatarUrl} alt="" referrerPolicy="no-referrer" />}
-          <div>
-            <span className="marketplace-detail__eyebrow">公开创作者主页</span>
-            <h2>{creator.displayName}</h2>
-            <p>@{creator.handle}</p>
-            {creator.bio && <p>{creator.bio}</p>}
-            <h3>公开作品</h3>
-            {works.length === 0 && <small>尚无公开作品。</small>}
-            {works.map((work) => (
-              <button type="button" key={work.id} onClick={() => onNavigate(work.url)}>
-                {work.title}
-              </button>
-            ))}
+          <header className="mk-card mk-profile">
+            {creator.avatarUrl ? (
+              <img className="mk-profile__avatar" src={creator.avatarUrl} alt="" referrerPolicy="no-referrer" />
+            ) : (
+              <span
+                className="mk-avatar mk-profile__avatar"
+                style={{ '--mk-avatar-hue': hueFromString(creator.handle) } as CSSProperties}
+                aria-hidden="true"
+              >
+                {initials(creator.displayName)}
+              </span>
+            )}
+            <div className="mk-profile__main">
+              <h1 className="mk-detail__title">{creator.displayName}</h1>
+              <p className="mk-detail__meta">@{creator.handle}</p>
+              {creator.bio && <p className="mk-detail__description">{creator.bio}</p>}
+            </div>
+          </header>
+
+          <section className="mk-detail__section" aria-label="Public works">
+            <h2 className="mk-detail__section-title">
+              Public works
+              <span className="mk-rank-section__count">{works.length}</span>
+            </h2>
+            {works.length === 0 ? (
+              <EmptyState
+                icon={AudioWaveform}
+                title="No public works yet"
+                hint="Published tones and collections from this creator appear here."
+              />
+            ) : (
+              <div className="mk-grid">
+                {works.map((work) => (
+                  <button
+                    type="button"
+                    key={work.id}
+                    className="mk-card mk-card--interactive mk-collection-card"
+                    onClick={() => onNavigate(work.url)}
+                  >
+                    <HashVisual seed={work.id} className="mk-collection-card__visual" />
+                    <div className="mk-preset-card__body">
+                      <h3 className="mk-preset-card__title">{work.title}</h3>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <div className="mk-detail__report">
             <MarketplaceReportForm kind="member" targetId={creator.id} onNavigate={onNavigate} />
           </div>
         </>

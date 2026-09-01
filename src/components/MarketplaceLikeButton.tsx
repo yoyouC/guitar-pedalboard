@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Heart } from 'lucide-react';
 import type { MarketplaceLikeState, MarketplaceLikeTargetKind } from '../../shared/marketplace';
 import { marketplaceClient, MarketplaceClientError } from '../marketplace/client';
 import {
@@ -8,12 +9,14 @@ import {
 } from '../marketplace/likeIntent.ts';
 import { useMemberSession } from '../members/useMemberSession.ts';
 
-export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavigate, onChange }: {
+export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavigate, onChange, hideHints = false }: {
   kind: MarketplaceLikeTargetKind;
   targetId: string;
   targetCreatorId: string;
   onNavigate(pathname: string): void;
   onChange?(state: MarketplaceLikeState): void;
+  /** Suppresses the hint/status paragraphs (list-row contexts); button, count, and logic stay. */
+  hideHints?: boolean;
 }) {
   const session = useMemberSession();
   const [state, setState] = useState<MarketplaceLikeState | null>(null);
@@ -32,7 +35,7 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
     setRetryAt(null);
     void marketplaceClient.getLikeState(kind, targetId).then(
       (next) => { if (active) setState(next); },
-      () => { if (active) setMessage('点赞状态暂不可用'); },
+      () => { if (active) setMessage('Like status is unavailable.'); },
     );
     return () => { active = false; };
   }, [kind, targetId]);
@@ -44,8 +47,8 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
     if (!state.canLike) {
       clearPendingMarketplaceLike(window.sessionStorage);
       setMessage(session.member.id === targetCreatorId
-        ? '不能 Like 自己的内容。'
-        : '当前账号无法 Like 此内容。');
+        ? 'You can\'t like your own content.'
+        : 'This account can\'t like this content.');
       return;
     }
     resuming.current = true;
@@ -54,14 +57,14 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
       clearPendingMarketplaceLike(window.sessionStorage);
       setState(next);
       onChange?.(next);
-      setMessage('登录成功，已完成 Like。');
+      setMessage('Signed in — like completed.');
     }, (cause: unknown) => {
       if (cause instanceof MarketplaceClientError && cause.verificationUrl) {
         rememberPendingMarketplaceLike(window.sessionStorage, { kind, targetId });
         setVerificationUrl(cause.verificationUrl);
       }
       if (cause instanceof MarketplaceClientError && cause.retryAt) setRetryAt(cause.retryAt);
-      setMessage(cause instanceof Error ? cause.message : '登录后 Like 失败，请重试。');
+      setMessage(cause instanceof Error ? cause.message : 'Like after sign-in failed — please retry.');
     }).finally(() => setBusy(false));
   }, [kind, onChange, session, state, targetCreatorId, targetId]);
 
@@ -87,7 +90,7 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
         setVerificationUrl(cause.verificationUrl);
       }
       if (cause instanceof MarketplaceClientError && cause.retryAt) setRetryAt(cause.retryAt);
-      setMessage(cause instanceof Error ? cause.message : '点赞失败');
+      setMessage(cause instanceof Error ? cause.message : 'Like failed');
     } finally {
       setBusy(false);
     }
@@ -100,17 +103,19 @@ export function MarketplaceLikeButton({ kind, targetId, targetCreatorId, onNavig
     <div className="marketplace-like">
       <button
         type="button"
+        className="mk-btn mk-btn--secondary mk-like-btn"
         disabled={busy || ownContent || (!canStartLogin && !state?.canLike)}
         onClick={() => void toggle()}
       >
-        {state?.liked ? '♥ 已点赞' : '♡ 点赞'} · {state?.likeCount ?? '—'}
+        <Heart size={14} aria-hidden="true" fill={state?.liked ? 'currentColor' : 'none'} />
+        {state?.liked ? 'Liked' : 'Like'} · {state?.likeCount ?? '—'}
       </button>
-      {ownContent && <small>不能 Like 自己的内容</small>}
-      {!ownContent && session.status === 'anonymous' && <small>登录后将自动完成 Like</small>}
-      {!ownContent && session.status === 'authenticated' && state && !state.canLike && <small>当前账号无法 Like 此内容</small>}
-      {message && <small role="alert">{message}</small>}
-      {verificationUrl && <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>}
-      {retryAt && <small>可重试时间：{new Date(retryAt).toLocaleString()}</small>}
+      {ownContent && !hideHints && <small>You can&apos;t like your own content</small>}
+      {!ownContent && !hideHints && session.status === 'anonymous' && <small>Sign in and the like completes automatically</small>}
+      {!ownContent && !hideHints && session.status === 'authenticated' && state && !state.canLike && <small>This account can&apos;t like this content</small>}
+      {message && !hideHints && <small role="alert">{message}</small>}
+      {verificationUrl && <button type="button" className="mk-btn mk-btn--ghost" onClick={() => onNavigate(verificationUrl)}>Verify email</button>}
+      {retryAt && !hideHints && <small>Retry available after {new Date(retryAt).toLocaleString()}</small>}
     </div>
   );
 }

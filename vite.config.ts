@@ -14,7 +14,7 @@ import { createMemoryMemberRepository } from './server/members/memoryRepository.
 import { createMemoryPublicCreatorWorks } from './server/members/works.ts'
 import { createPresetCollectionApi } from './server/collections/api.ts'
 import { createMemoryPresetCollectionRepository } from './server/collections/memoryRepository.ts'
-import type { MarketplaceTag, PresetCollection } from './shared/marketplace.ts'
+import type { CanonicalPublishedPreset, MarketplaceTag, PresetCollection } from './shared/marketplace.ts'
 import { createMarketplaceSearchApi } from './server/search/api.ts'
 import { createMemoryMarketplaceDiscoveryRepository } from './server/search/memoryRepository.ts'
 import { createMarketplaceLikesApi } from './server/likes/api.ts'
@@ -34,6 +34,9 @@ import {
 } from './server/members/standing.ts'
 import { createMarketplaceTagAdministrationApi } from './server/tags/api.ts'
 import { createMemoryMarketplaceTagAdministrationRepository } from './server/tags/memoryRepository.ts'
+import { normalizeRig } from './src/state/presetCodec.ts'
+import { RIG_PRESET_CATALOG } from './shared/rigPresetCatalog.ts'
+import { analyzePublishableRig } from './shared/publishableRig.ts'
 
 // 本地评估模型(models-local/,git-ignored,许可不允许公开分发):
 // 仅开发期经此中间件提供;/models-local/** 不进入 dist,也不会被部署。
@@ -124,8 +127,110 @@ function serveMarketplaceApi(): Plugin {
       id: 'revision-demo-unlisted-1',
     },
   }
+  // 网格视觉评估用的公开扩展示例:器材组合 / 标签 / 日期各异。
+  // 客户端 apply 走 isPublishedPresetRevisionCompatible → analyzePublishableRig,
+  // 要求存储 rig 与 normalizeRig 输出逐字节一致(canonical JSON);因此这里
+  // 存 normalizeRig 规范化后的 rig,派生属性/资源依赖直接取自 analysis,
+  //  fixtures 不一致时在此直接抛错,而不是留到运行期 503 / 无法应用。
+  const demoVariant = (variant: {
+    slug: string
+    title: string
+    description: string
+    pedalIds: string[]
+    ampId: string
+    tagIds: string[]
+    createdAt: string
+  }): CanonicalPublishedPreset => {
+    const preset = structuredClone(demoPublishedPreset)
+    preset.id = `preset-demo-${variant.slug}`
+    preset.title = variant.title
+    preset.description = variant.description
+    preset.tags = marketplaceTags
+      .filter((tag) => variant.tagIds.includes(tag.id))
+      .map((tag) => ({ id: tag.id, dimension: tag.dimension, nameZh: tag.nameZh, nameEn: tag.nameEn }))
+    const rawRig = {
+      ...preset.currentRevision.rig,
+      chain: variant.pedalIds.map((effectId) => ({
+        effectId, enabled: true, values: {}, post: false,
+      })),
+      amp: {
+        ...preset.currentRevision.rig.amp,
+        categoryId: variant.ampId,
+        modelKey: `builtin:${variant.ampId}`,
+      },
+    }
+    const analysis = analyzePublishableRig(normalizeRig(rawRig, RIG_PRESET_CATALOG))
+    if (!analysis) throw new Error(`demo fixture is not publishable: ${variant.slug}`)
+    preset.derivedAttributes = { ...analysis.derivedAttributes }
+    preset.currentRevision = {
+      ...preset.currentRevision,
+      id: `revision-demo-${variant.slug}-1`,
+      resourceDependencies: analysis.resourceDependencies,
+      derivedAttributes: { ...analysis.derivedAttributes },
+      rig: analysis.rig,
+    }
+    preset.createdAt = variant.createdAt
+    preset.updatedAt = variant.createdAt
+    return preset
+  }
+  const demoVariants = [
+    demoVariant({
+      slug: 'glassy-clean-chorus',
+      title: 'Glassy Clean Chorus',
+      description: 'Sparkling compressed clean with a wide analog chorus wash.',
+      pedalIds: ['compressor', 'chorus'],
+      ampId: 'clean',
+      tagIds: ['tone-clean', 'use-recording'],
+      createdAt: '2026-08-22T10:00:00.000Z',
+    }),
+    demoVariant({
+      slug: 'stoner-fuzz-wall',
+      title: 'Stoner Fuzz Wall',
+      description: 'Stacked Muff into a cranked Recto — downtuned riff concrete.',
+      pedalIds: ['bigmuffwdf', 'fuzzfacewdf'],
+      ampId: 'recto',
+      tagIds: ['tone-high-gain', 'genre-rock'],
+      createdAt: '2026-08-20T18:30:00.000Z',
+    }),
+    demoVariant({
+      slug: 'midnight-ambient-swell',
+      title: 'Midnight Ambient Swell',
+      description: 'Volume swells into shimmer, dotted-eighth delay, endless reverb tail.',
+      pedalIds: ['volume', 'shimmer', 'delay', 'reverb'],
+      ampId: 'chime',
+      tagIds: ['tone-clean', 'use-recording'],
+      createdAt: '2026-08-18T23:00:00.000Z',
+    }),
+    demoVariant({
+      slug: 'plexi-crunch-77',
+      title: "Plexi Crunch '77",
+      description: 'Tube Screamer pushed into a British crunch — classic rhythm bite.',
+      pedalIds: ['ts808'],
+      ampId: 'crunch',
+      tagIds: ['tone-crunch', 'genre-rock', 'use-live'],
+      createdAt: '2026-08-15T15:00:00.000Z',
+    }),
+    demoVariant({
+      slug: 'doom-sludge',
+      title: 'Doom Sludge',
+      description: 'Fuzz into RAT with a scooped EQ — slow, heavy, mean.',
+      pedalIds: ['fuzz', 'ratwdf', 'eq'],
+      ampId: 'recto',
+      tagIds: ['tone-high-gain'],
+      createdAt: '2026-08-12T12:00:00.000Z',
+    }),
+    demoVariant({
+      slug: 'surf-spring-drip',
+      title: 'Surf Spring Drip',
+      description: 'Dyna comp snap, tremolo chop, and a drippy spring tank.',
+      pedalIds: ['dynacomp', 'tremolo', 'springreverb'],
+      ampId: 'clean',
+      tagIds: ['tone-clean', 'genre-blues', 'use-live'],
+      createdAt: '2026-08-10T09:00:00.000Z',
+    }),
+  ]
   const publications = createMemoryPublishedPresetRepository(
-    [demoPublishedPreset, demoUnlistedPreset],
+    [demoPublishedPreset, ...demoVariants, demoUnlistedPreset],
     marketplaceTags,
     writeAllowed,
   )
@@ -152,7 +257,7 @@ function serveMarketplaceApi(): Plugin {
     now: () => new Date(),
     createId: () => crypto.randomUUID(),
     createHandleSuffix: () => crypto.randomUUID().replaceAll('-', '').slice(0, 8),
-    publicWorks: createMemoryPublicCreatorWorks([demoPublishedPreset]),
+    publicWorks: createMemoryPublicCreatorWorks([demoPublishedPreset, ...demoVariants]),
   })
   const demoCollection: PresetCollection = {
     id: 'collection-demo-stage-tones',
