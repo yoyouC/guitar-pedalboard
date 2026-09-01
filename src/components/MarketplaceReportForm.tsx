@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Flag } from 'lucide-react';
 import type {
   MarketplaceModerationReportReason,
   MarketplaceModerationTargetKind,
@@ -6,11 +7,17 @@ import type {
 import { marketplaceClient, MarketplaceClientError } from '../marketplace/client';
 
 const REASONS: Array<{ value: MarketplaceModerationReportReason; label: string }> = [
-  { value: 'copyright', label: '侵权' },
-  { value: 'spam', label: '垃圾内容' },
-  { value: 'impersonation', label: '冒充' },
-  { value: 'inappropriate', label: '不当内容' },
+  { value: 'copyright', label: 'Copyright' },
+  { value: 'spam', label: 'Spam' },
+  { value: 'impersonation', label: 'Impersonation' },
+  { value: 'inappropriate', label: 'Inappropriate content' },
 ];
+
+const TARGET_LABEL: Record<MarketplaceModerationTargetKind, string> = {
+  preset: 'tone',
+  collection: 'collection',
+  member: 'creator',
+};
 
 export function MarketplaceReportForm({ kind, targetId, onNavigate }: {
   kind: MarketplaceModerationTargetKind;
@@ -34,13 +41,13 @@ export function MarketplaceReportForm({ kind, targetId, onNavigate }: {
     try {
       const receipt = await marketplaceClient.submitReport({ targetKind: kind, targetId, reason, details });
       setDetails('');
-      setMessage(`举报已受理，编号 ${receipt.id}。管理员会在私有队列中处理。`);
+      setMessage(`Report received — reference ${receipt.id}. Moderators review reports in a private queue.`);
     } catch (cause) {
       if (cause instanceof MarketplaceClientError && cause.verificationUrl) {
         setVerificationUrl(cause.verificationUrl);
       }
       if (cause instanceof MarketplaceClientError && cause.retryAt) setRetryAt(cause.retryAt);
-      setMessage(cause instanceof Error ? cause.message : '举报提交失败。');
+      setMessage(cause instanceof Error ? cause.message : 'Report submission failed.');
     } finally {
       setBusy(false);
     }
@@ -49,43 +56,45 @@ export function MarketplaceReportForm({ kind, targetId, onNavigate }: {
   return (
     <aside className="marketplace-report">
       <div className="marketplace-report__buttons">
-        <button type="button" onClick={() => setOpen((current) => !current)}>
-          {open ? '收起举报' : '举报内容'}
+        <button type="button" className="mk-btn mk-btn--ghost" onClick={() => setOpen((current) => !current)}>
+          <Flag size={14} aria-hidden="true" />
+          {open ? 'Hide report form' : `Report this ${TARGET_LABEL[kind]}`}
         </button>
-        <button type="button" onClick={() => onNavigate('/marketplace/infringement-notice')}>
-          正式侵权通知
+        <button type="button" className="mk-btn mk-btn--ghost" onClick={() => onNavigate('/marketplace/infringement-notice')}>
+          Formal infringement notice
         </button>
       </div>
       {open && (
-        <form onSubmit={(event) => void submit(event)}>
+        <form className="marketplace-report__form" onSubmit={(event) => void submit(event)}>
           <label>
-            原因
-            <select value={reason} onChange={(event) => setReason(
+            Reason
+            <select className="mk-input" value={reason} onChange={(event) => setReason(
               event.target.value as MarketplaceModerationReportReason,
             )}>
               {REASONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
           <label>
-            说明
+            Details
             <textarea
+              className="mk-input"
               required
               maxLength={2000}
               value={details}
               onChange={(event) => setDetails(event.target.value)}
-              placeholder="请提供足够的信息，帮助管理员判断。"
+              placeholder="Give the moderators enough detail to evaluate this report."
             />
           </label>
-          <button type="submit" disabled={busy || !details.trim()}>
-            {busy ? '提交中…' : '提交举报'}
+          <button type="submit" className="mk-btn mk-btn--secondary" disabled={busy || !details.trim()}>
+            {busy ? 'Submitting…' : 'Submit report'}
           </button>
         </form>
       )}
       {message && <small role="status">{message}</small>}
       {verificationUrl && (
-        <button type="button" onClick={() => onNavigate(verificationUrl)}>验证邮箱</button>
+        <button type="button" className="mk-btn mk-btn--ghost" onClick={() => onNavigate(verificationUrl)}>Verify email</button>
       )}
-      {retryAt && <small>可重试时间：{new Date(retryAt).toLocaleString()}</small>}
+      {retryAt && <small>Retry available after {new Date(retryAt).toLocaleString()}</small>}
     </aside>
   );
 }

@@ -68,7 +68,7 @@ export function PresetCollectionManager({ collection, onUpdated }: PresetCollect
         }])),
       }));
     }, (cause: unknown) => {
-      if (active) setMessage(cause instanceof Error ? cause.message : '无法读取可选 Tone。');
+      if (active) setMessage(cause instanceof Error ? cause.message : 'Could not load the selectable tones.');
     });
     return () => { active = false; };
   }, []);
@@ -107,7 +107,7 @@ export function PresetCollectionManager({ collection, onUpdated }: PresetCollect
   const appendPreset = (preset: PublishedPreset, isPublic: boolean) => {
     const key = `${preset.id}\u0000${preset.currentRevision.id}`;
     if (included.has(key)) {
-      setItemError('这个固定修订已经在合集里。');
+      setItemError('This fixed revision is already in the collection.');
       return;
     }
     setChoices((current) => ({ ...current, [preset.id]: { preset, isPublic } }));
@@ -128,7 +128,7 @@ export function PresetCollectionManager({ collection, onUpdated }: PresetCollect
     if (items.some((item, itemIndex) => (
       itemIndex !== index && `${item.presetId}\u0000${item.revisionId}` === key
     ))) {
-      setItemError('目标修订已经在合集的另一个位置。');
+      setItemError('That revision already sits at another position in the collection.');
       return;
     }
     setItems((current) => positioned(current.map((entry, itemIndex) => itemIndex === index ? {
@@ -146,7 +146,7 @@ export function PresetCollectionManager({ collection, onUpdated }: PresetCollect
     try {
       appendPreset(await marketplaceClient.getPublishedPreset(result.id), true);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '无法读取这个 Tone。');
+      setMessage(cause instanceof Error ? cause.message : 'Could not load this tone.');
     } finally {
       setBusy(false);
     }
@@ -159,7 +159,7 @@ export function PresetCollectionManager({ collection, onUpdated }: PresetCollect
       const page = await marketplaceClient.searchPublishedPresets({ text: query.trim() || undefined, limit: 12 });
       setSearchResults(page.items);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '搜索 Tone 失败。');
+      setMessage(cause instanceof Error ? cause.message : 'Tone search failed.');
     } finally {
       setBusy(false);
     }
@@ -169,9 +169,9 @@ export function PresetCollectionManager({ collection, onUpdated }: PresetCollect
     setBusy(true);
     try {
       onUpdated(await marketplaceClient.getManagedPresetCollection(collection.id));
-      setMessage('已重新载入服务器上的最新版本。');
+      setMessage('Reloaded the latest version from the server.');
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '重新载入失败。');
+      setMessage(cause instanceof Error ? cause.message : 'Reload failed.');
     } finally {
       setBusy(false);
     }
@@ -182,7 +182,7 @@ export function PresetCollectionManager({ collection, onUpdated }: PresetCollect
     const nextErrors = validatePublicationFields({ title, description, tagIds });
     setErrors(nextErrors);
     if (visibility === 'public' && !canSetPublic) {
-      setItemError('至少加入一个当前 Public Tone，才能公开合集。');
+      setItemError('Add at least one currently Public tone before making the collection public.');
       return;
     }
     if (Object.keys(nextErrors).length > 0) return;
@@ -199,7 +199,7 @@ export function PresetCollectionManager({ collection, onUpdated }: PresetCollect
         expectedUpdatedAt: collection.updatedAt,
       });
       onUpdated(updated);
-      setMessage('合集已更新；条目仍固定到所示 revision。');
+      setMessage('Collection updated; items stay pinned to the revisions shown.');
     } catch (cause) {
       if (cause instanceof MarketplaceClientError && cause.fields) {
         setErrors(cause.fields);
@@ -208,47 +208,47 @@ export function PresetCollectionManager({ collection, onUpdated }: PresetCollect
       const conflict = cause instanceof MarketplaceClientError && cause.code === 'update_conflict';
       setConflicted(conflict);
       setMessage(conflict
-        ? '合集已在别处更新。请重新载入；不会强制覆盖。'
-        : cause instanceof Error ? cause.message : '合集更新失败。');
+        ? 'This collection was updated elsewhere. Reload first — no forced overwrite.'
+        : cause instanceof Error ? cause.message : 'Collection update failed.');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <section className="preset-manager" aria-label="管理预设合集">
+    <section className="preset-manager" aria-label="Manage preset collection">
       <div><span className="marketplace-detail__eyebrow">Creator workspace</span><h2>Manage Collection</h2></div>
       <form onSubmit={(event) => void save(event)}>
-        <label>标题<input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />{errors.title && <small className="preset-manager__error">{errors.title}</small>}</label>
-        <label>介绍<textarea value={description} maxLength={2000} onChange={(event) => setDescription(event.target.value)} /></label>
-        <fieldset><legend>标签（1–5）</legend><div className="preset-manager__tags">{tags.map((tag) => <label key={tag.id}><input type="checkbox" checked={tagIds.includes(tag.id)} onChange={() => setTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} />{tag.nameZh} / {tag.nameEn}</label>)}</div>{errors.tagIds && <small className="preset-manager__error">{errors.tagIds}</small>}</fieldset>
-        <label>可见性<select value={visibility} onChange={(event) => setVisibility(event.target.value as typeof visibility)}><option value="public" disabled={!canSetPublic}>Public{!canSetPublic ? ' · 需要至少一个 Public Tone' : ''}</option><option value="unlisted">Unlisted</option><option value="withdrawn">撤回</option></select></label>
+        <label>Title<input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />{errors.title && <small className="preset-manager__error">{errors.title}</small>}</label>
+        <label>Description<textarea value={description} maxLength={2000} onChange={(event) => setDescription(event.target.value)} /></label>
+        <fieldset><legend>Tags (1–5)</legend><div className="preset-manager__tags">{tags.map((tag) => <label key={tag.id}><input type="checkbox" checked={tagIds.includes(tag.id)} onChange={() => setTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} />{tag.nameEn}</label>)}</div>{errors.tagIds && <small className="preset-manager__error">{errors.tagIds}</small>}</fieldset>
+        <label>Visibility<select value={visibility} onChange={(event) => setVisibility(event.target.value as typeof visibility)}><option value="public" disabled={!canSetPublic}>Public{!canSetPublic ? ' · needs at least one Public tone' : ''}</option><option value="unlisted">Unlisted</option><option value="withdrawn">Withdrawn</option></select></label>
 
         <div className="preset-manager__section">
-          <h3>固定 Revision 队列</h3>
-          <small>发布者更新 Tone 不会自动改变这里的声音；只有点击 Upgrade 才会换到新修订。</small>
+          <h3>Fixed revision queue</h3>
+          <small>When a publisher updates a tone, the sound here does not change automatically — only clicking Upgrade moves to the new revision.</small>
           <ol className="collection-manager__items">{items.map((item, index) => {
             const choice = choices[item.presetId];
             const latest = choice?.preset.currentRevision.id;
             return <li key={`${item.presetId}-${item.revisionId}`} className={item.availability === 'unavailable' ? 'unavailable' : ''}>
               <span className="collection-detail__position">{index + 1}</span>
-              <div><strong>{item.title ?? '原作当前不可用'}</strong><small>@{item.creator.handle} · fixed revision {item.revisionId}</small>{choice && latest && latest !== item.revisionId && <button type="button" onClick={() => upgradeItem(index, choice)}>Upgrade to revision {latest}</button>}</div>
-              <div className="preset-manager__buttons"><button type="button" disabled={index === 0} onClick={() => move(index, -1)}>上移</button><button type="button" disabled={index === items.length - 1} onClick={() => move(index, 1)}>下移</button><button type="button" onClick={() => setItems((current) => positioned(current.filter((_, itemIndex) => itemIndex !== index)))}>移除</button></div>
+              <div><strong>{item.title ?? 'Original tone unavailable'}</strong><small>@{item.creator.handle} · fixed revision {item.revisionId}</small>{choice && latest && latest !== item.revisionId && <button type="button" onClick={() => upgradeItem(index, choice)}>Upgrade to revision {latest}</button>}</div>
+              <div className="preset-manager__buttons"><button type="button" disabled={index === 0} onClick={() => move(index, -1)}>Move up</button><button type="button" disabled={index === items.length - 1} onClick={() => move(index, 1)}>Move down</button><button type="button" onClick={() => setItems((current) => positioned(current.filter((_, itemIndex) => itemIndex !== index)))}>Remove</button></div>
             </li>;
           })}</ol>
-          {items.length === 0 && <p>合集还没有 Tone。先从自己的作品或公开搜索结果中选择。</p>}
+          {items.length === 0 && <p>No tones in this collection yet — pick from your own works or from public search results below.</p>}
           {itemError && <small className="preset-manager__error">{itemError}</small>}
         </div>
 
         <div className="collection-tone-picker">
-          <h3>从 My Tones 选择当前 Revision</h3>
+          <h3>Pick a current revision from My Tones</h3>
           <div className="collection-tone-picker__results">{myTones.filter((tone) => tone.visibility !== 'withdrawn').map((tone) => <button type="button" key={tone.id} disabled={included.has(`${tone.id}\u0000${tone.currentRevision.id}`)} onClick={() => appendPreset(tone, tone.visibility === 'public')}><strong>{tone.title}</strong><small>{tone.visibility} · current revision {tone.currentRevision.id}</small></button>)}</div>
-          <h3>搜索 Public Tones</h3>
-          <div className="collection-tone-picker__search"><input aria-label="搜索可加入合集的 Tone" value={query} onChange={(event) => setQuery(event.target.value)} /><button type="button" disabled={busy} onClick={() => void search()}>Search</button></div>
+          <h3>Search public tones</h3>
+          <div className="collection-tone-picker__search"><input aria-label="Search tones to add to the collection" value={query} onChange={(event) => setQuery(event.target.value)} /><button type="button" disabled={busy} onClick={() => void search()}>Search</button></div>
           <div className="collection-tone-picker__results">{searchResults.map((result) => <button type="button" key={result.id} disabled={busy} onClick={() => void addSearchResult(result)}><strong>{result.title}</strong><small>@{result.creator.handle} · choose current revision</small></button>)}</div>
         </div>
 
-        <button type="submit" disabled={busy || conflicted}>{busy ? '保存中…' : '保存合集'}</button>
+        <button type="submit" disabled={busy || conflicted}>{busy ? 'Saving…' : 'Save collection'}</button>
       </form>
       {message && <p className="preset-manager__message" role="status">{message}</p>}
       {conflicted && <button type="button" disabled={busy} onClick={() => void reload()}>Reload latest</button>}

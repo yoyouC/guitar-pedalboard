@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('unified discovery exposes three tabs with canonical creator navigation', async ({ page }) => {
   await page.goto('/marketplace/search');
 
-  await expect(page.getByRole('button', { name: '预设', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: 'Presets', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -20,7 +20,7 @@ test('unified discovery exposes three tabs with canonical creator navigation', a
   );
 
   await page.goto('/marketplace/search');
-  await page.getByRole('button', { name: '合集', exact: true }).click();
+  await page.getByRole('button', { name: 'Collections', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Demo Stage Tones' })).toBeVisible();
   await page.getByRole('button', { name: 'Demo Stage Tones' }).click();
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
@@ -34,7 +34,7 @@ test('unified discovery exposes three tabs with canonical creator navigation', a
   );
 
   await page.goto('/marketplace/search');
-  await page.getByRole('button', { name: '创作者', exact: true }).click();
+  await page.getByRole('button', { name: 'Creators', exact: true }).click();
   await page.getByRole('button', { name: 'Guitar Pedalboard', exact: true }).click();
   await expect.poll(() => new URL(page.url()).pathname).toBe('/creators/id/member-system');
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
@@ -62,8 +62,8 @@ test('legacy handle resolves to the id canonical page and Unlisted stays out of 
   );
 
   await page.goto('/marketplace/search');
-  await page.getByLabel('搜索预设标题、介绍、创作者或标签').fill('Secret Demo Tone');
-  await page.getByRole('button', { name: '搜索 Tone' }).click();
-  await expect(page.getByText('没有匹配的 Tone')).toBeVisible();
+  await page.getByLabel('Search tones, creators, or tags').fill('Secret Demo Tone');
+  await page.getByRole('button', { name: 'Search Tones' }).click();
+  await expect(page.getByText('No matching tones')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Secret Demo Tone' })).toHaveCount(0);
 });

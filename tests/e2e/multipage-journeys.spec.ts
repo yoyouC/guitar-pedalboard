@@ -81,9 +81,9 @@ test('anonymous Tone apply is reversible, marks edits, and never creates a Local
 test('Collection starts an explicit browser-session queue and exits without cloud state', async ({ page }) => {
   await startTestAudio(page);
   await page.getByRole('link', { name: '音色市场' }).click();
-  await page.getByRole('button', { name: '合集', exact: true }).click();
+  await page.getByRole('button', { name: 'Collections', exact: true }).click();
   await page.getByRole('button', { name: 'Demo Stage Tones' }).click();
-  await expect(page.getByRole('radio', { name: '从位置 1 开始' })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Start from position 1' })).toBeChecked();
   await page.getByRole('button', { name: 'Use Collection in Pedalboard' }).click();
 
   const session = page.getByLabel('Tone Market session');
@@ -150,27 +150,27 @@ test('Report preserves details across throttle and verification failures; formal
   });
 
   await page.goto('/marketplace/tones/preset-demo-crunch');
-  await page.getByRole('button', { name: '举报内容' }).click();
-  const details = page.getByLabel('说明');
+  await page.getByRole('button', { name: 'Report this tone' }).click();
+  const details = page.getByLabel('Details');
   await details.fill('The public attribution appears misleading.');
-  await page.getByRole('button', { name: '提交举报' }).click();
-  await expect(page.getByText('可重试时间：', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Submit report' }).click();
+  await expect(page.getByText('Retry available after', { exact: false })).toBeVisible();
   await expect(details).toHaveValue('The public attribution appears misleading.');
-  await page.getByRole('button', { name: '提交举报' }).click();
-  await expect(page.getByRole('button', { name: '验证邮箱' })).toBeVisible();
+  await page.getByRole('button', { name: 'Submit report' }).click();
+  await expect(page.getByRole('button', { name: 'Verify email' })).toBeVisible();
   await expect(details).toHaveValue('The public attribution appears misleading.');
 
   await page.route('**/api/marketplace/infringement-notices', (route) => route.fulfill({ status: 201 }));
   await page.getByRole('button', { name: '正式侵权通知（无需登录）' }).click();
   await expect(page).toHaveURL(/\/marketplace\/infringement-notice/);
-  await expect(page.getByText('此入口无需登录')).toBeVisible();
-  await page.getByLabel('姓名').fill('Rights Holder');
-  await page.getByLabel('联系邮箱').fill('rights@example.test');
-  await page.getByLabel('目标 ID').fill('preset-demo-crunch');
-  await page.getByLabel('权利说明').fill('I own the identified work and request a formal review.');
-  await page.getByLabel('我确认以上声明出于善意且信息准确。').check();
-  await page.getByRole('button', { name: '提交正式通知' }).click();
-  await expect(page.getByRole('status')).toContainText('正式侵权通知已提交');
+  await expect(page.getByText('This entry requires no sign-in')).toBeVisible();
+  await page.getByLabel('Name').fill('Rights Holder');
+  await page.getByLabel('Contact email').fill('rights@example.test');
+  await page.getByLabel('Target ID').fill('preset-demo-crunch');
+  await page.getByLabel('Rights statement').fill('I own the identified work and request a formal review.');
+  await page.getByLabel('I confirm these statements are made in good faith and are accurate.').check();
+  await page.getByRole('button', { name: 'Submit formal notice' }).click();
+  await expect(page.getByRole('status')).toContainText('Formal infringement notice submitted.');
 });
 
 test('Account Settings exports data, logs out on deletion, and requires an explicit restore decision', async ({ page }) => {
@@ -249,11 +249,11 @@ test('offline discovery is announced as failure while local Rig and reduced-moti
     json: { error: { code: 'marketplace_unavailable', message: 'Tone Market is offline.' } },
   }));
   await page.getByRole('link', { name: '音色市场' }).click();
-  await expect(page.getByRole('alert')).toContainText('Tone Market 无法完成搜索');
-  await expect(page.getByText('没有匹配的 Tone')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('Tone Market search failed');
+  await expect(page.getByText('No matching tones')).toHaveCount(0);
   await expect(page.getByRole('status', { name: 'Audio input is active' })).toContainText('Test tone');
 
-  await page.getByRole('button', { name: '返回效果器' }).click();
+  await page.getByRole('button', { name: 'Back to pedalboard' }).click();
   await expect(page.getByLabel('Tone Market session')).toContainText('Demo Crunch');
   await expect(page.getByRole('button', { name: '■ 停止' })).toBeVisible();
   await expect(page.getByRole('option', { name: 'Offline Rig' })).toHaveCount(1);

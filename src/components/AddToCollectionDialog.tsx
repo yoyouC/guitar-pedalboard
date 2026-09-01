@@ -44,7 +44,7 @@ export function AddToCollectionDialog({ tone, onClose, onNavigate }: Props) {
       setTags(availableTags);
     }, (cause: unknown) => {
       if (!active) return;
-      setMessage(cause instanceof Error ? cause.message : '无法读取 My Collections。');
+      setMessage(cause instanceof Error ? cause.message : 'Could not load My Collections.');
     });
     return () => { active = false; };
   }, []);
@@ -54,7 +54,7 @@ export function AddToCollectionDialog({ tone, onClose, onNavigate }: Props) {
       item.presetId === tone.presetId && item.revisionId === tone.revisionId
     ));
     if (alreadyIncluded) {
-      setMessage('这个固定修订已经在该合集里。');
+      setMessage('This fixed revision is already in that collection.');
       return collection;
     }
     return marketplaceClient.updatePresetCollection(collection.id, {
@@ -78,9 +78,9 @@ export function AddToCollectionDialog({ tone, onClose, onNavigate }: Props) {
     try {
       const updated = await add(collection);
       setCollections((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setMessage(`已将固定 revision ${tone.revisionId} 加入「${updated.title}」。`);
+      setMessage(`Added fixed revision ${tone.revisionId} to “${updated.title}”.`);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '加入合集失败。');
+      setMessage(cause instanceof Error ? cause.message : 'Could not add to the collection.');
     } finally {
       setBusy(false);
     }
@@ -88,7 +88,7 @@ export function AddToCollectionDialog({ tone, onClose, onNavigate }: Props) {
 
   const createAndAdd = async () => {
     if (!newTitle.trim() || newTagIds.length < 1 || newTagIds.length > 5) {
-      setMessage('请填写标题并选择 1–5 个标签。');
+      setMessage('Enter a title and pick 1–5 tags.');
       return;
     }
     setBusy(true);
@@ -103,9 +103,9 @@ export function AddToCollectionDialog({ tone, onClose, onNavigate }: Props) {
       const updated = await add(created);
       setCollections((current) => [updated, ...current]);
       setSelectedId(updated.id);
-      setMessage(`已创建 Unlisted 合集「${updated.title}」并加入这个固定修订。`);
+      setMessage(`Created the Unlisted collection “${updated.title}” and added this fixed revision.`);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : '创建合集失败。');
+      setMessage(cause instanceof Error ? cause.message : 'Could not create the collection.');
     } finally {
       setBusy(false);
     }
@@ -120,13 +120,13 @@ export function AddToCollectionDialog({ tone, onClose, onNavigate }: Props) {
             <span className="marketplace-detail__eyebrow">Fixed revision</span>
             <h2 id="add-collection-title">Add to Collection</h2>
           </div>
-          <button type="button" onClick={onClose}>关闭</button>
+          <button type="button" onClick={onClose}>Close</button>
         </header>
         <p><strong>{tone.title}</strong> · @{tone.creator.handle} · revision {tone.revisionId}</p>
         <label>
-          选择已有 Collection
+          Choose an existing collection
           <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
-            <option value="">选择合集…</option>
+            <option value="">Choose a collection…</option>
             {collections.map((collection) => {
               const incompatible = collection.visibility === 'public' && tone.visibility !== 'public';
               const duplicate = collection.items.some((item) => (
@@ -135,25 +135,25 @@ export function AddToCollectionDialog({ tone, onClose, onNavigate }: Props) {
               return (
                 <option key={collection.id} value={collection.id} disabled={incompatible || duplicate}>
                   {collection.title} · {collection.visibility} · {collection.items.length} tones
-                  {duplicate ? ' · 已加入' : incompatible ? ' · 需 Public Tone' : ''}
+                  {duplicate ? ' · already added' : incompatible ? ' · requires a Public tone' : ''}
                 </option>
               );
             })}
           </select>
         </label>
         <button type="button" disabled={!selectedId || busy} onClick={() => void addExisting()}>
-          加入所选 Collection
+          Add to the selected collection
         </button>
         <div className="add-collection-dialog__new">
-          <h3>或创建新的 Unlisted Collection</h3>
-          <label>标题<input value={newTitle} maxLength={80} onChange={(event) => setNewTitle(event.target.value)} /></label>
+          <h3>Or create a new Unlisted collection</h3>
+          <label>Title<input value={newTitle} maxLength={80} onChange={(event) => setNewTitle(event.target.value)} /></label>
           <fieldset>
-            <legend>标签（1–5）</legend>
+            <legend>Tags (1–5)</legend>
             <div className="preset-manager__tags">{tags.map((tag) => (
-              <label key={tag.id}><input type="checkbox" checked={newTagIds.includes(tag.id)} onChange={() => setNewTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} />{tag.nameZh}</label>
+              <label key={tag.id}><input type="checkbox" checked={newTagIds.includes(tag.id)} onChange={() => setNewTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])} />{tag.nameEn}</label>
             ))}</div>
           </fieldset>
-          <button type="button" disabled={busy} onClick={() => void createAndAdd()}>创建并加入</button>
+          <button type="button" disabled={busy} onClick={() => void createAndAdd()}>Create & add</button>
         </div>
         {message && <p role="status">{message}</p>}
         {authenticationRequired && <button type="button" onClick={() => onNavigate('/login?return=' + encodeURIComponent(window.location.pathname))}>Sign in</button>}

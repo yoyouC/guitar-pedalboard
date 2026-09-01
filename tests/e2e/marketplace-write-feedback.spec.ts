@@ -38,15 +38,15 @@ test('email verification keeps a publication draft across the dedicated verifica
   await page.getByRole('button', { name: '发布当前 Rig' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByLabel('标题').fill('My clean draft');
-  await page.getByLabel('纯文本介绍').fill('Keep these words while verifying.');
-  await page.getByLabel('清音 / Clean').check();
+  await page.getByLabel('Title').fill('My clean draft');
+  await page.getByLabel('Plain-text description').fill('Keep these words while verifying.');
+  await page.getByLabel('Clean').check();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByLabel('Public · 可进入发现').check();
+  await page.getByLabel('Public · discoverable').check();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByLabel('我确认当前预览、来源署名、可见性和社区条款').check();
+  await page.getByLabel('I confirm the current preview, source attribution, visibility, and community terms').check();
   await page.getByRole('button', { name: 'New Tone' }).click();
-  await page.getByRole('button', { name: '验证邮箱' }).click();
+  await page.getByRole('button', { name: 'Verify email' }).click();
 
   await expect(page.getByRole('heading', { name: '验证邮箱' })).toBeVisible();
   await expect(page.getByLabel('邮箱')).toHaveCount(0);
@@ -57,9 +57,9 @@ test('email verification keeps a publication draft across the dedicated verifica
   await expect(page).toHaveURL(/\/publish/);
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByLabel('标题')).toHaveValue('My clean draft');
-  await expect(page.getByLabel('纯文本介绍')).toHaveValue('Keep these words while verifying.');
-  await expect(page.getByLabel('清音 / Clean')).toBeChecked();
+  await expect(page.getByLabel('Title')).toHaveValue('My clean draft');
+  await expect(page.getByLabel('Plain-text description')).toHaveValue('Keep these words while verifying.');
+  await expect(page.getByLabel('Clean')).toBeChecked();
 });
 
 test('account recovery opens its returned email verification entry', async ({ page }) => {

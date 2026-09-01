@@ -22,7 +22,7 @@ export function CreatePresetCollectionForm({ onCreated, onCancel }: CreatePreset
     void marketplaceClient.listAvailableTags().then(
       (available) => { if (active) setTags(available); },
       (cause: unknown) => {
-        if (active) setMessage(cause instanceof Error ? cause.message : '无法读取标签。');
+        if (active) setMessage(cause instanceof Error ? cause.message : 'Could not load tags.');
       },
     );
     return () => { active = false; };
@@ -45,7 +45,7 @@ export function CreatePresetCollectionForm({ onCreated, onCancel }: CreatePreset
       onCreated(`/marketplace/collections/${encodeURIComponent(collection.id)}`);
     } catch (cause) {
       if (cause instanceof MarketplaceClientError && cause.fields) setErrors(cause.fields);
-      setMessage(cause instanceof Error ? cause.message : '创建合集失败。');
+      setMessage(cause instanceof Error ? cause.message : 'Could not create the collection.');
     } finally {
       setBusy(false);
     }
@@ -53,18 +53,18 @@ export function CreatePresetCollectionForm({ onCreated, onCancel }: CreatePreset
 
   return (
     <form className="collection-create" onSubmit={(event) => void submit(event)}>
-      <h3>创建预设合集</h3>
+      <h3>Create preset collection</h3>
       <label>
-        标题
+        Title
         <input value={title} maxLength={80} onChange={(event) => setTitle(event.target.value)} />
         {errors.title && <small className="preset-manager__error">{errors.title}</small>}
       </label>
       <label>
-        介绍
+        Description
         <textarea value={description} maxLength={2000} onChange={(event) => setDescription(event.target.value)} />
       </label>
       <fieldset>
-        <legend>标签（1–5）</legend>
+        <legend>Tags (1–5)</legend>
         <div className="preset-manager__tags">
           {tags.map((tag) => (
             <label key={tag.id}>
@@ -75,16 +75,16 @@ export function CreatePresetCollectionForm({ onCreated, onCancel }: CreatePreset
                   ? current.filter((id) => id !== tag.id)
                   : [...current, tag.id])}
               />
-              {tag.nameZh}
+              {tag.nameEn}
             </label>
           ))}
         </div>
         {errors.tagIds && <small className="preset-manager__error">{errors.tagIds}</small>}
       </fieldset>
-      <p>新合集将以 Unlisted 创建；加入至少一个当前可用 Tone 后，才能显式切换为 Public。</p>
+      <p>New collections start Unlisted; only after adding at least one currently available tone can you explicitly switch to Public.</p>
       <div className="preset-manager__buttons">
-        <button type="submit" disabled={busy}>{busy ? '创建中…' : '创建空合集'}</button>
-        <button type="button" disabled={busy} onClick={onCancel}>取消</button>
+        <button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create empty collection'}</button>
+        <button type="button" disabled={busy} onClick={onCancel}>Cancel</button>
       </div>
       {message && <p className="preset-manager__message">{message}</p>}
     </form>
